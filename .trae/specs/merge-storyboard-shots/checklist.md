@@ -1,0 +1,22 @@
+# Checklist
+
+- [x] 后端新增 `StoryboardShotMergeRequest`，要求至少 2 个 shot_id 并去重、非空校验
+- [x] 仓库层 `merge_storyboard_shots` 在 memory 与 mysql 两种实现中语义一致
+- [x] 合并仅接受相邻（index 连续）分镜，非相邻请求被后端拒绝（VALIDATION_ERROR）
+- [x] 合并总时长 > 30s 被后端拒绝，错误信息包含当前总时长
+- [x] 合并总时长 = 30s 被允许，新分镜 duration_seconds 正确求和
+- [x] 新分镜 description/visual_prompt/narration 按镜头顺序换行拼接，空字段跳过
+- [x] 新分镜 title 为「镜头 X-Y」，video_prompt 被清空
+- [x] 新分镜 reference_image/video/audio_asset_ids 全部清空
+- [x] 新分镜 first_frame_asset_id 与 first_frame_source_video_asset_id 清空
+- [x] 新分镜 video_asset_id 清空且 status 为待生成，工作台显示「待生成」
+- [x] 合并后其余分镜被删除且整个序列重新连续编号（1..N）
+- [x] 合并后调用 mark_downstream_stale(STORYBOARD)，下游成片被标记 STALE
+- [x] STORYBOARD 文本产物内容同步反映合并后的镜头序列
+- [x] 资产库原始素材文件在合并清空关联后依然保留
+- [x] 前端 api-client 新增 mergeStoryboardShots 并返回更新后的 Project
+- [x] 前端工作台支持多选分镜并提供「合并所选分镜」按钮
+- [x] 前端在非相邻/单选/超 30s 情况下禁用合并并给出对应提示
+- [x] 合并前有二次确认弹窗，说明参考素材与视频将被清空
+- [x] 合并成功后自动选中新分镜、清空多选并提示重新选择素材
+- [x] 后端 pytest（memory + mysql）与前端 Vitest 相关用例全部通过

@@ -1,0 +1,10 @@
+- [x] 技术方案明确前端使用 React + Next.js + Tailwind + shadcn/ui。
+- [x] 技术方案明确后端使用 Python + FastAPI。
+- [x] 技术方案覆盖前端页面、核心组件、状态展示和任务轮询。
+- [x] 技术方案覆盖后端模块划分、API 草案、数据模型和异步任务。
+- [x] 技术方案明确 ModelArk SDK 安装方式 `pip install 'byteplus-python-sdk-v2[ark]'`。
+- [x] 技术方案明确文本生成模型 `doubao-seed-evolving` 的适用阶段和调用方式。
+- [x] 技术方案明确生图模型 `doubao-seedream-5-0-pro-260628` 的调用方式、关键参数和图片资产保存。
+- [x] 技术方案明确生视频模型 `doubao-seedance-2-5-260628` 的异步创建、状态轮询和视频 URL 转存。
+- [x] 技术方案覆盖 brief、故事、剧本、分镜、生图、生视频、剪辑成片的端到端工作流。
+- [x] 技术方案覆盖错误处理、失败重试、任务状态、安全合规、测试策略和部署配置。

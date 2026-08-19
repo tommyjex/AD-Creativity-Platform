@@ -1,0 +1,16 @@
+- [x] 资产库展示“角色 / 场景 / 商品 / 产物”四个分区
+- [x] 移除 `category !== null` 无条件过滤，`category=null` 的产物不再被丢弃
+- [x] 产物分区展示分镜视频片段（`storyboard_video`）
+- [x] 产物分区展示视频编辑结果（`final_video`）
+- [x] 产物分区展示由 `metadata.last_frame_status === "available"` 派生的尾帧图卡片
+- [x] 商品分区展示空态占位文案，不报错
+- [x] “资产类型”筛选提供角色 / 场景 / 商品 / 产物四个选项；商品、产物为前端聚合分区，不透传后端 `category`
+- [x] 资产卡片提供删除入口，点击弹出二次确认弹窗
+- [x] 确认删除调用 `DELETE /api/projects/{project_id}/assets/{asset_id}`，成功后从列表移除
+- [x] 取消删除不发起请求，资产保留
+- [x] 删除尾帧图卡片时提示将同时删除对应分镜视频片段，并删除其宿主 `storyboard_video` 资产
+- [x] 各分区超过每页阈值时分页展示并提供翻页控制；未超阈值不显示翻页
+- [x] 删除后分页边界正确重算，不停留在空页
+- [x] `workspace-asset-library.test.tsx` 覆盖四分区、产物展示、删除、分页并通过
+- [x] 前端 `npm test`、`npm run typecheck`、`npm run lint` 全部通过
+- [x] 后端 `AssetCategory` 枚举、`list_assets` 签名、`GET /api/assets` 接口保持不变

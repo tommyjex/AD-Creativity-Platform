@@ -1,0 +1,9 @@
+- [x] 顶部导航不再包含“创作中枢”“平台能力”“端到端流程”三项
+- [x] 顶部导航包含“项目”入口，链接为 `/workspace/projects`
+- [x] 顶部导航包含“资产库”入口，链接为 `/workspace/assets`
+- [x] 当前路由匹配时对应顶部导航入口高亮（`aria-current="page"`）
+- [x] 创作工作台不再渲染左侧边栏（桌面 `aside` 与移动横向模块条均移除）
+- [x] 工作台主内容区移除 `lg:ml-64` 偏移，呈全宽单栏布局
+- [x] 首页区块 `id`（brief/capabilities/pipeline）与页内 CTA 跳转不受影响
+- [x] `workspace-navigation.test.tsx` 更新后测试通过
+- [x] 前端 `npm test`、`npm run typecheck`、`npm run lint` 全部通过
