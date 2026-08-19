@@ -1,0 +1,13 @@
+- [x] 存在可运行的 `frontend/` Next.js 应用。
+- [x] 前端使用 React、Next.js App Router、TypeScript、Tailwind 和 shadcn/ui 风格基础组件。
+- [x] 首页具备科技感、大气的视觉风格，并展示平台定位、能力和创作入口。
+- [x] Brief 表单支持广告需求、平台、比例、时长、风格、受众和商品名称。
+- [x] Brief 表单能调用 `POST /api/projects` 创建项目，并在成功后进入项目详情页。
+- [x] 前端 API client 覆盖项目创建、项目详情、资产列表、阶段生成、任务查询和任务重试。
+- [x] `/projects/[projectId]` 能展示 brief、阶段进度、文本产物、分镜、任务状态和资产摘要。
+- [x] 项目详情页能触发故事、剧本、分镜、生图、生视频和剪辑阶段生成。
+- [x] 任务状态面板能处理 `queued`、`running`、`succeeded`、`failed`，并支持失败重试。
+- [x] `/projects/[projectId]/assets` 能展示项目资产列表、媒体预览和空状态。
+- [x] `/projects/[projectId]/export` 能展示最终视频预览、下载入口和未生成提示。
+- [x] 前端错误提示不暴露后端堆栈、密钥或敏感配置。
+- [x] 前端可用验证命令执行通过。

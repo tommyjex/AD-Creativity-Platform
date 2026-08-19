@@ -1,0 +1,12 @@
+- [x] 后端配置能读取 `.env` 中的 `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`。
+- [x] 后端配置能读取 `.env` 中的 TOS access key、secret key、endpoint、region、bucket 和 public endpoint。
+- [x] 依赖配置包含 MySQL ORM/驱动和 TOS SDK。
+- [x] 存在 MySQL engine/session 管理和数据库表初始化能力。
+- [x] MySQL 表结构覆盖项目、brief、文本产物、分镜、任务和资产。
+- [x] 默认 repository 使用 MySQL 持久化，测试仍可替换仓储。
+- [x] 项目创建、详情查询、任务状态和资产列表 API 能通过 MySQL repository 工作。
+- [x] workflow 的阶段依赖、幂等保护、失败重试和 `stale` 标记在 MySQL repository 下可用。
+- [x] TOS 资产服务能生成 object key，保存或登记图片、视频和成片资产。
+- [x] 资产元数据写入 MySQL，并能从资产列表 API 返回稳定 URL。
+- [x] 日志和错误响应不会输出数据库密码、TOS secret key 或完整 access key。
+- [x] `.venv/bin/python -m pytest backend -q` 执行通过。

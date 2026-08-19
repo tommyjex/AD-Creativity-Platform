@@ -1,0 +1,32 @@
+# Tasks
+- [x] Task 1: 创建后端项目骨架和运行配置。
+  - [x] SubTask 1.1: 新增 `backend/` 目录、Python 依赖配置和 FastAPI 应用入口。
+  - [x] SubTask 1.2: 注册 CORS、中间件、API 路由和 `GET /health` 健康检查。
+  - [x] SubTask 1.3: 提供可被测试和 ASGI Server 导入的稳定 `app` 对象。
+- [x] Task 2: 实现核心 schema 与配置模块。
+  - [x] SubTask 2.1: 定义项目、brief、文本产物、分镜、任务和资产 Pydantic schema。
+  - [x] SubTask 2.2: 定义统一状态、阶段、资产类型和错误码枚举。
+  - [x] SubTask 2.3: 定义后端配置，包含 ModelArk 模型 ID 默认值和基础服务配置。
+- [x] Task 3: 实现内存仓储与工作流服务。
+  - [x] SubTask 3.1: 实现项目、任务、资产和文本产物的内存仓储。
+  - [x] SubTask 3.2: 实现阶段依赖校验、任务创建、幂等保护和状态更新。
+  - [x] SubTask 3.3: 实现上游编辑后下游产物 `stale` 标记。
+- [x] Task 4: 实现 ModelArk mock 适配层和生成服务。
+  - [x] SubTask 4.1: 定义 ModelArk 适配层接口，覆盖文本、生图和生视频方法。
+  - [x] SubTask 4.2: 实现 mock 文本生成，返回故事、剧本和分镜结构化结果。
+  - [x] SubTask 4.3: 实现 mock 生图、生视频和剪辑资产生成。
+- [x] Task 5: 实现 FastAPI 业务 API。
+  - [x] SubTask 5.1: 实现项目创建、详情查询和资产查询 API。
+  - [x] SubTask 5.2: 实现故事、剧本、分镜、生图、生视频和剪辑阶段 API。
+  - [x] SubTask 5.3: 实现任务查询和失败任务重试 API。
+- [x] Task 6: 添加自动化测试并验证。
+  - [x] SubTask 6.1: 添加 schema、健康检查、项目 API、任务 API 和工作流测试。
+  - [x] SubTask 6.2: 覆盖阶段依赖、幂等保护、失败重试和 stale 标记测试。
+  - [x] SubTask 6.3: 运行测试，确认后端首版模块通过验证。
+
+# Task Dependencies
+- Task 2 depends on Task 1。
+- Task 3 depends on Task 2。
+- Task 4 depends on Task 2。
+- Task 5 depends on Task 3 and Task 4。
+- Task 6 depends on Task 5。

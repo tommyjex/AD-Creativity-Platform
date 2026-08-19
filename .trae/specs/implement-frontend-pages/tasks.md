@@ -1,0 +1,37 @@
+# Tasks
+- [x] Task 1: 创建 Next.js 前端应用骨架和基础工程配置。
+  - [x] SubTask 1.1: 新增 `frontend/` 应用，配置 React、Next.js App Router、TypeScript、Tailwind。
+  - [x] SubTask 1.2: 接入 shadcn/ui 所需的基础样式、工具函数和可复用 UI 组件。
+  - [x] SubTask 1.3: 提供前端运行、构建、类型检查或测试脚本。
+- [x] Task 2: 建立科技感大气视觉系统。
+  - [x] SubTask 2.1: 定义深色主题、品牌色、状态色、字体层级、网格背景和光效样式。
+  - [x] SubTask 2.2: 实现全局布局、导航、背景氛围层、卡片/按钮/徽章等基础视觉组件。
+  - [x] SubTask 2.3: 确保视觉风格服务于广告创作平台，避免通用模板化页面。
+- [x] Task 3: 实现后端 API client 和前端类型。
+  - [x] SubTask 3.1: 根据后端 schema 定义 Project、Brief、Task、Asset、StoryboardShot、Stage、Status 等前端类型。
+  - [x] SubTask 3.2: 实现 API client，覆盖项目创建、项目详情、资产列表、阶段生成、任务查询和任务重试。
+  - [x] SubTask 3.3: 实现统一错误解析和后端 base URL 配置。
+- [x] Task 4: 实现首页创作工作台。
+  - [x] SubTask 4.1: 实现科技感首页 hero、平台能力概览和端到端流程展示。
+  - [x] SubTask 4.2: 实现 Brief 表单，支持广告需求、平台、比例、时长、风格、受众和商品名称。
+  - [x] SubTask 4.3: 表单提交调用 `POST /api/projects`，成功后跳转项目详情页，失败时展示错误。
+- [x] Task 5: 实现项目详情创作流程页。
+  - [x] SubTask 5.1: 实现 `/projects/[projectId]` 数据加载和项目概览。
+  - [x] SubTask 5.2: 实现阶段进度、任务状态面板、文本产物展示和分镜表。
+  - [x] SubTask 5.3: 实现故事、剧本、分镜、生图、生视频和剪辑阶段生成按钮，并对接任务轮询。
+- [x] Task 6: 实现资产库和导出预览页。
+  - [x] SubTask 6.1: 实现 `/projects/[projectId]/assets` 资产库，按类型和阶段展示图片/视频/空状态。
+  - [x] SubTask 6.2: 实现 `/projects/[projectId]/export` 成片预览、最终视频信息和下载入口。
+  - [x] SubTask 6.3: 处理无资产、无成片、加载中和错误状态。
+- [x] Task 7: 添加前端验证和基础测试。
+  - [x] SubTask 7.1: 添加 API client、关键组件或页面的基础测试。
+  - [x] SubTask 7.2: 运行前端 lint/typecheck/test/build 中可用的验证命令。
+  - [x] SubTask 7.3: 修复验证中发现的问题，并记录最终结果。
+
+# Task Dependencies
+- Task 2 depends on Task 1。
+- Task 3 depends on Task 1。
+- Task 4 depends on Task 2 and Task 3。
+- Task 5 depends on Task 3 and Task 4。
+- Task 6 depends on Task 3 and Task 5。
+- Task 7 depends on Task 4, Task 5 and Task 6。

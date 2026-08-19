@@ -1,0 +1,42 @@
+# Tasks
+- [x] Task 1: 扩展项目与资产后端契约。
+  - [x] SubTask 1.1: 新增项目列表响应和项目/Brief 更新请求 schema。
+  - [x] SubTask 1.2: 新增项目列表与项目/Brief 更新 repository 能力和 API。
+  - [x] SubTask 1.3: 为资产增加角色/场景分类元数据和筛选能力。
+- [x] Task 2: 扩展角色生成工作流。
+  - [x] SubTask 2.1: 定义角色生成阶段的依赖、任务状态和可跳过语义。
+  - [x] SubTask 2.2: 接入角色生成任务，并将角色资产持久化到 MySQL/TOS 资产体系。
+  - [x] SubTask 2.3: 保持现有故事、剧本、分镜、视频和剪辑接口兼容。
+- [x] Task 3: 创建创作工作台布局和导航。
+  - [x] SubTask 3.1: 新增工作台路由、蓝白简洁布局和左侧边栏。
+  - [x] SubTask 3.2: 实现“项目”和“资产库”模块切换及当前模块选中态。
+  - [x] SubTask 3.3: 将首页右上角“进入工作台”改为工作台项目模块链接。
+- [x] Task 4: 实现项目模块。
+  - [x] SubTask 4.1: 实现项目列表、新建项目和空状态。
+  - [x] SubTask 4.2: 实现项目名称与完整 Brief 字段的编辑、校验和保存反馈。
+  - [x] SubTask 4.3: 实现项目选择后加载详情和关键摘要。
+- [x] Task 5: 实现创作流程管理。
+  - [x] SubTask 5.1: 按故事、角色、剧本、分镜脚本、分镜视频、剪辑成片展示阶段。
+  - [x] SubTask 5.2: 实现阶段依赖、生成操作、任务轮询、失败提示和重试。
+  - [x] SubTask 5.3: 实现角色阶段跳过或确认无角色需求的交互。
+- [x] Task 6: 实现工作台资产库。
+  - [x] SubTask 6.1: 实现角色与场景资产分类展示。
+  - [x] SubTask 6.2: 实现按项目、类型和状态筛选。
+  - [x] SubTask 6.3: 实现资产预览、元数据和空状态。
+- [x] Task 7: 添加测试并完成验证。
+  - [x] SubTask 7.1: 添加后端项目列表、Brief 更新、资产筛选和角色工作流测试。
+  - [x] SubTask 7.2: 添加前端侧边栏、项目编辑、阶段管理和资产筛选测试。
+  - [x] SubTask 7.3: 在 `.venv` 中运行后端测试，并运行前端 lint、typecheck、test、build 与浏览器 smoke test。
+- [x] Task 8: 补齐分镜场景图进入工作台资产库的数据链路。
+  - [x] SubTask 8.1: 分镜图生成落库时设置 `category=scene`，确保工作台资产库不会过滤生成结果。
+  - [x] SubTask 8.2: 添加覆盖“生成分镜图 -> MySQL 持久化 -> 按场景分类查询”的后端回归测试。
+  - [x] SubTask 8.3: 使用真实生成结果复验资产库的项目、类型和状态组合筛选。
+
+# Task Dependencies
+- Task 2 depends on Task 1。
+- Task 3 可与 Task 1 并行。
+- Task 4 depends on Task 1 and Task 3。
+- Task 5 depends on Task 2, Task 3 and Task 4。
+- Task 6 depends on Task 1 and Task 3。
+- Task 7 depends on Task 2, Task 4, Task 5 and Task 6。
+- Task 8 depends on Task 2 and Task 6。
