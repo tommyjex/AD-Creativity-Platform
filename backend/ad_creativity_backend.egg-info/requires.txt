@@ -1,0 +1,12 @@
+fastapi<1.0.0,>=0.115.0
+uvicorn[standard]<1.0.0,>=0.35.0
+pydantic<3.0.0,>=2.11.0
+sqlalchemy<3.0.0,>=2.0.0
+pymysql<2.0.0,>=1.1.0
+tos<3.0.0,>=2.8.0
+httpx<1.0.0,>=0.28.0
+byteplus-python-sdk-v2[ark]
+
+[dev]
+httpx<1.0.0,>=0.28.0
+pytest<9.0.0,>=8.0.0

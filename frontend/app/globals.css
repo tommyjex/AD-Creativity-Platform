@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 214 56% 97%;
+    --foreground: 216 46% 18%;
+    --card: 0 0% 100%;
+    --card-foreground: 216 46% 18%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 216 46% 18%;
+    --primary: 216 82% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 55% 94%;
+    --secondary-foreground: 216 44% 28%;
+    --muted: 214 40% 94%;
+    --muted-foreground: 215 18% 46%;
+    --accent: 207 92% 56%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 358 68% 54%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 34% 87%;
+    --input: 214 34% 84%;
+    --ring: 216 82% 52%;
+    --success: 151 60% 39%;
+    --warning: 35 88% 48%;
+    --info: 207 82% 48%;
+    --radius: 0.75rem;
+    --font-sans: "Aptos", "SF Pro Text", "HarmonyOS Sans SC", "PingFang SC", sans-serif;
+    --font-mono: "SF Mono", "Cascadia Code", "JetBrains Mono", monospace;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    @apply min-h-screen bg-background text-foreground antialiased;
+    background:
+      radial-gradient(circle at 10% 0%, hsl(var(--primary) / 0.08), transparent 30rem),
+      radial-gradient(circle at 90% 8%, hsl(var(--accent) / 0.06), transparent 28rem),
+      linear-gradient(180deg, hsl(213 64% 98%) 0%, hsl(var(--background)) 52%, hsl(214 42% 96%) 100%);
+    font-family: var(--font-sans);
+    font-feature-settings:
+      "ss01" 1,
+      "cv02" 1,
+      "case" 1;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.28);
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  .ad-shell-grid {
+    background-image:
+      linear-gradient(hsl(var(--primary) / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--primary) / 0.035) 1px, transparent 1px);
+    background-position:
+      -1px -1px,
+      -1px -1px,
+      -1px -1px,
+      -1px -1px;
+    background-size:
+      48px 48px,
+      48px 48px;
+    mask-image: linear-gradient(to bottom, black 0%, black 48%, transparent 88%);
+  }
+
+  .ad-noise {
+    background-image:
+      radial-gradient(circle at 18% 12%, hsl(var(--primary) / 0.06), transparent 25rem),
+      radial-gradient(circle at 82% 8%, hsl(var(--accent) / 0.045), transparent 24rem);
+  }
+
+  .ad-panel {
+    @apply border border-border bg-card shadow-glass;
+  }
+
+  .ad-edge-light {
+    position: relative;
+  }
+
+  .ad-edge-light::before {
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.58), transparent);
+    content: "";
+    height: 1px;
+    inset: 0 8% auto;
+    opacity: 0.48;
+    position: absolute;
+  }
+
+  .ad-kicker {
+    @apply font-mono text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-primary;
+  }
+
+  .ad-display {
+    @apply text-balance text-4xl font-semibold tracking-[-0.04em] text-foreground md:text-6xl lg:text-7xl;
+  }
+
+  .ad-copy {
+    @apply text-pretty text-base leading-7 text-muted-foreground md:text-lg;
+  }
+}
