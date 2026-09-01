@@ -14,8 +14,11 @@ import type { Asset, ProjectListItem } from "@/lib/api-types";
 
 const apiMocks = vi.hoisted(() => ({
   deleteAsset: vi.fn(),
+  deleteToolAsset: vi.fn(),
   listAssets: vi.fn(),
-  listProjects: vi.fn()
+  listProjects: vi.fn(),
+  listToolAssets: vi.fn(),
+  listToolTasks: vi.fn()
 }));
 
 vi.mock("@/lib/api-client", () => ({
@@ -111,16 +114,45 @@ const generatedImageAsset = createAsset({
   url: "/api/assets/generated-1/content"
 });
 
+const toolVideoAsset = createAsset({
+  category: null,
+  id: "tool-video-1",
+  metadata: { name: "人物打码结果" },
+  project_id: null,
+  stage: null,
+  tool_asset_role: "output",
+  tool_task_id: "tool-task-1",
+  type: "uploaded_video",
+  url: "/api/assets/tool-video-1/content"
+});
+
+const toolTask = {
+  created_at: "2026-08-10T10:00:00Z",
+  finished_at: null,
+  id: "tool-task-1",
+  input_snapshot: {},
+  provider_task_id: "provider-task-1",
+  started_at: "2026-08-10T10:01:00Z",
+  status: "running" as const,
+  type: "face_blur_video" as const,
+  updated_at: "2026-08-10T10:01:00Z"
+};
+
 describe("WorkspaceAssetLibrary", () => {
   beforeEach(() => {
     apiMocks.deleteAsset.mockReset();
+    apiMocks.deleteToolAsset.mockReset();
     apiMocks.listAssets.mockReset();
     apiMocks.listProjects.mockReset();
+    apiMocks.listToolAssets.mockReset();
+    apiMocks.listToolTasks.mockReset();
   });
 
   it("fetches assets without a backend category and keeps sections client-side", async () => {
     apiMocks.listProjects.mockResolvedValue([project]);
     apiMocks.listAssets.mockResolvedValue([characterAsset]);
+    apiMocks.listToolAssets.mockResolvedValue([]);
+    apiMocks.listToolTasks.mockResolvedValue([]);
 
     render(
       await WorkspaceAssetsPage({
@@ -143,6 +175,9 @@ describe("WorkspaceAssetLibrary", () => {
       },
       { next: { revalidate: 30 } }
     );
+    expect(apiMocks.listToolAssets).toHaveBeenCalledWith({
+      next: { revalidate: 30 }
+    });
     expect(screen.getByLabelText("项目")).toHaveValue(project.id);
     expect(screen.getByLabelText("状态")).toHaveValue("succeeded");
     // section from the URL seeds the sidebar selection, so only 角色 renders.
@@ -155,6 +190,8 @@ describe("WorkspaceAssetLibrary", () => {
   it("does not forward artifacts section as a backend category", async () => {
     apiMocks.listProjects.mockResolvedValue([project]);
     apiMocks.listAssets.mockResolvedValue([storyboardVideoAsset]);
+    apiMocks.listToolAssets.mockResolvedValue([]);
+    apiMocks.listToolTasks.mockResolvedValue([]);
 
     render(
       await WorkspaceAssetsPage({
@@ -167,6 +204,72 @@ describe("WorkspaceAssetLibrary", () => {
       { next: { revalidate: 30 } }
     );
     expect(screen.getByRole("heading", { name: "产物" })).toBeInTheDocument();
+  });
+
+  it("loads only tool assets and tasks when the tools source is selected", async () => {
+    apiMocks.listProjects.mockResolvedValue([project]);
+    apiMocks.listToolAssets.mockResolvedValue([toolVideoAsset]);
+    apiMocks.listToolTasks.mockResolvedValue([toolTask]);
+
+    render(
+      await WorkspaceAssetsPage({
+        searchParams: Promise.resolve({
+          project_id: "",
+          source: "tools",
+          status: ""
+        })
+      })
+    );
+
+    expect(apiMocks.listAssets).not.toHaveBeenCalled();
+    expect(apiMocks.listToolAssets).toHaveBeenCalledWith({
+      next: { revalidate: 30 }
+    });
+    expect(screen.getByLabelText("来源")).toHaveValue("tools");
+    expect(screen.getByRole("heading", { name: "工具资产" })).toBeInTheDocument();
+  });
+
+  it("drops stale project filters when the tools source is submitted repeatedly", async () => {
+    apiMocks.listProjects.mockResolvedValue([project]);
+    apiMocks.listToolAssets.mockResolvedValue([]);
+    apiMocks.listToolTasks.mockResolvedValue([]);
+
+    render(
+      await WorkspaceAssetsPage({
+        searchParams: Promise.resolve({
+          project_id: project.id,
+          source: "tools"
+        })
+      })
+    );
+
+    expect(apiMocks.listAssets).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("来源")).toHaveValue("tools");
+    expect(screen.getByLabelText("项目")).toHaveValue("");
+    expect(screen.getByLabelText("项目")).toBeDisabled();
+    expect(screen.getByRole("heading", { name: "暂无匹配资产" })).toBeInTheDocument();
+  });
+
+  it("does not include a project field when submitting the tools source filter", () => {
+    render(
+      <WorkspaceAssetLibrary
+        assets={[]}
+        filters={{}}
+        projects={[project]}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("项目"), {
+      target: { value: project.id }
+    });
+    fireEvent.change(screen.getByLabelText("来源"), {
+      target: { value: "tools" }
+    });
+
+    const projectSelect = screen.getByLabelText("项目");
+    const form = screen.getByRole("button", { name: "筛选" }).closest("form");
+    expect(projectSelect).toBeDisabled();
+    expect(new FormData(form as HTMLFormElement).has("project_id")).toBe(false);
   });
 
   it("renders all four sections including public generated images", () => {
@@ -189,6 +292,81 @@ describe("WorkspaceAssetLibrary", () => {
     expect(screen.getByRole("heading", { name: "图片成品" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "产物" })).toBeInTheDocument();
     expect(screen.getByText("图层合成")).toBeInTheDocument();
+  });
+
+  it("shows tool cards with task metadata and a direct download", () => {
+    render(
+      <WorkspaceAssetLibrary
+        assets={[toolVideoAsset]}
+        filters={{ source: "tools" }}
+        projects={[project]}
+        toolTasks={[toolTask]}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "工具资产" })).toBeInTheDocument();
+    expect(screen.getByText("视频人物打码")).toBeInTheDocument();
+    expect(screen.getByText("输出产物")).toBeInTheDocument();
+    expect(screen.getAllByText("生成中")).toHaveLength(3);
+    expect(screen.getByRole("link", { name: "下载资产" })).toHaveAttribute(
+      "href",
+      "http://backend.local/api/assets/tool-video-1/content?download=1"
+    );
+  });
+
+  it("identifies AIGC input and output assets in the shared library", () => {
+    const aigcInput = createAsset({
+      category: null,
+      id: "aigc-input",
+      metadata: { aigc_role: "input", name: "参考商品图", origin: "aigc" },
+      project_id: null,
+      stage: null,
+      tool_asset_role: "input",
+      tool_task_id: null,
+      type: "uploaded_image",
+      url: "/api/assets/aigc-input/content"
+    });
+    const aigcOutput = createAsset({
+      ...aigcInput,
+      id: "aigc-output",
+      metadata: { aigc_role: "output", name: "生成主图", origin: "aigc" },
+      tool_asset_role: "output",
+      url: "/api/assets/aigc-output/content"
+    });
+
+    render(
+      <WorkspaceAssetLibrary
+        assets={[aigcInput, aigcOutput]}
+        filters={{ source: "tools" }}
+        projects={[project]}
+      />
+    );
+
+    expect(screen.getAllByText("AIGC 工作台")).toHaveLength(2);
+    expect(screen.getByText("AIGC 输入素材")).toBeInTheDocument();
+    expect(screen.getByText("AIGC 输出产物")).toBeInTheDocument();
+  });
+
+  it("uses the tool deletion endpoint without affecting project assets", async () => {
+    apiMocks.deleteToolAsset.mockResolvedValue(undefined);
+
+    render(
+      <WorkspaceAssetLibrary
+        assets={[toolVideoAsset, characterAsset]}
+        filters={{ source: "tools" }}
+        projects={[project]}
+        toolTasks={[toolTask]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "删除资产" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("不会影响同一任务的其他资产");
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+    await waitFor(() =>
+      expect(apiMocks.deleteToolAsset).toHaveBeenCalledWith("tool-video-1")
+    );
+    expect(apiMocks.deleteAsset).not.toHaveBeenCalled();
   });
 
   it("surfaces artifact assets and a derived last-frame card", () => {

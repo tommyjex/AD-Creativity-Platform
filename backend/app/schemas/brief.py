@@ -12,7 +12,11 @@ SellingPoint = Annotated[str, Field(min_length=1)]
 
 
 class BriefBase(SchemaModel):
-    prompt: str = Field(..., min_length=1, description="Original user requirement.")
+    prompt: str = Field(
+        default="",
+        min_length=1,
+        description="Original user requirement.",
+    )
     target_language: TargetLanguage = TargetLanguage.ZH
     target_platform: str = Field(default="douyin", min_length=1)
     aspect_ratio: str = Field(default="9:16", pattern=r"^(9:16|16:9|1:1|4:3|3:4)$")
@@ -59,4 +63,5 @@ class BriefUpdate(SchemaModel):
 
 
 class Brief(BriefBase):
+    prompt: str = ""
     summary: Optional[str] = None

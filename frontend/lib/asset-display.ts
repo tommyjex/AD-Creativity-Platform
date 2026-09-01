@@ -228,7 +228,27 @@ export function artifactMatchesKeyword(
 }
 
 export function getSafePreviewUrl(asset: Asset): string | null {
-  return getSafeMediaUrl(asset.url, "/content");
+  return getSafeAssetContentUrl(asset.url);
+}
+
+export function getSafeAssetContentUrl(value: string | null): string | null {
+  return getSafeMediaUrl(value, "/content");
+}
+
+export function getAssetDownloadUrl(asset: Asset): string | null {
+  return getAssetDownloadUrlById(asset.id);
+}
+
+export function getAssetDownloadUrlById(
+  assetId: string,
+  filename?: string
+): string | null {
+  const normalizedId = assetId.trim();
+  if (!normalizedId) return null;
+  const baseUrl = getBackendBaseUrl().replace(/\/+$/, "");
+  const params = new URLSearchParams({ download: "1" });
+  if (filename?.trim()) params.set("filename", filename.trim());
+  return `${baseUrl}/api/assets/${encodeURIComponent(normalizedId)}/content?${params.toString()}`;
 }
 
 export function getSafeLastFrameUrl(asset: Asset): string | null {

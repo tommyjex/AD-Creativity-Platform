@@ -1,0 +1,8 @@
+- [x] `ImageCanvasEditor` 新增 `variant?: "dialog" | "page"`，默认 `"dialog"`，默认形态与改造前完全一致。
+- [x] `variant="page"` 时不渲染 `Dialog`/`DialogOverlay` 遮罩，编辑器以页面级容器内联呈现，无浮层圆角与外留白。
+- [x] `variant="page"` 提供等效关闭控件（`aria-label="关闭"`），点击调用 `onOpenChange(false)`。
+- [x] 画布页 `/projects/[projectId]/canvas` 传 `variant="page"`，编辑器铺满顶部导航下方正文区，四周无留白。
+- [x] 画布页关闭控件仍导航回上一页（`router.back()`）。
+- [x] 画布编辑功能（生成、编辑、上传/移除参考图、设为目标图、分辨率/格式、图层拆分入口、任务轮询与反馈）保持不变。
+- [x] `image-project-workspace.tsx` 的弹窗形态用法不受影响，仍为原全屏对话框。
+- [x] 前端 `npm run lint`、`npm run typecheck`、`npm run test`、`npm run build` 全部通过。

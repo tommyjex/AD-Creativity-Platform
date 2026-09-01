@@ -1,0 +1,11 @@
+- [x] 视频输出节点播放器的浏览器原生全屏控件可正常进入和退出全屏。证据：Chromium 151 headless/headed 真实指针点击 UA 原生按钮，`fullscreenchange` 依次记录 `VIDEO` 和 `null`。
+- [x] 进入和退出全屏不会重置视频播放位置、暂停状态或音量状态。证据：Chromium 原生全屏及 Chromium/WebKit 产品全屏均通过 `currentTime < 0.25s`、`paused`、`muted`、`volume` 连续性断言。
+- [x] 全屏视频保持原始宽高比，不发生裁切或拉伸。证据：浏览器实测固有尺寸 640×360、比例 16:9、计算样式 `object-fit: contain`；产品代码原生与放大预览视频均保留 `object-contain`。
+- [x] 操作播放、进度、音量和全屏控件不会拖动节点或平移画布。证据：Chromium 真实指针完成播放、进度、静音及全屏操作后，节点 bounding box/class/style 与 React Flow viewport transform/style 均不变。
+- [x] 视频控件区域的滚轮操作不会缩放 React Flow 画布。证据：视频区域真实滚轮输入后 viewport transform/style 保持不变。
+- [x] 退出全屏后节点尺寸、位置和画布缩放保持不变。证据：Chromium 原生/产品全屏及 WebKit 产品全屏退出后的布局断言全部通过。
+- [x] 结果面板、放大预览弹窗和视频输入节点中的共享播放器无行为回归。证据：`aigc-video-player`、`aigc-flow-node`、`aigc-editor` 相关断言通过，非节点播放器无 `nodrag nopan nowheel`，原生 controls、预览和 `object-contain` 保留。
+- [x] 不支持标准 Fullscreen API 的环境不会抛出未处理异常，平台原生媒体全屏不被事件处理阻止。证据：组件测试覆盖 `webkitEnterFullscreen` fallback、完全不支持时禁用说明、请求拒绝捕获；事件链测试确认六类输入事件不再被播放器容器拦截。
+- [x] 相关 Vitest 测试通过。证据：4 个测试文件、64 项测试通过。
+- [x] 前端 TypeScript 类型检查和 ESLint 通过。证据：`npm run typecheck`、`npm run lint` 均退出 0。
+- [x] Chromium 与可用 WebKit 环境浏览器验收通过。证据：Chromium 151.0.7922.34 headless/headed、Playwright WebKit 26.5 headed 均退出 0；Safari 26.3 WebDriver 因管理员授权无法启动，记录为环境限制，不阻断原批准规格。

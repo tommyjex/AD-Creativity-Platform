@@ -10,8 +10,10 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "项目", href: "/workspace/projects" },
-  { label: "资产库", href: "/workspace/assets" }
-] as const satisfies ReadonlyArray<{ label: string; href: Route }>;
+  { label: "资产库", href: "/workspace/assets" },
+  { label: "工具", href: "/workspace/tools" },
+  { label: "AIGC工作台", href: "/workspace/aigc" }
+] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -47,7 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       ? "bg-card text-primary shadow-sm"
                       : "text-muted-foreground"
                   )}
-                  href={item.href}
+                  href={item.href as Route}
                   key={item.href}
                 >
                   {item.label}

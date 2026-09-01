@@ -69,10 +69,176 @@ def init_database(bind: Engine | None = None) -> None:
 
     target_engine = bind or get_engine()
     Base.metadata.create_all(bind=target_engine)
+    _drop_pipeline_source_template_foreign_key(target_engine)
     _apply_additive_migrations(target_engine)
 
 
+def _drop_pipeline_source_template_foreign_key(bind: Engine) -> None:
+    foreign_keys = inspect(bind).get_foreign_keys("pipelines")
+    source_template_fk = next(
+        (
+            foreign_key
+            for foreign_key in foreign_keys
+            if foreign_key["constrained_columns"] == ["source_template_id"]
+            and foreign_key["referred_table"] == "pipeline_templates"
+        ),
+        None,
+    )
+    if source_template_fk is None:
+        return
+    if bind.dialect.name == "sqlite":
+        _rebuild_sqlite_pipelines_without_template_foreign_key(bind)
+        return
+
+    constraint_name = source_template_fk.get("name")
+    if not constraint_name:
+        raise RuntimeError("pipeline source template foreign key has no name")
+    quoted_name = bind.dialect.identifier_preparer.quote(constraint_name)
+    with bind.begin() as connection:
+        connection.execute(
+            text(f"ALTER TABLE pipelines DROP FOREIGN KEY {quoted_name}")
+        )
+
+
+def _rebuild_sqlite_pipelines_without_template_foreign_key(bind: Engine) -> None:
+    inspector = inspect(bind)
+    columns = inspector.get_columns("pipelines")
+    primary_key = inspector.get_pk_constraint("pipelines")["constrained_columns"]
+    unique_constraints = inspector.get_unique_constraints("pipelines")
+    check_constraints = inspector.get_check_constraints("pipelines")
+    foreign_keys = [
+        foreign_key
+        for foreign_key in inspector.get_foreign_keys("pipelines")
+        if not (
+            foreign_key["constrained_columns"] == ["source_template_id"]
+            and foreign_key["referred_table"] == "pipeline_templates"
+        )
+    ]
+    with bind.connect() as connection:
+        indexes = connection.execute(
+            text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'index' AND tbl_name = 'pipelines' "
+                "AND sql IS NOT NULL ORDER BY name"
+            )
+        ).scalars().all()
+        connection.commit()
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()
+        try:
+            with connection.begin():
+                definitions: list[str] = []
+                column_names: list[str] = []
+                for column in columns:
+                    name = str(column["name"])
+                    quoted_name = _quote_sqlite_identifier(name)
+                    column_names.append(quoted_name)
+                    definition = f"{quoted_name} {column['type'] or ''}".rstrip()
+                    if len(primary_key) == 1 and name in primary_key:
+                        definition += " PRIMARY KEY"
+                    if not column["nullable"]:
+                        definition += " NOT NULL"
+                    if column["default"] is not None:
+                        definition += f" DEFAULT {column['default']}"
+                    definitions.append(definition)
+                if len(primary_key) > 1:
+                    definitions.append(
+                        "PRIMARY KEY ("
+                        + ", ".join(
+                            _quote_sqlite_identifier(name) for name in primary_key
+                        )
+                        + ")"
+                    )
+                for constraint in unique_constraints:
+                    definitions.append(
+                        "UNIQUE ("
+                        + ", ".join(
+                            _quote_sqlite_identifier(name)
+                            for name in constraint["column_names"]
+                        )
+                        + ")"
+                    )
+                for constraint in check_constraints:
+                    sqltext = constraint.get("sqltext")
+                    if sqltext:
+                        definitions.append(f"CHECK ({sqltext})")
+                for foreign_key in foreign_keys:
+                    local_columns = ", ".join(
+                        _quote_sqlite_identifier(name)
+                        for name in foreign_key["constrained_columns"]
+                    )
+                    remote_columns = ", ".join(
+                        _quote_sqlite_identifier(name)
+                        for name in foreign_key["referred_columns"]
+                    )
+                    definition = (
+                        f"FOREIGN KEY ({local_columns}) REFERENCES "
+                        f"{_quote_sqlite_identifier(foreign_key['referred_table'])} "
+                        f"({remote_columns})"
+                    )
+                    options = foreign_key.get("options") or {}
+                    if options.get("onupdate"):
+                        definition += f" ON UPDATE {options['onupdate']}"
+                    if options.get("ondelete"):
+                        definition += f" ON DELETE {options['ondelete']}"
+                    definitions.append(definition)
+                connection.execute(
+                    text(
+                        "CREATE TABLE pipelines_without_template_fk ("
+                        + ", ".join(definitions)
+                        + ")"
+                    )
+                )
+                column_list = ", ".join(column_names)
+                connection.execute(
+                    text(
+                        f"INSERT INTO pipelines_without_template_fk ({column_list}) "
+                        f"SELECT {column_list} FROM pipelines"
+                    )
+                )
+                connection.execute(text("DROP TABLE pipelines"))
+                connection.execute(
+                    text(
+                        "ALTER TABLE pipelines_without_template_fk "
+                        "RENAME TO pipelines"
+                    )
+                )
+                for index_sql in indexes:
+                    connection.execute(text(index_sql))
+        finally:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.commit()
+        violations = connection.execute(text("PRAGMA foreign_key_check")).all()
+        if violations:
+            raise RuntimeError("pipeline template foreign key migration violated constraints")
+
+
 def _apply_additive_migrations(bind: Engine) -> None:
+    _expand_pipeline_task_type(bind)
+    _add_aigc_error_columns(bind)
+
+    inspector = inspect(bind)
+    pipeline_columns = {
+        column["name"] for column in inspector.get_columns("pipelines")
+    }
+    if "deleted_at" not in pipeline_columns:
+        with bind.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE pipelines ADD COLUMN deleted_at DATETIME NULL")
+            )
+    inspector = inspect(bind)
+    pipeline_indexes = {
+        index["name"] for index in inspector.get_indexes("pipelines")
+    }
+    if "ix_pipelines_deleted_at" not in pipeline_indexes:
+        with bind.begin() as connection:
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_pipelines_deleted_at "
+                    "ON pipelines (deleted_at)"
+                )
+            )
+
     inspector = inspect(bind)
     project_columns = {
         column["name"] for column in inspector.get_columns("projects")
@@ -97,6 +263,7 @@ def _apply_additive_migrations(bind: Engine) -> None:
         "image_prompt_status": "VARCHAR(16) NOT NULL DEFAULT 'draft'",
         "current_image_asset_id": "VARCHAR(36) NULL",
         "image_revision": "INTEGER NOT NULL DEFAULT 0",
+        "image_reference_asset_ids": "JSON NOT NULL DEFAULT ('[]')",
     }
     for column_name, column_definition in project_column_definitions.items():
         if column_name not in project_columns:
@@ -184,6 +351,29 @@ def _apply_additive_migrations(bind: Engine) -> None:
             connection.execute(
                 text("CREATE INDEX ix_assets_asset_role ON assets (asset_role)")
             )
+    asset_column_definitions = {
+        "tool_task_id": "VARCHAR(36) NULL",
+        "tool_asset_role": "VARCHAR(16) NULL",
+    }
+    for column_name, column_definition in asset_column_definitions.items():
+        if column_name not in asset_columns:
+            with bind.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE assets "
+                        f"ADD COLUMN {column_name} {column_definition}"
+                    )
+                )
+    inspector = inspect(bind)
+    asset_indexes = {index["name"] for index in inspector.get_indexes("assets")}
+    if "ix_assets_tool_task_id" not in asset_indexes:
+        with bind.begin() as connection:
+            connection.execute(
+                text("CREATE INDEX ix_assets_tool_task_id ON assets (tool_task_id)")
+            )
+    if "project_id" in asset_columns:
+        _make_asset_project_id_nullable(bind)
+    _relax_asset_owner_constraint(bind)
 
     inspector = inspect(bind)
     storyboard_columns = {
@@ -254,6 +444,243 @@ def _apply_additive_migrations(bind: Engine) -> None:
                     "ON generation_tasks (retry_of_task_id)"
                 )
             )
+
+
+def _expand_pipeline_task_type(bind: Engine) -> None:
+    columns = {
+        column["name"]: column
+        for column in inspect(bind).get_columns("pipeline_tasks")
+    }
+    task_type = columns.get("type")
+    if task_type is None:
+        return
+    current_length = getattr(task_type["type"], "length", None)
+    if current_length is not None and current_length >= 32:
+        return
+    if bind.dialect.name == "mysql":
+        with bind.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE pipeline_tasks "
+                    "MODIFY COLUMN type VARCHAR(32) NOT NULL"
+                )
+            )
+        return
+    if bind.dialect.name == "sqlite":
+        _rebuild_sqlite_table_with_type_override(
+            bind,
+            table_name="pipeline_tasks",
+            column_name="type",
+            column_type="VARCHAR(32)",
+        )
+        return
+    raise RuntimeError(
+        f"unsupported pipeline task type migration dialect: {bind.dialect.name}"
+    )
+
+
+def _add_aigc_error_columns(bind: Engine) -> None:
+    for table_name in ("pipeline_runs", "pipeline_run_nodes"):
+        columns = {
+            column["name"] for column in inspect(bind).get_columns(table_name)
+        }
+        if "error_json" not in columns:
+            with bind.begin() as connection:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {table_name} "
+                        "ADD COLUMN error_json JSON NULL"
+                    )
+                )
+
+
+def _rebuild_sqlite_table_with_type_override(
+    bind: Engine,
+    *,
+    table_name: str,
+    column_name: str,
+    column_type: str,
+) -> None:
+    inspector = inspect(bind)
+    columns = inspector.get_columns(table_name)
+    primary_key = inspector.get_pk_constraint(table_name)
+    unique_constraints = inspector.get_unique_constraints(table_name)
+    check_constraints = inspector.get_check_constraints(table_name)
+    foreign_keys = inspector.get_foreign_keys(table_name)
+    temporary_table = f"{table_name}_type_migration"
+    with bind.connect() as connection:
+        indexes = connection.execute(
+            text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'index' AND tbl_name = :table_name "
+                "AND sql IS NOT NULL ORDER BY name"
+            ),
+            {"table_name": table_name},
+        ).scalars().all()
+        connection.commit()
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()
+        try:
+            with connection.begin():
+                connection.execute(
+                    text(
+                        f"DROP TABLE IF EXISTS "
+                        f"{_quote_sqlite_identifier(temporary_table)}"
+                    )
+                )
+                definitions: list[str] = []
+                column_names: list[str] = []
+                primary_key_columns = primary_key.get("constrained_columns") or []
+                for column in columns:
+                    name = str(column["name"])
+                    quoted_name = _quote_sqlite_identifier(name)
+                    column_names.append(quoted_name)
+                    resolved_type = (
+                        column_type if name == column_name else str(column["type"] or "")
+                    )
+                    definition = f"{quoted_name} {resolved_type}".rstrip()
+                    if len(primary_key_columns) == 1 and name in primary_key_columns:
+                        definition += " PRIMARY KEY"
+                    if not column["nullable"]:
+                        definition += " NOT NULL"
+                    if column["default"] is not None:
+                        definition += f" DEFAULT {column['default']}"
+                    definitions.append(definition)
+                if len(primary_key_columns) > 1:
+                    definitions.append(
+                        "PRIMARY KEY ("
+                        + ", ".join(
+                            _quote_sqlite_identifier(name)
+                            for name in primary_key_columns
+                        )
+                        + ")"
+                    )
+                for constraint in unique_constraints:
+                    prefix = (
+                        f"CONSTRAINT "
+                        f"{_quote_sqlite_identifier(str(constraint['name']))} "
+                        if constraint.get("name")
+                        else ""
+                    )
+                    definitions.append(
+                        prefix
+                        + "UNIQUE ("
+                        + ", ".join(
+                            _quote_sqlite_identifier(name)
+                            for name in constraint["column_names"]
+                        )
+                        + ")"
+                    )
+                for constraint in check_constraints:
+                    sqltext = constraint.get("sqltext")
+                    if not sqltext:
+                        continue
+                    prefix = (
+                        f"CONSTRAINT "
+                        f"{_quote_sqlite_identifier(str(constraint['name']))} "
+                        if constraint.get("name")
+                        else ""
+                    )
+                    definitions.append(f"{prefix}CHECK ({sqltext})")
+                for foreign_key in foreign_keys:
+                    prefix = (
+                        f"CONSTRAINT "
+                        f"{_quote_sqlite_identifier(str(foreign_key['name']))} "
+                        if foreign_key.get("name")
+                        else ""
+                    )
+                    local_columns = ", ".join(
+                        _quote_sqlite_identifier(name)
+                        for name in foreign_key["constrained_columns"]
+                    )
+                    remote_columns = ", ".join(
+                        _quote_sqlite_identifier(name)
+                        for name in foreign_key["referred_columns"]
+                    )
+                    definition = (
+                        f"{prefix}FOREIGN KEY ({local_columns}) REFERENCES "
+                        f"{_quote_sqlite_identifier(foreign_key['referred_table'])} "
+                        f"({remote_columns})"
+                    )
+                    options = foreign_key.get("options") or {}
+                    if options.get("onupdate"):
+                        definition += f" ON UPDATE {options['onupdate']}"
+                    if options.get("ondelete"):
+                        definition += f" ON DELETE {options['ondelete']}"
+                    definitions.append(definition)
+                connection.execute(
+                    text(
+                        f"CREATE TABLE {_quote_sqlite_identifier(temporary_table)} ("
+                        + ", ".join(definitions)
+                        + ")"
+                    )
+                )
+                quoted_table = _quote_sqlite_identifier(table_name)
+                column_list = ", ".join(column_names)
+                connection.execute(
+                    text(
+                        f"INSERT INTO {_quote_sqlite_identifier(temporary_table)} "
+                        f"({column_list}) SELECT {column_list} FROM {quoted_table}"
+                    )
+                )
+                connection.execute(text(f"DROP TABLE {quoted_table}"))
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {_quote_sqlite_identifier(temporary_table)} "
+                        f"RENAME TO {quoted_table}"
+                    )
+                )
+                for index_sql in indexes:
+                    connection.execute(text(index_sql))
+        finally:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.commit()
+        violations = connection.execute(text("PRAGMA foreign_key_check")).all()
+        if violations:
+            raise RuntimeError("pipeline task type migration violated foreign keys")
+
+
+def _make_asset_project_id_nullable(bind: Engine) -> None:
+    project_id = next(
+        column
+        for column in inspect(bind).get_columns("assets")
+        if column["name"] == "project_id"
+    )
+    if project_id["nullable"] or bind.dialect.name == "sqlite":
+        return
+    with bind.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE assets MODIFY COLUMN project_id VARCHAR(36) NULL")
+        )
+
+
+def _relax_asset_owner_constraint(bind: Engine) -> None:
+    """Allow standalone tool-library assets while retaining project exclusivity."""
+    if bind.dialect.name != "mysql":
+        return
+    inspector = inspect(bind)
+    owner_check = next(
+        (
+            item
+            for item in inspector.get_check_constraints("assets")
+            if item.get("name") == "ck_assets_one_owner"
+        ),
+        None,
+    )
+    if owner_check is None or "tool_task_id IS NOT NULL" not in str(
+        owner_check.get("sqltext", "")
+    ):
+        return
+    with bind.begin() as connection:
+        connection.execute(text("ALTER TABLE assets DROP CHECK ck_assets_one_owner"))
+        connection.execute(
+            text(
+                "ALTER TABLE assets ADD CONSTRAINT ck_assets_one_owner CHECK "
+                "((project_id IS NOT NULL AND tool_task_id IS NULL "
+                "AND tool_asset_role IS NULL) OR "
+                "(project_id IS NULL AND tool_asset_role IS NOT NULL))"
+            )
+        )
 
 
 def _make_brief_duration_nullable(bind: Engine) -> None:

@@ -27,6 +27,7 @@ const apiMocks = vi.hoisted(() => ({
   retryTask: vi.fn(),
   saveImagePromptVersion: vi.fn(),
   selectCurrentImage: vi.fn(),
+  setImageProjectReferenceSelection: vi.fn(),
   updateImageLayerSet: vi.fn(),
   updateProject: vi.fn(),
   uploadImageProjectReference: vi.fn()
@@ -232,6 +233,31 @@ function deferred<T>() {
   return { promise, reject, resolve };
 }
 
+function drawBbox(image: HTMLElement) {
+  Object.defineProperty(image, "naturalHeight", {
+    configurable: true,
+    value: 1000
+  });
+  Object.defineProperty(image, "naturalWidth", {
+    configurable: true,
+    value: 1000
+  });
+  Object.defineProperty(image, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      bottom: 100,
+      height: 100,
+      left: 0,
+      right: 100,
+      top: 0,
+      width: 100
+    })
+  });
+  fireEvent.pointerDown(image, { clientX: 10, clientY: 20, pointerId: 1 });
+  fireEvent.pointerMove(image, { clientX: 80, clientY: 90, pointerId: 1 });
+  fireEvent.pointerUp(image, { clientX: 80, clientY: 90, pointerId: 1 });
+}
+
 describe("图片项目工作区", () => {
   beforeEach(() => {
     Object.values(apiMocks).forEach((mock) => mock.mockReset());
@@ -243,7 +269,7 @@ describe("图片项目工作区", () => {
     vi.useRealTimers();
   });
 
-  it("显示图片用途标签并路由到独立图片工作区", async () => {
+  it("显示图片用途标签并路由到只读图片详情", async () => {
     apiMocks.getProject.mockResolvedValue(imageProject);
     render(<ProjectWorkspace initialProjects={[listItem]} />);
 
@@ -253,45 +279,21 @@ describe("图片项目工作区", () => {
     expect(
       await screen.findByRole("heading", { name: "图片提示词" })
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("分辨率")).toHaveValue("2K");
-    expect(screen.getByRole("button", { name: "生成图片" })).toBeEnabled();
+    expect(screen.getByRole("heading", { name: "Brief" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "进入画布" })).toHaveAttribute(
+      "href",
+      `/projects/${imageProject.id}/canvas`
+    );
+    expect(
+      screen.queryByRole("button", { name: "编辑 Brief" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "生成图片" })
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("故事生成")).not.toBeInTheDocument();
   });
 
-  it("仅在顶部提供 Brief 入口并使用响应式弹窗编辑", async () => {
-    apiMocks.getProject.mockResolvedValue(imageProject);
-    render(<ProjectWorkspace initialProjects={[listItem]} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /咖啡机主图/ }));
-    await screen.findByRole("heading", { name: "图片提示词" });
-
-    expect(screen.queryByText("Brief Summary")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "项目与 Brief" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: "编辑 Brief" })
-    ).toHaveLength(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑 Brief" }));
-
-    expect(
-      screen.getByRole("dialog", { name: "编辑 Brief" })
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("brief-dialog-scroll-region")).toHaveClass(
-      "overflow-y-auto"
-    );
-    expect(screen.getByLabelText("图片用途").closest(".grid")).toHaveClass(
-      "md:grid-cols-2"
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "关闭编辑" }));
-    expect(
-      screen.queryByRole("dialog", { name: "编辑 Brief" })
-    ).not.toBeInTheDocument();
-  });
-
-  it("创建图片项目时隐藏时长并提交完整图片 Brief", async () => {
+  it("创建图片项目时仅项目名称必填", async () => {
     apiMocks.createProject.mockResolvedValue(imageProject);
     render(<ProjectWorkspace initialProjects={[]} />);
 
@@ -302,18 +304,6 @@ describe("图片项目工作区", () => {
     fireEvent.change(screen.getByLabelText("项目名称"), {
       target: { value: "咖啡机主图" }
     });
-    fireEvent.change(screen.getByLabelText("广告需求"), {
-      target: { value: "制作简洁的商品主图" }
-    });
-    fireEvent.change(screen.getByLabelText("商品名称"), {
-      target: { value: "便携咖啡机" }
-    });
-    fireEvent.change(screen.getByLabelText("目标受众"), {
-      target: { value: "城市通勤人群" }
-    });
-    fireEvent.change(screen.getByLabelText("核心卖点（每行一项）"), {
-      target: { value: "轻巧便携" }
-    });
     fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
 
     await waitFor(() => {
@@ -322,68 +312,14 @@ describe("图片项目工作区", () => {
           brief: expect.objectContaining({
             duration_seconds: null,
             image_purpose: "ecommerce_main",
-            product_name: "便携咖啡机",
-            selling_points: ["轻巧便携"]
+            product_name: null,
+            prompt: "",
+            selling_points: []
           }),
           project_type: "image_asset"
         })
       );
     });
-  });
-
-  it("编辑图片 Brief 时保持图片字段矩阵", async () => {
-    apiMocks.getProject.mockResolvedValue(imageProject);
-    apiMocks.updateProject.mockResolvedValue({
-      ...imageProject,
-      brief: { ...imageProject.brief, image_purpose: "poster" }
-    });
-    render(<ProjectWorkspace initialProjects={[listItem]} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /咖啡机主图/ }));
-    await screen.findByRole("heading", { name: "图片提示词" });
-    fireEvent.click(screen.getByRole("button", { name: "编辑 Brief" }));
-
-    expect(screen.queryByLabelText("视频时长（秒）")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("图片用途"), {
-      target: { value: "poster" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
-
-    await waitFor(() => {
-      expect(apiMocks.updateProject).toHaveBeenCalledWith(
-        imageProject.id,
-        expect.objectContaining({
-          brief: expect.objectContaining({
-            duration_seconds: null,
-            image_purpose: "poster",
-            selling_points: ["轻巧便携"]
-          })
-        })
-      );
-    });
-    expect(
-      screen.queryByRole("dialog", { name: "编辑 Brief" })
-    ).not.toBeInTheDocument();
-  });
-
-  it("图片 Brief 保存失败时保留弹窗和已编辑内容", async () => {
-    apiMocks.getProject.mockResolvedValue(imageProject);
-    apiMocks.updateProject.mockRejectedValue(new Error("private error"));
-    render(<ProjectWorkspace initialProjects={[listItem]} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /咖啡机主图/ }));
-    await screen.findByRole("heading", { name: "图片提示词" });
-    fireEvent.click(screen.getByRole("button", { name: "编辑 Brief" }));
-
-    const nameInput = screen.getByLabelText("项目名称");
-    fireEvent.change(nameInput, { target: { value: "未保存的主图项目" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("请求失败");
-    expect(nameInput).toHaveValue("未保存的主图项目");
-    expect(
-      screen.getByRole("dialog", { name: "编辑 Brief" })
-    ).toBeInTheDocument();
   });
 
   it("加载历史版本并保存单调的新版本", async () => {
@@ -673,6 +609,11 @@ describe("图片项目工作区", () => {
   it("点击上传有效参考图并在生成 payload 中携带资产 ID", async () => {
     const queued = imageTask();
     apiMocks.uploadImageProjectReference.mockResolvedValue(referenceAsset);
+    apiMocks.setImageProjectReferenceSelection.mockResolvedValue({
+      ...imageProject,
+      assets: [referenceAsset],
+      image_reference_asset_ids: [referenceAsset.id]
+    });
     apiMocks.generateProjectImage.mockResolvedValue(queued);
     render(
       <ImageProjectWorkspace
@@ -687,8 +628,10 @@ describe("图片项目工作区", () => {
       target: { files: [file] }
     });
 
-    expect(await screen.findByText(file.name)).toBeInTheDocument();
-    expect(screen.getByAltText("当前参考图")).toHaveAttribute(
+    expect(
+      await screen.findByText(referenceAsset.metadata.name as string)
+    ).toBeInTheDocument();
+    expect(screen.getByAltText(file.name)).toHaveAttribute(
       "src",
       referenceAsset.url
     );
@@ -705,7 +648,7 @@ describe("图片项目工作区", () => {
           format: "png",
           operation: "text_to_image",
           prompt_version_id: firstVersion.id,
-          reference_asset_id: referenceAsset.id,
+          reference_asset_ids: [referenceAsset.id],
           size: "2K"
         }
       );
@@ -745,9 +688,38 @@ describe("图片项目工作区", () => {
     expect(apiMocks.uploadImageProjectReference).not.toHaveBeenCalled();
   });
 
+  it("选择超过 10 张参考图时不开始上传", async () => {
+    render(
+      <ImageProjectWorkspace
+        onProjectUpdated={vi.fn()}
+        project={imageProject}
+      />
+    );
+    await screen.findByDisplayValue(firstVersion.prompt);
+    const files = Array.from(
+      { length: 11 },
+      (_, index) =>
+        new File(["png"], `reference-${index}.png`, { type: "image/png" })
+    );
+
+    fireEvent.change(screen.getByLabelText("参考图（可选）"), {
+      target: { files }
+    });
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "参考图最多支持 10 张"
+    );
+    expect(apiMocks.uploadImageProjectReference).not.toHaveBeenCalled();
+  });
+
   it("支持拖拽上传，上传期间禁用生成", async () => {
     const request = deferred<Asset>();
     apiMocks.uploadImageProjectReference.mockReturnValue(request.promise);
+    apiMocks.setImageProjectReferenceSelection.mockResolvedValue({
+      ...imageProject,
+      assets: [referenceAsset],
+      image_reference_asset_ids: [referenceAsset.id]
+    });
     render(
       <ImageProjectWorkspace
         onProjectUpdated={vi.fn()}
@@ -758,7 +730,7 @@ describe("图片项目工作区", () => {
     const file = new File(["webp"], "拖拽参考.webp", { type: "image/webp" });
 
     fireEvent.drop(
-      screen.getByRole("button", { name: "点击或拖拽上传参考图" }),
+      screen.getByRole("button", { name: "点击或拖拽添加参考图" }),
       { dataTransfer: { files: [file] } }
     );
     expect(screen.getByRole("button", { name: "生成图片" })).toBeDisabled();
@@ -766,10 +738,12 @@ describe("图片项目工作区", () => {
       ...referenceAsset,
       metadata: { ...referenceAsset.metadata, name: file.name }
     });
-    expect(await screen.findByText(file.name)).toBeInTheDocument();
+    expect(
+      await screen.findByText(referenceAsset.metadata.name as string)
+    ).toBeInTheDocument();
   });
 
-  it("更换和移除仅更新单张本地选择，不删除后端资产", async () => {
+  it("支持累积添加并移除持久化参考图", async () => {
     const replacement = {
       ...referenceAsset,
       id: "reference-2",
@@ -779,6 +753,22 @@ describe("图片项目工作区", () => {
     apiMocks.uploadImageProjectReference
       .mockResolvedValueOnce(referenceAsset)
       .mockResolvedValueOnce(replacement);
+    apiMocks.setImageProjectReferenceSelection
+      .mockResolvedValueOnce({
+        ...imageProject,
+        assets: [referenceAsset],
+        image_reference_asset_ids: [referenceAsset.id]
+      })
+      .mockResolvedValueOnce({
+        ...imageProject,
+        assets: [referenceAsset, replacement],
+        image_reference_asset_ids: [referenceAsset.id, replacement.id]
+      })
+      .mockResolvedValueOnce({
+        ...imageProject,
+        assets: [replacement],
+        image_reference_asset_ids: [replacement.id]
+      });
     render(
       <ImageProjectWorkspace
         onProjectUpdated={vi.fn()}
@@ -794,20 +784,52 @@ describe("图片项目工作区", () => {
       }
     });
     await screen.findByText("咖啡机参考图.png");
-    fireEvent.click(screen.getByRole("button", { name: "更换参考图" }));
     fireEvent.change(input, {
       target: {
         files: [new File(["jpg"], "替换图.jpg", { type: "image/jpeg" })]
       }
     });
     expect(await screen.findByText("替换图.jpg")).toBeInTheDocument();
-    expect(screen.queryByText("咖啡机参考图.png")).not.toBeInTheDocument();
+    expect(screen.getByText("咖啡机参考图.png")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "移除参考图" }));
-    expect(
-      screen.getByRole("button", { name: "点击或拖拽上传参考图" })
-    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "移除参考图：咖啡机参考图.png" })
+    );
+    await waitFor(() => {
+      expect(screen.queryByText("咖啡机参考图.png")).not.toBeInTheDocument();
+    });
     expect(apiMocks.uploadImageProjectReference).toHaveBeenCalledTimes(2);
+  });
+
+  it("恢复持久化参考图并使用四列预览栅格", async () => {
+    const additionalAssets = Array.from({ length: 3 }, (_, index) => ({
+      ...referenceAsset,
+      id: `reference-${index + 2}`,
+      metadata: {
+        ...referenceAsset.metadata,
+        name: `参考图-${index + 2}.png`
+      }
+    }));
+    render(
+      <ImageProjectWorkspace
+        onProjectUpdated={vi.fn()}
+        project={{
+          ...imageProject,
+          assets: [referenceAsset, ...additionalAssets],
+          image_reference_asset_ids: [
+            referenceAsset.id,
+            ...additionalAssets.map((asset) => asset.id)
+          ]
+        }}
+      />
+    );
+
+    await screen.findByText("参考图-4.png");
+    expect(screen.getByText("4 / 10")).toBeInTheDocument();
+    expect(
+      screen.getByText("参考图-4.png").parentElement?.parentElement?.parentElement
+    )
+      .toHaveClass("sm:grid-cols-4");
   });
 
   it("使用当前保存版本提交生成并轮询成功后刷新版本网格", async () => {
@@ -875,6 +897,54 @@ describe("图片项目工作区", () => {
       screen.getByRole("button", { name: "失效版本不可设为当前" })
     ).toBeDisabled();
     expect(screen.getByRole("button", { name: "编辑图片" })).toBeEnabled();
+  });
+
+  it("编辑图片版本时只提交目标图单图编辑 payload", async () => {
+    const queued = imageTask({
+      frozen_input: {
+        operation: "image_to_image",
+        source_asset_id: generatedAsset.id
+      }
+    });
+    apiMocks.editProjectImage.mockResolvedValue(queued);
+    render(
+      <ImageProjectWorkspace
+        onProjectUpdated={vi.fn()}
+        project={{
+          ...imageProject,
+          assets: [generatedAsset, referenceAsset],
+          image_reference_asset_ids: [referenceAsset.id]
+        }}
+      />
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "编辑图片" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "咖啡机参考图.png 图1" }));
+    drawBbox(screen.getByAltText("目标图"));
+    drawBbox(screen.getByAltText("参考图：咖啡机参考图.png"));
+    fireEvent.change(screen.getByLabelText("编辑指令"), {
+      target: { value: "只修改目标图框选区域" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "生成编辑版本" }));
+
+    await waitFor(() => {
+      expect(apiMocks.editProjectImage).toHaveBeenCalled();
+    });
+    const [, payload] = apiMocks.editProjectImage.mock.calls[0];
+    expect(payload).toEqual({
+      annotation: { type: "bbox", x1: 100, x2: 800, y1: 200, y2: 900 },
+      edit_mode: "single_region",
+      format: "png",
+      operation: "image_to_image",
+      prompt: "只修改目标图框选区域",
+      prompt_version_id: firstVersion.id,
+      size: "2K",
+      source_asset_id: generatedAsset.id
+    });
+    expect(payload).not.toHaveProperty("reference_regions");
+    expect(payload).not.toHaveProperty("target_bbox");
   });
 
   it("选择版本时提交当前 image_revision", async () => {

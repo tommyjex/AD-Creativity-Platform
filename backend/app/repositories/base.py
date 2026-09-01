@@ -1,13 +1,34 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Protocol
 
 from backend.app.schemas import (
+    AigcAssetDirection,
+    AigcPipeline,
+    AigcPipelineAssetReference,
+    AigcPipelineCreate,
+    AigcPipelineRun,
+    AigcPipelineRunDetail,
+    AigcPipelineRunNode,
+    AigcPipelineTaskAssetReference,
+    AigcPipelineTaskAttempt,
+    AigcPipelineTemplate,
+    AigcPipelineTemplateCreate,
+    AigcPipelineTemplateUpdate,
+    AigcPipelineUpdate,
+    AigcTaskError,
+    AigcTaskMetrics,
+    AigcTaskResult,
+    AigcTaskStatus,
+    AigcWorkerLease,
     Asset,
     AssetCategory,
     AssetCreate,
     AssetRole,
+    CanvasLayout,
+    CanvasNode,
     CharacterCard,
     CharacterCardCreate,
     GenerationTask,
@@ -27,8 +48,11 @@ from backend.app.schemas import (
     StoryboardShotVideoConfigUpdate,
     TextArtifact,
     TextArtifactCreate,
+    ToolTask,
+    ToolTaskCreate,
+    ToolTaskInputAsset,
 )
-from backend.app.schemas.enums import ReferenceAssetKind, Stage, Status
+from backend.app.schemas.enums import ReferenceAssetKind, Stage, Status, ToolTaskType
 
 
 class NotFoundError(KeyError):
@@ -39,7 +63,167 @@ class RevisionConflictError(RuntimeError):
     """Raised when an optimistic-lock revision no longer matches."""
 
 
+class ActiveRunConflictError(RuntimeError):
+    """Raised when a pipeline already has an active run."""
+
+
+class AssetReferenceConflictError(RuntimeError):
+    """Raised when an asset is still referenced by an active AIGC entity."""
+
+
+class PipelineRunConflictError(RuntimeError):
+    """Raised when a pipeline is still referenced by an AIGC run."""
+
+
 class Repository(Protocol):
+    def create_aigc_template(
+        self,
+        data: AigcPipelineTemplateCreate,
+    ) -> AigcPipelineTemplate: ...
+
+    def get_aigc_template(self, template_id: str) -> AigcPipelineTemplate: ...
+
+    def list_aigc_templates(
+        self,
+        q: str | None = None,
+    ) -> list[AigcPipelineTemplate]: ...
+
+    def update_aigc_template(
+        self,
+        template_id: str,
+        data: AigcPipelineTemplateUpdate,
+    ) -> AigcPipelineTemplate: ...
+
+    def delete_aigc_template(self, template_id: str) -> None: ...
+
+    def create_aigc_pipeline(self, data: AigcPipelineCreate) -> AigcPipeline: ...
+
+    def get_aigc_pipeline(self, pipeline_id: str) -> AigcPipeline: ...
+
+    def list_aigc_pipelines(self, q: str | None = None) -> list[AigcPipeline]: ...
+
+    def update_aigc_pipeline(
+        self,
+        pipeline_id: str,
+        data: AigcPipelineUpdate,
+    ) -> AigcPipeline: ...
+
+    def delete_aigc_pipeline(self, pipeline_id: str) -> None: ...
+
+    def list_aigc_pipeline_assets(
+        self,
+        pipeline_id: str,
+    ) -> list[AigcPipelineAssetReference]: ...
+
+    def create_aigc_run(
+        self,
+        run: AigcPipelineRun,
+        *,
+        idempotency_key: str,
+        nodes: Iterable[AigcPipelineRunNode],
+    ) -> AigcPipelineRunDetail: ...
+
+    def get_aigc_run(self, run_id: str) -> AigcPipelineRunDetail: ...
+
+    def list_aigc_runs(self, pipeline_id: str) -> list[AigcPipelineRun]: ...
+
+    def get_aigc_run_asset(
+        self,
+        pipeline_id: str,
+        run_id: str,
+        asset_id: str,
+    ) -> Asset: ...
+
+    def update_aigc_run(
+        self,
+        run_id: str,
+        **changes: object,
+    ) -> AigcPipelineRun: ...
+
+    def update_aigc_run_node(
+        self,
+        run_id: str,
+        node_id: str,
+        **changes: object,
+    ) -> AigcPipelineRunNode: ...
+
+    def create_aigc_task_attempt(
+        self,
+        task: AigcPipelineTaskAttempt,
+        *,
+        idempotency_key: str,
+        retry_of_task_id: str | None = None,
+    ) -> AigcPipelineTaskAttempt: ...
+
+    def get_aigc_task_attempt(
+        self,
+        task_id: str,
+    ) -> AigcPipelineTaskAttempt: ...
+
+    def update_aigc_task_attempt(
+        self,
+        task_id: str,
+        **changes: object,
+    ) -> AigcPipelineTaskAttempt: ...
+
+    def list_aigc_task_attempts(
+        self,
+        *,
+        statuses: set[AigcTaskStatus] | None = None,
+    ) -> list[AigcPipelineTaskAttempt]: ...
+
+    def claim_aigc_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+    ) -> AigcPipelineTaskAttempt | None: ...
+
+    def commit_aigc_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+        status: AigcTaskStatus,
+        result: AigcTaskResult,
+        error: AigcTaskError | None,
+        metrics: AigcTaskMetrics,
+    ) -> tuple[AigcPipelineTaskAttempt, bool]: ...
+
+    def add_aigc_task_assets(
+        self,
+        references: Iterable[AigcPipelineTaskAssetReference],
+    ) -> list[AigcPipelineTaskAssetReference]: ...
+
+    def list_aigc_task_assets(
+        self,
+        task_id: str,
+    ) -> list[AigcPipelineTaskAssetReference]: ...
+
+    def remove_aigc_task_assets(
+        self,
+        task_id: str,
+        *,
+        direction: AigcAssetDirection | None = None,
+    ) -> list[AigcPipelineTaskAssetReference]: ...
+
+    def acquire_aigc_worker_lease(
+        self,
+        owner_id: str,
+        *,
+        now: datetime,
+        lease_seconds: int,
+    ) -> AigcWorkerLease | None: ...
+
+    def renew_aigc_worker_lease(
+        self,
+        owner_id: str,
+        fencing_token: int,
+        *,
+        now: datetime,
+        lease_seconds: int,
+    ) -> AigcWorkerLease | None: ...
+
     def create_project(self, data: ProjectCreate) -> Project: ...
 
     def get_project(self, project_id: str) -> Project: ...
@@ -76,6 +260,12 @@ class Repository(Protocol):
 
     def mark_image_prompt_stale(self, project_id: str) -> Project: ...
 
+    def set_image_reference_asset_ids(
+        self,
+        project_id: str,
+        asset_ids: list[str],
+    ) -> Project: ...
+
     def set_current_image_asset(
         self,
         project_id: str,
@@ -102,6 +292,31 @@ class Repository(Protocol):
     ) -> GenerationTask | None: ...
 
     def update_task(self, task_id: str, **changes: object) -> GenerationTask: ...
+
+    def create_tool_task(self, data: ToolTaskCreate) -> ToolTask: ...
+
+    def create_tool_task_with_input_assets(
+        self,
+        data: ToolTaskCreate,
+        inputs: Iterable[ToolTaskInputAsset],
+    ) -> ToolTask: ...
+
+    def get_tool_task(self, task_id: str) -> ToolTask: ...
+
+    def list_tool_task_input_assets(
+        self,
+        task_id: str,
+    ) -> list[ToolTaskInputAsset]: ...
+
+    def list_tool_tasks(
+        self,
+        *,
+        task_type: ToolTaskType | None = None,
+    ) -> list[ToolTask]: ...
+
+    def update_tool_task(self, task_id: str, **changes: object) -> ToolTask: ...
+
+    def delete_tool_task(self, task_id: str) -> ToolTask: ...
 
     def create_asset(self, data: AssetCreate) -> Asset: ...
 
@@ -131,6 +346,8 @@ class Repository(Protocol):
 
     def delete_asset(self, project_id: str, asset_id: str) -> Asset: ...
 
+    def delete_tool_asset(self, asset_id: str) -> Asset: ...
+
     def create_image_layer_set(
         self,
         data: ImageLayerSetCreate,
@@ -155,6 +372,26 @@ class Repository(Protocol):
         expected_revision: int,
         layers: Iterable[ImageLayerUpdate],
     ) -> ImageLayerSet: ...
+
+    def replace_image_layer_asset(
+        self,
+        project_id: str,
+        set_id: str,
+        *,
+        expected_revision: int,
+        layer_id: str,
+        asset: AssetCreate,
+    ) -> ImageLayerSet: ...
+
+    def get_canvas_layout(self, project_id: str) -> CanvasLayout: ...
+
+    def save_canvas_layout(
+        self,
+        project_id: str,
+        *,
+        expected_revision: int,
+        nodes: Iterable[CanvasNode],
+    ) -> CanvasLayout: ...
 
     def create_character_card(self, data: CharacterCardCreate) -> CharacterCard: ...
 

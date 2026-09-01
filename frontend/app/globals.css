@@ -26,6 +26,18 @@
     --success: 151 60% 39%;
     --warning: 35 88% 48%;
     --info: 207 82% 48%;
+    --aigc-modality-text: #2563eb;
+    --aigc-modality-text-light: #eff6ff;
+    --aigc-modality-text-border: var(--aigc-modality-text);
+    --aigc-modality-image: #16a34a;
+    --aigc-modality-image-light: #f0fdf4;
+    --aigc-modality-image-border: var(--aigc-modality-image);
+    --aigc-modality-video: #ea580c;
+    --aigc-modality-video-light: #fff7ed;
+    --aigc-modality-video-border: var(--aigc-modality-video);
+    --aigc-modality-audio: #db2777;
+    --aigc-modality-audio-light: #fdf2f8;
+    --aigc-modality-audio-border: var(--aigc-modality-audio);
     --radius: 0.75rem;
     --font-sans: "Aptos", "SF Pro Text", "HarmonyOS Sans SC", "PingFang SC", sans-serif;
     --font-mono: "SF Mono", "Cascadia Code", "JetBrains Mono", monospace;

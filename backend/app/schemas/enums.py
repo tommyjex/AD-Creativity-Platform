@@ -61,6 +61,16 @@ class AssetRole(str, Enum):
     INTERNAL_LAYER = "internal_layer"
 
 
+class ToolTaskType(str, Enum):
+    FACE_BLUR_VIDEO = "face_blur_video"
+    MULTIMODAL_VIDEO_GENERATION = "multimodal_video_generation"
+
+
+class ToolAssetRole(str, Enum):
+    INPUT = "input"
+    OUTPUT = "output"
+
+
 class ImageGenerationOperation(str, Enum):
     TEXT_TO_IMAGE = "text_to_image"
     IMAGE_TO_IMAGE = "image_to_image"

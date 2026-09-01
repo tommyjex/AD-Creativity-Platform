@@ -32,12 +32,22 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { getSafePreviewUrl } from "@/lib/asset-display";
 import {
   apiClient,
   getUserFacingErrorMessage,
   isApiError
 } from "@/lib/api-client";
+import {
+  clampLayerScale,
+  getLayerFrame,
+  MAX_LAYER_SCALE,
+  MIN_LAYER_SCALE,
+  moveLayer,
+  positionFromDrag,
+  scaleFromResize
+} from "@/lib/layer-editor-geometry";
 import type {
   Asset,
   GenerationTask,
@@ -46,9 +56,6 @@ import type {
   ImageLayerUpdate
 } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
-
-const MIN_SCALE = 0.05;
-const MAX_SCALE = 20;
 
 interface DragState {
   clientX: number;
@@ -67,99 +74,14 @@ interface ResizeState {
   scale: number;
 }
 
-export interface LayerFrame {
-  heightPercent: number;
-  leftPercent: number;
-  topPercent: number;
-  widthPercent: number;
-}
-
-export function getLayerFrame(
-  layer: ImageLayer,
-  canvasWidth: number,
-  canvasHeight: number
-): LayerFrame {
-  const [x1, y1, x2, y2] = layer.bbox_absolute;
-  return {
-    heightPercent: ((y2 - y1) * layer.scale * 100) / canvasHeight,
-    leftPercent: (layer.x * 100) / canvasWidth,
-    topPercent: (layer.y * 100) / canvasHeight,
-    widthPercent: ((x2 - x1) * layer.scale * 100) / canvasWidth
-  };
-}
-
-export function positionFromDrag(
-  start: Pick<DragState, "x" | "y">,
-  deltaX: number,
-  deltaY: number,
-  renderedWidth: number,
-  renderedHeight: number,
-  canvasWidth: number,
-  canvasHeight: number
-) {
-  if (renderedWidth <= 0 || renderedHeight <= 0) return start;
-  return {
-    x: roundCoordinate(start.x + (deltaX / renderedWidth) * canvasWidth),
-    y: roundCoordinate(start.y + (deltaY / renderedHeight) * canvasHeight)
-  };
-}
-
-export function clampLayerScale(value: number) {
-  if (!Number.isFinite(value)) return MIN_SCALE;
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
-}
-
-export function scaleFromResize(
-  start: Pick<ResizeState, "layerHeight" | "layerWidth" | "scale">,
-  deltaX: number,
-  deltaY: number,
-  renderedWidth: number,
-  renderedHeight: number,
-  canvasWidth: number,
-  canvasHeight: number
-) {
-  if (
-    renderedWidth <= 0 ||
-    renderedHeight <= 0 ||
-    canvasWidth <= 0 ||
-    canvasHeight <= 0
-  ) {
-    return start.scale;
-  }
-  const baseWidth = (start.layerWidth / canvasWidth) * renderedWidth;
-  const baseHeight = (start.layerHeight / canvasHeight) * renderedHeight;
-  const diagonalSquared = baseWidth ** 2 + baseHeight ** 2;
-  if (diagonalSquared <= 0) return start.scale;
-  const projectedScaleDelta =
-    (deltaX * baseWidth + deltaY * baseHeight) / diagonalSquared;
-  return clampLayerScale(start.scale + projectedScaleDelta);
-}
-
-export function moveLayer(
-  layers: ImageLayer[],
-  layerId: string,
-  direction: "down" | "up"
-) {
-  const ordered = layers.toSorted((a, b) => a.z_index - b.z_index);
-  const index = ordered.findIndex((layer) => layer.id === layerId);
-  const targetIndex = direction === "up" ? index + 1 : index - 1;
-  if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) {
-    return layers;
-  }
-  const current = ordered[index];
-  const target = ordered[targetIndex];
-  return ordered
-    .map((layer) => {
-      if (layer.id === current.id) {
-        return { ...layer, z_index: target.z_index };
-      }
-      if (layer.id === target.id) {
-        return { ...layer, z_index: current.z_index };
-      }
-      return layer;
-    })
-    .toSorted((a, b) => a.z_index - b.z_index);
-}
+export {
+  clampLayerScale,
+  getLayerFrame,
+  moveLayer,
+  positionFromDrag,
+  scaleFromResize,
+  type LayerFrame
+} from "@/lib/layer-editor-geometry";
 
 export function toLayerUpdates(layers: ImageLayer[]): ImageLayerUpdate[] {
   return layers
@@ -203,6 +125,8 @@ export function LayerEditorDialog({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [exportTask, setExportTask] = useState<GenerationTask | null>(null);
   const [exportedAsset, setExportedAsset] = useState<Asset | null>(null);
+  const [contentEditPrompt, setContentEditPrompt] = useState("");
+  const [contentEditTask, setContentEditTask] = useState<GenerationTask | null>(null);
 
   const assetById = useMemo(
     () =>
@@ -221,6 +145,8 @@ export function LayerEditorDialog({
   const dirty = savedState !== draftState;
   const isExporting =
     exportTask?.status === "queued" || exportTask?.status === "running";
+  const isContentEditing =
+    contentEditTask?.status === "queued" || contentEditTask?.status === "running";
   const baseUrl = getSafePreviewUrl(layerSet.base_asset);
   const canvasRatio = layerSet.canvas_width / layerSet.canvas_height;
 
@@ -335,10 +261,8 @@ export function LayerEditorDialog({
     event.stopPropagation();
   }
 
-  async function handleSave() {
-    if (!dirty || isSaving) return;
+  async function persistLayout(): Promise<ImageLayerSetDetail | null> {
     setIsSaving(true);
-    setFeedback(null);
     try {
       const updated = await apiClient.updateImageLayerSet(
         layerSet.project_id,
@@ -351,8 +275,8 @@ export function LayerEditorDialog({
       setLayerSet(updated);
       setLayers(updated.layers.toSorted((a, b) => a.z_index - b.z_index));
       setConflict(false);
-      setFeedback(`图层布局已保存，Revision ${updated.revision}。`);
       onLayerSetChange(updated);
+      return updated;
     } catch (error) {
       if (isApiError(error) && error.status === 409) {
         setConflict(true);
@@ -360,8 +284,18 @@ export function LayerEditorDialog({
       } else {
         setFeedback(getUserFacingErrorMessage(error));
       }
+      return null;
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleSave() {
+    if (!dirty || isSaving) return;
+    setFeedback(null);
+    const updated = await persistLayout();
+    if (updated) {
+      setFeedback(`图层布局已保存，Revision ${updated.revision}。`);
     }
   }
 
@@ -443,6 +377,51 @@ export function LayerEditorDialog({
       await pollExportTask(await apiClient.retryTask(exportTask.id));
     } catch (error) {
       setFeedback(getUserFacingErrorMessage(error));
+    }
+  }
+
+  async function handleContentEdit() {
+    if (!selectedLayer || !contentEditPrompt.trim() || isContentEditing || isSaving) {
+      return;
+    }
+    setFeedback(null);
+    let activeRevision = layerSet.revision;
+    if (dirty) {
+      const saved = await persistLayout();
+      if (!saved) return;
+      activeRevision = saved.revision;
+    }
+    try {
+      let task = await apiClient.editImageLayerContent(layerSet.project_id, layerSet.id, {
+        expected_revision: activeRevision,
+        layer_id: selectedLayer.id,
+        prompt: contentEditPrompt.trim(),
+        size: "2K",
+        format: "png"
+      });
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        setContentEditTask(task);
+        if (task.status === "succeeded") {
+          await handleReload();
+          setContentEditPrompt("");
+          setFeedback("图层内容已替换。");
+          return;
+        }
+        if (task.status === "failed") {
+          setFeedback(task.error?.message ?? "图层内容编辑失败。");
+          return;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        task = await apiClient.getTask(task.id, { cache: "no-store" });
+      }
+      throw new Error("layer content edit polling timed out");
+    } catch (error) {
+      if (isApiError(error) && error.status === 409) {
+        setConflict(true);
+        setFeedback("图层内容替换冲突：请重新加载最新图层。");
+      } else {
+        setFeedback(getUserFacingErrorMessage(error));
+      }
     }
   }
 
@@ -545,8 +524,8 @@ export function LayerEditorDialog({
                       {selectedId === layer.id && layer.visible ? (
                         <span
                           aria-label={`等比缩放图层 ${layer.name}`}
-                          aria-valuemax={MAX_SCALE}
-                          aria-valuemin={MIN_SCALE}
+                          aria-valuemax={MAX_LAYER_SCALE}
+                          aria-valuemin={MIN_LAYER_SCALE}
                           aria-valuenow={layer.scale}
                           className="absolute -bottom-2 -right-2 z-10 h-4 w-4 touch-none cursor-nwse-resize rounded-[3px] border-2 border-primary bg-background shadow-[0_1px_5px_rgba(15,23,42,0.35)]"
                           data-testid={`resize-handle-${layer.id}`}
@@ -649,6 +628,37 @@ export function LayerEditorDialog({
                   selectedLayer && updateLayer(selectedLayer.id, changes)
                 }
               />
+              {selectedLayer ? (
+                <div className="border-t border-border p-3">
+                  <label className="text-xs font-semibold" htmlFor="layer-content-edit">
+                    编辑图层内容
+                  </label>
+                  <Textarea
+                    className="mt-2 min-h-20 text-xs"
+                    disabled={isContentEditing || isSaving}
+                    id="layer-content-edit"
+                    maxLength={4000}
+                    onChange={(event) => setContentEditPrompt(event.target.value)}
+                    placeholder={`例如：将${selectedLayer.name}改为深蓝色磨砂材质。`}
+                    value={contentEditPrompt}
+                  />
+                  <Button
+                    className="mt-2 w-full"
+                    disabled={isContentEditing || isSaving || !contentEditPrompt.trim()}
+                    onClick={handleContentEdit}
+                    size="sm"
+                    type="button"
+                  >
+                    {isContentEditing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {isContentEditing ? "正在生成替换图层" : "生成替换图层"}
+                  </Button>
+                  {dirty ? (
+                    <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                      提交内容编辑前会先自动保存当前图层布局改动。
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </aside>
         </div>
@@ -845,8 +855,8 @@ function TransformControls({
               aria-label="图层缩放滑杆"
               className="w-full accent-primary"
               id="layer-scale"
-              max={MAX_SCALE}
-              min={MIN_SCALE}
+              max={MAX_LAYER_SCALE}
+              min={MIN_LAYER_SCALE}
               onChange={(event) =>
                 onChange({ scale: clampLayerScale(Number(event.target.value)) })
               }
@@ -856,8 +866,8 @@ function TransformControls({
             />
             <Input
               aria-label="图层缩放数值"
-              max={MAX_SCALE}
-              min={MIN_SCALE}
+              max={MAX_LAYER_SCALE}
+              min={MIN_LAYER_SCALE}
               onChange={(event) =>
                 onChange({ scale: clampLayerScale(Number(event.target.value)) })
               }
@@ -926,8 +936,4 @@ function LayerIconButton({
       <Icon aria-hidden="true" className="h-3.5 w-3.5" />
     </button>
   );
-}
-
-function roundCoordinate(value: number) {
-  return Math.round(value * 100) / 100;
 }

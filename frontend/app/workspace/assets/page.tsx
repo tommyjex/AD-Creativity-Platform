@@ -1,5 +1,6 @@
 import {
   WorkspaceAssetLibrary,
+  WORKSPACE_ASSET_SOURCES,
   type WorkspaceAssetFilters
 } from "@/components/workspace/workspace-asset-library";
 import {
@@ -12,7 +13,8 @@ import {
   STATUSES,
   type Asset,
   type ProjectListItem,
-  type Status
+  type Status,
+  type ToolTask
 } from "@/lib/api-types";
 
 type SearchParams = Promise<
@@ -28,15 +30,28 @@ export default async function WorkspaceAssetsPage({
   const api = createApiClient();
   let assets: Asset[] = [];
   let projects: ProjectListItem[] = [];
+  let toolTasks: ToolTask[] = [];
   let error: string | undefined;
 
   try {
     // Cache the navigation render for 30s so switching project/section paints
     // quickly; deletes in the client refresh their own local state.
-    [projects, assets] = await Promise.all([
+    const [nextProjects, projectAssets, toolAssets, nextToolTasks] =
+      await Promise.all([
       api.listProjects({ next: { revalidate: 30 } }),
-      api.listAssets(toApiFilters(filters), { next: { revalidate: 30 } })
+      filters.source === "tools"
+        ? Promise.resolve([])
+        : api.listAssets(toApiFilters(filters), { next: { revalidate: 30 } }),
+      filters.source === "projects"
+        ? Promise.resolve([])
+        : api.listToolAssets({ next: { revalidate: 30 } }),
+      filters.source === "projects"
+        ? Promise.resolve([])
+        : api.listToolTasks({ next: { revalidate: 30 } })
     ]);
+    projects = nextProjects;
+    assets = [...projectAssets, ...toolAssets];
+    toolTasks = nextToolTasks;
   } catch (requestError) {
     error = getUserFacingErrorMessage(requestError);
   }
@@ -47,6 +62,7 @@ export default async function WorkspaceAssetsPage({
       error={error}
       filters={filters}
       projects={projects}
+      toolTasks={toolTasks}
     />
   );
 }
@@ -57,10 +73,13 @@ function parseFilters(
   const projectId = firstValue(searchParams.project_id)?.trim();
   const section = firstValue(searchParams.section);
   const status = firstValue(searchParams.status);
+  const source = firstValue(searchParams.source);
+  const parsedSource = isWorkspaceAssetSource(source) ? source : undefined;
 
   return {
-    projectId: projectId || undefined,
+    projectId: parsedSource === "tools" ? undefined : projectId || undefined,
     section: isAssetSection(section) ? section : undefined,
+    source: parsedSource,
     status: isStatus(status) ? status : undefined
   };
 }
@@ -73,7 +92,7 @@ function parseFilters(
 function toApiFilters(filters: WorkspaceAssetFilters): AssetFilters {
   return {
     category: undefined,
-    projectId: filters.projectId,
+    projectId: filters.source === "tools" ? undefined : filters.projectId,
     status: filters.status
   };
 }
@@ -90,4 +109,15 @@ function isAssetSection(value: string | undefined): value is AssetSection {
 
 function isStatus(value: string | undefined): value is Status {
   return value !== undefined && STATUSES.includes(value as Status);
+}
+
+function isWorkspaceAssetSource(
+  value: string | undefined
+): value is WorkspaceAssetFilters["source"] {
+  return (
+    value !== undefined &&
+    WORKSPACE_ASSET_SOURCES.includes(
+      value as (typeof WORKSPACE_ASSET_SOURCES)[number]
+    )
+  );
 }

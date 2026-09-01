@@ -138,6 +138,19 @@ const secondProjectListItem: ProjectListItem = {
   updated_at: secondProject.updated_at
 };
 
+const imageProjectListItem: ProjectListItem = {
+  ...projectListItem,
+  brief: {
+    ...projectListItem.brief,
+    duration_seconds: null,
+    image_purpose: "poster",
+    prompt: "为夏季气泡水制作一张清爽的社交媒体海报"
+  },
+  id: "image-project-1",
+  name: "气泡水夏季海报",
+  project_type: "image_asset"
+};
+
 describe("ProjectWorkspace", () => {
   beforeEach(() => {
     Object.values(apiMocks).forEach((mock) => mock.mockReset());
@@ -312,6 +325,39 @@ describe("ProjectWorkspace", () => {
     expect(await screen.findByText(project.name)).toBeInTheDocument();
     expect(screen.getByText(secondProject.name)).toBeInTheDocument();
     expect(searchInput).toHaveValue("");
+  });
+
+  it("filters the sidebar project list by video and image project types", () => {
+    render(
+      <ProjectWorkspace
+        initialProjects={[
+          projectListItem,
+          secondProjectListItem,
+          imageProjectListItem
+        ]}
+      />
+    );
+
+    const categoryTabs = screen.getByLabelText("项目分类");
+    expect(within(categoryTabs).getByRole("tab", { name: /全部项目（3 个项目）/ }))
+      .toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(project.name)).toBeInTheDocument();
+    expect(screen.getByText(secondProject.name)).toBeInTheDocument();
+    expect(screen.getByText(imageProjectListItem.name)).toBeInTheDocument();
+
+    fireEvent.click(
+      within(categoryTabs).getByRole("tab", { name: /视频项目（2 个项目）/ })
+    );
+    expect(screen.getByText(project.name)).toBeInTheDocument();
+    expect(screen.getByText(secondProject.name)).toBeInTheDocument();
+    expect(screen.queryByText(imageProjectListItem.name)).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(categoryTabs).getByRole("tab", { name: /图片（1 个项目）/ })
+    );
+    expect(screen.queryByText(project.name)).not.toBeInTheDocument();
+    expect(screen.queryByText(secondProject.name)).not.toBeInTheDocument();
+    expect(screen.getByText(imageProjectListItem.name)).toBeInTheDocument();
   });
 
   it("shows a searchable error and retries the current keyword", async () => {

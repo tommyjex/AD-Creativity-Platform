@@ -8,7 +8,7 @@ from pydantic import Field, StrictInt, field_validator, model_validator
 
 from .asset import Asset
 from .common import SchemaModel, utc_now
-from .enums import ImageLayerDecompositionSize, ImageOutputFormat, Status
+from .enums import ImageGenerationSize, ImageLayerDecompositionSize, ImageOutputFormat, Status
 from .image_generation import COORDINATE_TAG_PATTERN, ImageBboxAnnotation
 
 
@@ -112,6 +112,37 @@ class ImageLayerCompositionRequest(SchemaModel):
     layer_set_id: str = Field(..., min_length=1)
     expected_revision: int = Field(..., ge=0)
     set_current: bool = True
+
+
+class ImageLayerContentEditRequest(SchemaModel):
+    expected_revision: int = Field(..., ge=0)
+    layer_id: str = Field(..., min_length=1)
+    prompt: str = Field(..., min_length=1, max_length=4000)
+    size: ImageGenerationSize = ImageGenerationSize.TWO_K
+    format: ImageOutputFormat = ImageOutputFormat.PNG
+
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, value: str) -> str:
+        value = value.strip()
+        if not value or COORDINATE_TAG_PATTERN.search(value):
+            raise ValueError("coordinate tags are not accepted in layer edit prompts")
+        return value
+
+
+class FrozenImageLayerContentEditInput(SchemaModel):
+    kind: Literal["layer_content_edit"] = "layer_content_edit"
+    project_id: str = Field(..., min_length=1)
+    layer_set_id: str = Field(..., min_length=1)
+    layer_id: str = Field(..., min_length=1)
+    expected_revision: int = Field(..., ge=0)
+    source_asset_id: str = Field(..., min_length=1)
+    source_object_key: str = Field(..., min_length=1)
+    source_asset_created_at: str = Field(..., min_length=1)
+    prompt: str = Field(..., min_length=1)
+    size: ImageGenerationSize = ImageGenerationSize.TWO_K
+    format: ImageOutputFormat = ImageOutputFormat.PNG
+    model: str = Field(..., min_length=1)
 
 
 class FrozenImageLayerCompositionInput(SchemaModel):

@@ -1,3 +1,9 @@
+import type {
+  SeedanceAspectRatio,
+  SeedanceModel,
+  SeedanceResolution
+} from "@/lib/seedance";
+
 export type DateTimeString = string;
 
 export const STATUSES = [
@@ -45,6 +51,10 @@ export const ASSET_TYPES = [
 
 export type AssetType = (typeof ASSET_TYPES)[number];
 export type AssetRole = "public" | "internal_base" | "internal_layer";
+export type ToolAssetRole = "input" | "output";
+export type ToolTaskType =
+  | "face_blur_video"
+  | "multimodal_video_generation";
 
 export const ASSET_CATEGORIES = ["character", "scene", "reference"] as const;
 
@@ -149,6 +159,7 @@ export interface ProjectListItem {
   image_prompt_status: Status;
   current_image_asset_id: string | null;
   image_revision: number;
+  image_reference_asset_ids?: string[];
   created_at: DateTimeString;
   updated_at: DateTimeString;
 }
@@ -164,6 +175,7 @@ export interface Project {
   image_prompt_status: Status;
   current_image_asset_id: string | null;
   image_revision: number;
+  image_reference_asset_ids?: string[];
   character_cards?: CharacterCard[];
   text_artifacts: TextArtifact[];
   storyboard: StoryboardShot[];
@@ -199,6 +211,7 @@ export interface ImagePromptSuggestion {
 
 export type ImageGenerationSize = "1K" | "1.5K" | "2K";
 export type ImageOutputFormat = "png" | "jpeg";
+export type ImageEditMode = "single_region" | "reference_replace";
 export type ImageEditAnnotation =
   | { type: "point"; x: number; y: number }
   | {
@@ -209,9 +222,50 @@ export type ImageEditAnnotation =
       y2: number;
     };
 
+export interface ImageReferenceRegion {
+  asset_id: string;
+  image_index: number;
+  bbox: Extract<ImageEditAnnotation, { type: "bbox" }>;
+}
+
+export type CanvasNodeKind = "reference" | "output";
+export type CanvasNodeSource =
+  | "text_to_image"
+  | "image_to_image"
+  | "layer_decomposition";
+
+export interface CanvasNode {
+  id: string;
+  kind: CanvasNodeKind;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z: number;
+  asset_id?: string | null;
+  order_index?: number;
+  bbox?: Extract<ImageEditAnnotation, { type: "bbox" }> | null;
+  task_id?: string | null;
+  source?: CanvasNodeSource | null;
+}
+
+export interface CanvasLayout {
+  project_id: string;
+  nodes: CanvasNode[];
+  revision: number;
+  updated_at: DateTimeString;
+}
+
+export interface CanvasLayoutUpdate {
+  expected_revision: number;
+  nodes: CanvasNode[];
+}
+
 export interface TextToImageGenerationRequest {
   operation: "text_to_image";
   prompt_version_id: string;
+  reference_asset_ids?: string[];
+  /** @deprecated Use reference_asset_ids. */
   reference_asset_id?: string;
   size: ImageGenerationSize;
   format: ImageOutputFormat;
@@ -223,6 +277,9 @@ export interface ImageToImageGenerationRequest {
   prompt: string;
   prompt_version_id?: string;
   annotation?: ImageEditAnnotation | null;
+  edit_mode?: ImageEditMode;
+  target_bbox?: Extract<ImageEditAnnotation, { type: "bbox" }> | null;
+  reference_regions?: ImageReferenceRegion[];
   size: ImageGenerationSize;
   format: ImageOutputFormat;
 }
@@ -230,6 +287,10 @@ export interface ImageToImageGenerationRequest {
 export type ImageGenerationRequest =
   | TextToImageGenerationRequest
   | ImageToImageGenerationRequest;
+
+export interface ImageReferenceSelectionUpdate {
+  asset_ids: string[];
+}
 
 export type ImageLayerDecompositionSize = "auto" | ImageGenerationSize;
 
@@ -293,6 +354,14 @@ export interface ImageLayerCompositionRequest {
   layer_set_id: string;
   expected_revision: number;
   set_current?: boolean;
+}
+
+export interface ImageLayerContentEditRequest {
+  expected_revision: number;
+  layer_id: string;
+  prompt: string;
+  size: ImageGenerationSize;
+  format: ImageOutputFormat;
 }
 
 export interface SetCurrentImageRequest {
@@ -472,7 +541,9 @@ export interface TextGenerationStreamState {
 
 export interface Asset {
   id: string;
-  project_id: string;
+  project_id: string | null;
+  tool_task_id?: string | null;
+  tool_asset_role?: ToolAssetRole | null;
   type: AssetType;
   category: AssetCategory | null;
   asset_role?: AssetRole;
@@ -486,6 +557,62 @@ export interface Asset {
   metadata: AssetMetadata;
   created_at: DateTimeString;
   updated_at: DateTimeString;
+}
+
+export interface ToolTask {
+  id: string;
+  type: ToolTaskType;
+  status: Status;
+  input_snapshot: Record<string, unknown>;
+  provider_task_id: string | null;
+  error?: TaskError | null;
+  retry_of_task_id?: string | null;
+  created_at: DateTimeString;
+  updated_at: DateTimeString;
+  started_at: DateTimeString | null;
+  finished_at: DateTimeString | null;
+  input_assets?: ToolTaskInputAsset[];
+}
+
+export interface ToolTaskInputAsset {
+  task_id: string;
+  asset_id: string;
+  kind: ReferenceAssetKind;
+  created_at: DateTimeString;
+}
+
+export interface ToolTaskCreate {
+  type: ToolTaskType;
+  input_snapshot?: Record<string, unknown>;
+  retry_of_task_id?: string | null;
+}
+
+export interface FaceBlurVideoRequest {
+  video_asset_id: string;
+  mask_mode: "mosaic" | "blur";
+  mask_strength: "low" | "medium" | "high";
+}
+
+export interface ToolVideoGenerationRequest {
+  model: SeedanceModel;
+  prompt: string;
+  duration_seconds: number;
+  resolution: SeedanceResolution;
+  aspect_ratio: SeedanceAspectRatio;
+  reference_image_asset_ids: string[];
+  reference_video_asset_ids: string[];
+  reference_audio_asset_ids: string[];
+}
+
+export interface ToolVideoPromptOptimizeRequest {
+  prompt: string;
+  reference_image_count?: number;
+  reference_video_count?: number;
+  reference_audio_count?: number;
+}
+
+export interface ToolVideoPromptOptimizeResponse {
+  optimized_prompt: string;
 }
 
 export interface CharacterCard {

@@ -10,7 +10,7 @@ from time import monotonic
 from typing import Any, Literal, Optional, Protocol, Union
 
 import httpx
-from pydantic import Field, ValidationError, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from ..core.config import Settings, get_settings
 from ..schemas import (
@@ -29,6 +29,24 @@ from ..schemas import (
     validate_visible_selling_copy,
 )
 from ..schemas.common import SchemaModel
+from ..schemas.seedance import (
+    SEEDANCE_DEFAULT_TASK_TYPE,
+    SeedanceAspectRatio,
+    SeedanceGenerationMode,
+    SeedanceModel,
+    SeedanceResolution,
+    SeedanceTaskType,
+    validate_seedance_duration,
+    validate_seedance_reference_counts,
+    validate_seedance_resolution,
+)
+from ..schemas.tool_task import (
+    ToolVideoAspectRatio,
+    ToolVideoModel,
+    ToolVideoResolution,
+    validate_tool_video_duration,
+    validate_tool_video_resolution,
+)
 from ..video_prompt import MAX_VIDEO_PROMPT_LENGTH
 from .text_streaming import IncrementalJsonStringExtractor
 
@@ -182,6 +200,13 @@ class TextGenerationRequest(SchemaModel):
     image_urls: list[str] = Field(default_factory=list)
 
 
+class AigcTextGenerationRequest(SchemaModel):
+    model: str = Field(..., min_length=1, max_length=255)
+    prompt: str = Field(..., min_length=1, max_length=20000)
+    system_prompt: str = Field(default="", max_length=12000)
+    temperature: float = Field(default=0.7, ge=0, le=2)
+
+
 class ImageGenerationRequest(SchemaModel):
     project_id: str = Field(..., min_length=1)
     shot: StoryboardShotCreate
@@ -202,7 +227,7 @@ class ProjectImageGenerationRequest(SchemaModel):
     size: ImageGenerationSize = ImageGenerationSize.TWO_K
     output_format: ImageOutputFormat = ImageOutputFormat.PNG
     source_image_url: str | None = Field(default=None, min_length=1)
-    reference_image_url: str | None = Field(default=None, min_length=1)
+    reference_image_urls: list[str] = Field(default_factory=list, max_length=10)
 
     @model_validator(mode="after")
     def validate_source_image(self) -> "ProjectImageGenerationRequest":
@@ -216,11 +241,6 @@ class ProjectImageGenerationRequest(SchemaModel):
             and self.source_image_url is not None
         ):
             raise ValueError("text_to_image must not include source_image_url")
-        if (
-            self.operation == ImageGenerationOperation.IMAGE_TO_IMAGE
-            and self.reference_image_url is not None
-        ):
-            raise ValueError("image_to_image must not include reference_image_url")
         return self
 
 
@@ -303,6 +323,140 @@ class VideoGenerationRequest(SchemaModel):
         return self
 
 
+class ToolVideoGenerationRequest(SchemaModel):
+    """Independent Seedance request for a tool task with no storyboard inputs."""
+
+    model: ToolVideoModel
+    prompt: str = Field(..., min_length=1, max_length=12000)
+    reference_image_urls: list[str] = Field(default_factory=list, max_length=30)
+    reference_video_urls: list[str] = Field(default_factory=list, max_length=10)
+    reference_audio_urls: list[str] = Field(default_factory=list, max_length=10)
+    duration_seconds: int = Field(..., strict=True)
+    resolution: ToolVideoResolution
+    aspect_ratio: ToolVideoAspectRatio
+
+    @model_validator(mode="after")
+    def validate_duration_for_model(self) -> "ToolVideoGenerationRequest":
+        validate_tool_video_duration(self.model, self.duration_seconds)
+        validate_tool_video_resolution(self.model, self.resolution)
+        validate_seedance_reference_counts(
+            self.model,
+            reference_image_count=len(self.reference_image_urls),
+            reference_video_count=len(self.reference_video_urls),
+            reference_audio_count=len(self.reference_audio_urls),
+        )
+        return self
+
+
+class SeedanceVideoGenerationRequest(SchemaModel):
+    """Domain-neutral, fully validated Seedance provider request."""
+
+    model: SeedanceModel
+    generation_mode: SeedanceGenerationMode
+    task_type: SeedanceTaskType = SEEDANCE_DEFAULT_TASK_TYPE
+    prompt: str | None = Field(default=None, max_length=12000)
+    first_frame_url: str | None = Field(default=None, min_length=1)
+    last_frame_url: str | None = Field(default=None, min_length=1)
+    reference_image_urls: list[str] = Field(default_factory=list, max_length=30)
+    reference_video_urls: list[str] = Field(default_factory=list, max_length=10)
+    reference_audio_urls: list[str] = Field(default_factory=list, max_length=10)
+    duration_seconds: int = Field(..., strict=True)
+    resolution: SeedanceResolution
+    aspect_ratio: SeedanceAspectRatio
+    generate_audio: bool = Field(default=True, strict=True)
+
+    @field_validator(
+        "prompt",
+        "first_frame_url",
+        "last_frame_url",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_text(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator(
+        "reference_image_urls",
+        "reference_video_urls",
+        "reference_audio_urls",
+    )
+    @classmethod
+    def validate_reference_urls(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("reference URLs must not be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_seedance_request(self) -> "SeedanceVideoGenerationRequest":
+        validate_seedance_duration(self.model, self.duration_seconds)
+        validate_seedance_resolution(self.model, self.resolution)
+        validate_seedance_reference_counts(
+            self.model,
+            reference_image_count=len(self.reference_image_urls),
+            reference_video_count=len(self.reference_video_urls),
+            reference_audio_count=len(self.reference_audio_urls),
+        )
+        has_references = any(
+            (
+                self.reference_image_urls,
+                self.reference_video_urls,
+                self.reference_audio_urls,
+            )
+        )
+        if self.task_type in {"edit", "extend"}:
+            if self.generation_mode != "multimodal_reference":
+                raise ValueError(
+                    "edit and extend require multimodal_reference mode"
+                )
+            if not self.reference_video_urls:
+                raise ValueError(
+                    "edit and extend require at least one reference video"
+                )
+        if self.generation_mode == "text_to_video":
+            if not self.prompt:
+                raise ValueError("text_to_video requires prompt")
+            if self.first_frame_url or self.last_frame_url or has_references:
+                raise ValueError("text_to_video must not include media")
+        elif self.generation_mode == "first_frame":
+            if not self.first_frame_url:
+                raise ValueError("first_frame requires first_frame_url")
+            if self.last_frame_url or has_references:
+                raise ValueError("first_frame must not include other media")
+        elif self.generation_mode == "first_last_frame":
+            if not self.first_frame_url or not self.last_frame_url:
+                raise ValueError(
+                    "first_last_frame requires first_frame_url and last_frame_url"
+                )
+            if has_references:
+                raise ValueError(
+                    "first_last_frame must not include reference media"
+                )
+        else:
+            if self.first_frame_url or self.last_frame_url:
+                raise ValueError(
+                    "multimodal_reference must not include frame media"
+                )
+            if not self.prompt and not has_references:
+                raise ValueError(
+                    "multimodal_reference requires prompt or reference media"
+                )
+            if (
+                self.model != "doubao-seedance-2-5-260628"
+                and self.reference_audio_urls
+                and not (
+                    self.reference_image_urls or self.reference_video_urls
+                )
+            ):
+                raise ValueError(
+                    f"{self.model} audio references require an image or video"
+                )
+        return self
+
+
 class VideoEditRequest(SchemaModel):
     project_id: str = Field(..., min_length=1)
     shot: StoryboardShotCreate
@@ -352,6 +506,33 @@ class VideoPromptOptimizationResult(SchemaModel):
     )
 
 
+class ToolVideoPromptOptimizationRequest(SchemaModel):
+    """Lightweight edit-oriented prompt optimization request for tool videos."""
+
+    prompt: str = Field(..., min_length=1, max_length=12000)
+    reference_image_count: int = Field(default=0, ge=0)
+    reference_video_count: int = Field(default=0, ge=0)
+    reference_audio_count: int = Field(default=0, ge=0)
+
+
+class AigcImagePromptOptimizationRequest(SchemaModel):
+    text: str = Field(default="", max_length=20000)
+    reference_instructions: list[str] = Field(default_factory=list, max_length=10)
+    generation_modes: list[Literal["text_to_image", "image_to_image"]] = Field(
+        min_length=1,
+        max_length=2,
+    )
+    reference_image_count: int = Field(default=0, ge=0, le=10)
+
+
+class AigcImagePromptOptimizationResult(SchemaModel):
+    optimized_text: str = Field(default="", max_length=20000)
+    optimized_reference_instructions: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+    )
+
+
 class GeneratedTextResult(SchemaModel):
     stage: Stage
     title: str = Field(..., min_length=1)
@@ -386,7 +567,69 @@ class GeneratedAssetResult(SchemaModel):
     )
 
 
+def _seedance_metadata(
+    request: SeedanceVideoGenerationRequest,
+    *,
+    provider: str,
+    provider_task_id: str,
+    provider_request_id: str | None,
+) -> dict[str, Optional[Union[str, int, float, bool]]]:
+    return {
+        "model": request.model,
+        "generation_mode": request.generation_mode,
+        "provider": provider,
+        "provider_task_id": provider_task_id,
+        "provider_request_id": provider_request_id,
+        "prompt": request.prompt,
+        "duration_seconds": request.duration_seconds,
+        "aspect_ratio": request.aspect_ratio,
+        "resolution": request.resolution,
+        "generate_audio": request.generate_audio,
+        "uses_first_frame": request.first_frame_url is not None,
+        "uses_last_frame": request.last_frame_url is not None,
+        "reference_image_count": len(request.reference_image_urls),
+        "reference_video_count": len(request.reference_video_urls),
+        "reference_audio_count": len(request.reference_audio_urls),
+        "status": Status.SUCCEEDED.value,
+    }
+
+
+def _seedance_request_from_tool(
+    request: ToolVideoGenerationRequest,
+) -> SeedanceVideoGenerationRequest:
+    generation_mode: SeedanceGenerationMode = (
+        "multimodal_reference"
+        if any(
+            (
+                request.reference_image_urls,
+                request.reference_video_urls,
+                request.reference_audio_urls,
+            )
+        )
+        else "text_to_video"
+    )
+    return SeedanceVideoGenerationRequest(
+        model=request.model,
+        generation_mode=generation_mode,
+        task_type=SEEDANCE_DEFAULT_TASK_TYPE,
+        prompt=request.prompt,
+        reference_image_urls=request.reference_image_urls,
+        reference_video_urls=request.reference_video_urls,
+        reference_audio_urls=request.reference_audio_urls,
+        duration_seconds=request.duration_seconds,
+        resolution=request.resolution,
+        aspect_ratio=request.aspect_ratio,
+        generate_audio=True,
+    )
+
+
 class ModelArkAdapter(Protocol):
+    async def generate_aigc_text(
+        self,
+        request: AigcTextGenerationRequest,
+    ) -> str:
+        """Generate unstructured text for an AIGC pipeline node."""
+
     async def generate_text(
         self,
         request: TextGenerationRequest,
@@ -447,6 +690,18 @@ class ModelArkAdapter(Protocol):
     ) -> GeneratedAssetResult:
         """Generate one storyboard video asset for a storyboard shot."""
 
+    async def generate_tool_video(
+        self,
+        request: ToolVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        """Generate one independent tool video with multimodal references."""
+
+    async def generate_seedance_video(
+        self,
+        request: SeedanceVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        """Generate one video through the shared Seedance provider chain."""
+
     async def edit_video(
         self,
         request: VideoEditRequest,
@@ -458,6 +713,18 @@ class ModelArkAdapter(Protocol):
         request: VideoPromptOptimizationRequest,
     ) -> VideoPromptOptimizationResult:
         """Optimize one storyboard video prompt without persisting it."""
+
+    async def optimize_tool_video_prompt(
+        self,
+        request: ToolVideoPromptOptimizationRequest,
+    ) -> VideoPromptOptimizationResult:
+        """Optimize one tool video edit prompt without persisting it."""
+
+    async def optimize_aigc_image_prompt(
+        self,
+        request: AigcImagePromptOptimizationRequest,
+    ) -> AigcImagePromptOptimizationResult:
+        """Optimize one structured AIGC image prompt without persisting it."""
 
     def stream_video_prompt_optimization(
         self,
@@ -588,6 +855,31 @@ class BytePlusModelArkAdapter:
                 "prompt_summary": prompt[:240],
             },
         )
+
+    async def generate_aigc_text(
+        self,
+        request: AigcTextGenerationRequest,
+    ) -> str:
+        messages = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        messages.append({"role": "user", "content": request.prompt})
+        try:
+            response = await asyncio.to_thread(
+                self.client.chat.completions.create,
+                model=request.model,
+                messages=messages,
+                thinking=SEED_THINKING_DISABLED,
+                temperature=request.temperature,
+            )
+            return self._chat_output_text(response)
+        except ModelArkProviderError:
+            raise
+        except Exception as exc:
+            raise _provider_error_from_exception(
+                exc,
+                phase="aigc_text_generate",
+            ) from exc
 
     async def generate_image_prompt(
         self,
@@ -755,6 +1047,74 @@ class BytePlusModelArkAdapter:
         except Exception as exc:
             raise ModelArkProviderError("video prompt optimization failed") from exc
 
+    async def optimize_tool_video_prompt(
+        self,
+        request: ToolVideoPromptOptimizationRequest,
+    ) -> VideoPromptOptimizationResult:
+        system_prompt, user_prompt = (
+            MockModelArkAdapter.build_tool_video_prompt_optimization_messages(request)
+        )
+        try:
+            response = await asyncio.to_thread(
+                self.client.chat.completions.create,
+                model=self.settings.ark_text_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+                thinking=SEED_THINKING_DISABLED,
+                temperature=0.1,
+                max_tokens=8_192,
+            )
+            return self._parse_video_prompt_optimization_payload(
+                self._chat_output_text(response)
+            )
+        except (ModelArkProviderError, ModelArkTextParseError):
+            raise
+        except ValidationError as exc:
+            raise ModelArkTextParseError(
+                "tool video prompt optimization response could not be parsed"
+            ) from exc
+        except Exception as exc:
+            raise ModelArkProviderError(
+                "tool video prompt optimization failed"
+            ) from exc
+
+    async def optimize_aigc_image_prompt(
+        self,
+        request: AigcImagePromptOptimizationRequest,
+    ) -> AigcImagePromptOptimizationResult:
+        system_prompt, user_prompt = (
+            MockModelArkAdapter.build_aigc_image_prompt_optimization_messages(request)
+        )
+        try:
+            response = await asyncio.to_thread(
+                self.client.chat.completions.create,
+                model=self.settings.ark_text_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+                thinking=SEED_THINKING_DISABLED,
+                temperature=0.1,
+                max_tokens=32_768,
+            )
+            return self._parse_aigc_image_prompt_optimization_payload(
+                self._chat_output_text(response)
+            )
+        except (ModelArkProviderError, ModelArkTextParseError):
+            raise
+        except ValidationError as exc:
+            raise ModelArkTextParseError(
+                "AIGC image prompt optimization response could not be parsed"
+            ) from exc
+        except Exception as exc:
+            raise ModelArkProviderError(
+                "AIGC image prompt optimization failed"
+            ) from exc
+
     async def stream_video_prompt_optimization(
         self,
         request: VideoPromptOptimizationRequest,
@@ -818,10 +1178,14 @@ class BytePlusModelArkAdapter:
             "watermark": False,
             "stream": False,
         }
-        if request.source_image_url is not None:
-            kwargs["image"] = request.source_image_url
-        elif request.reference_image_url is not None:
-            kwargs["image"] = request.reference_image_url
+        image_urls = [
+            *( [request.source_image_url] if request.source_image_url else [] ),
+            *request.reference_image_urls,
+        ]
+        if image_urls:
+            kwargs["image"] = (
+                image_urls[0] if len(image_urls) == 1 else image_urls
+            )
         try:
             response = await asyncio.to_thread(
                 self.client.images.generate,
@@ -983,6 +1347,110 @@ class BytePlusModelArkAdapter:
         request: VideoGenerationRequest,
     ) -> GeneratedAssetResult:
         return await self._generate_video(request)
+
+    async def generate_tool_video(
+        self,
+        request: ToolVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        return await self.generate_seedance_video(_seedance_request_from_tool(request))
+
+    async def generate_seedance_video(
+        self,
+        request: SeedanceVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        content: list[dict[str, object]] = []
+        if request.prompt:
+            content.append({"type": "text", "text": request.prompt})
+        for url, role in (
+            (request.first_frame_url, "first_frame"),
+            (request.last_frame_url, "last_frame"),
+        ):
+            if url:
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": url},
+                        "role": role,
+                    }
+                )
+        content.extend(
+            {
+                "type": "image_url",
+                "image_url": {"url": url},
+                "role": "reference_image",
+            }
+            for url in request.reference_image_urls
+        )
+        content.extend(
+            {
+                "type": "video_url",
+                "video_url": {"url": url},
+                "role": "reference_video",
+            }
+            for url in request.reference_video_urls
+        )
+        content.extend(
+            {
+                "type": "audio_url",
+                "audio_url": {"url": url},
+                "role": "reference_audio",
+            }
+            for url in request.reference_audio_urls
+        )
+
+        try:
+            created = await asyncio.to_thread(
+                self.client.content_generation.tasks.create,
+                model=request.model,
+                content=content,
+                resolution=request.resolution,
+                ratio=request.aspect_ratio,
+                duration=request.duration_seconds,
+                generate_audio=request.generate_audio,
+                watermark=False,
+            )
+        except Exception as exc:
+            raise _provider_error_from_exception(exc, phase="create") from exc
+
+        try:
+            task_id = getattr(created, "id", None)
+            if not isinstance(task_id, str) or not task_id.strip():
+                raise ModelArkProviderError(
+                    "video generation task returned no task ID",
+                    phase="create",
+                )
+            completed = await self._wait_for_video_task(task_id.strip())
+            video_url = getattr(getattr(completed, "content", None), "video_url", None)
+            if not isinstance(video_url, str) or not video_url.strip():
+                raise ModelArkProviderError(
+                    "video generation succeeded without a video URL",
+                    phase="poll",
+                    provider_task_id=task_id.strip(),
+                )
+        except ModelArkProviderError:
+            raise
+        except Exception as exc:
+            raise _provider_error_from_exception(
+                exc,
+                phase="poll",
+                provider_task_id=task_id.strip(),
+            ) from exc
+
+        return GeneratedAssetResult(
+            type=AssetType.STORYBOARD_VIDEO,
+            stage=Stage.VIDEO,
+            url=video_url.strip(),
+            mime_type="video/mp4",
+            metadata=_seedance_metadata(
+                request,
+                provider="volcengine-modelark",
+                provider_task_id=task_id.strip(),
+                provider_request_id=(
+                    _provider_request_id(created)
+                    or _provider_request_id(completed)
+                ),
+            ),
+        )
 
     async def _generate_video(
         self,
@@ -1415,6 +1883,31 @@ class BytePlusModelArkAdapter:
             ) from exc
 
     @staticmethod
+    def _parse_aigc_image_prompt_optimization_payload(
+        text: str,
+    ) -> AigcImagePromptOptimizationResult:
+        stripped = text.strip()
+        fence_match = re.search(r"```(?:json)?\s*(.*?)```", stripped, flags=re.DOTALL)
+        if fence_match:
+            stripped = fence_match.group(1).strip()
+        try:
+            raw = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise ModelArkTextParseError(
+                "AIGC image prompt optimization response is not valid JSON"
+            ) from exc
+        if not isinstance(raw, dict):
+            raise ModelArkTextParseError(
+                "AIGC image prompt optimization response must be a JSON object"
+            )
+        try:
+            return AigcImagePromptOptimizationResult.model_validate(raw)
+        except ValidationError as exc:
+            raise ModelArkTextParseError(
+                "AIGC image prompt optimization response has an invalid structure"
+            ) from exc
+
+    @staticmethod
     def _plain_text_output(text: str) -> str:
         stripped = text.strip()
         fence_match = re.fullmatch(
@@ -1449,6 +1942,20 @@ class MockModelArkAdapter:
         if request.stage == Stage.SCRIPT:
             return self._generate_script(request)
         return self._generate_storyboard(request)
+
+    async def generate_aigc_text(
+        self,
+        request: AigcTextGenerationRequest,
+    ) -> str:
+        digest = hashlib.sha256(
+            json.dumps(
+                request.model_dump(mode="json"),
+                sort_keys=True,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()[:12]
+        return f"{request.prompt.strip()}\n\n[mock:{digest}]"
 
     async def generate_image_prompt(
         self,
@@ -1582,6 +2089,54 @@ class MockModelArkAdapter:
             1,
         )
         return VideoPromptOptimizationResult(optimized_prompt=optimized)
+
+    async def optimize_tool_video_prompt(
+        self,
+        request: ToolVideoPromptOptimizationRequest,
+    ) -> VideoPromptOptimizationResult:
+        references: list[str] = []
+        for label, count in (
+            ("视频", request.reference_video_count),
+            ("图片", request.reference_image_count),
+            ("音频", request.reference_audio_count),
+        ):
+            if count > 0:
+                references.append(
+                    "、".join(f"{label}{index}" for index in range(1, count + 1))
+                )
+        reference_line = (
+            "；".join(references) if references else "无参考素材，仅基于文本进行编辑"
+        )
+        optimized = "\n".join(
+            [
+                f"编辑任务：{request.prompt}",
+                "【编辑要求】",
+                "1. 明确需要修改的范围与内容，可配合时间戳（如“4-6 秒”）进行部分编辑。",
+                "2. 尽可能说明修改内容从 A→B 的过程，未被要求修改的内容保持不变。",
+                f"3. 可引用的标准素材编号：{reference_line}。",
+            ]
+        )
+        optimized = optimized[:12000]
+        return VideoPromptOptimizationResult(optimized_prompt=optimized)
+
+    async def optimize_aigc_image_prompt(
+        self,
+        request: AigcImagePromptOptimizationRequest,
+    ) -> AigcImagePromptOptimizationResult:
+        suffix = "，主体明确，场景完整，构图与光影清晰，保持用户指定内容不变"
+
+        def enhance(value: str, limit: int) -> str:
+            stripped = value.strip()
+            if not stripped:
+                return ""
+            return f"{stripped}{suffix}"[:limit]
+
+        return AigcImagePromptOptimizationResult(
+            optimized_text=enhance(request.text, 20000),
+            optimized_reference_instructions=[
+                enhance(value, 4000) for value in request.reference_instructions
+            ],
+        )
 
     async def stream_video_prompt_optimization(
         self,
@@ -1837,6 +2392,32 @@ class MockModelArkAdapter:
                 "brief_summary": request.brief_summary,
                 "status": Status.SUCCEEDED.value,
             },
+        )
+
+    async def generate_tool_video(
+        self,
+        request: ToolVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        return await self.generate_seedance_video(_seedance_request_from_tool(request))
+
+    async def generate_seedance_video(
+        self,
+        request: SeedanceVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        digest = hashlib.sha256(
+            request.model_dump_json().encode("utf-8")
+        ).hexdigest()[:20]
+        return GeneratedAssetResult(
+            type=AssetType.STORYBOARD_VIDEO,
+            stage=Stage.VIDEO,
+            url=f"mock://modelark/tools/videos/{digest}.mp4",
+            mime_type="video/mp4",
+            metadata=_seedance_metadata(
+                request,
+                provider="mock-modelark",
+                provider_task_id=f"mock-seedance-{digest}",
+                provider_request_id=f"mock-request-{digest}",
+            ),
         )
 
     async def edit_video(
@@ -2459,6 +3040,92 @@ class MockModelArkAdapter:
         )
         return system_prompt, user_prompt
 
+    @staticmethod
+    def build_tool_video_prompt_optimization_messages(
+        request: ToolVideoPromptOptimizationRequest,
+    ) -> tuple[str, str]:
+        system_prompt = "\n".join(
+            [
+                "你是全模态参考生视频（Seedance）编辑类提示词优化器。",
+                "只输出一个 JSON 对象 {\"optimized_prompt\": \"...\"}，"
+                "不要 markdown 代码围栏、不要解释、不要多个候选。",
+                "优化原则：明确需要修改的范围和内容，可配合时间戳（如“4-6 秒”）"
+                "进行部分编辑；尽可能说明修改内容从 A→B 的过程；"
+                "未被要求修改的内容保持不变。",
+                "使用与工具一致的标准素材编号（视频1..N / 图片1..N / 音频1..N，"
+                "编号数量由 reference_*_count 决定），不得臆造不存在的素材编号。",
+                "示范写法（仅作参考，不要把示例写进结果）：",
+                "示例1：仅编辑视频 1 中男人的台词，修改为“你不要过来啊”，"
+                "口音调整为东北口音。",
+                "示例2：把视频 1 中 4-6 秒男人喝咖啡的动作改变为拖地，其余内容不要变化。",
+                "示例3：编辑任务：把视频 1 中右侧的亚洲女生改为图片 1 中的黑人女生。",
+                "结果不得超过 12000 字符。",
+            ]
+        )
+        context = {
+            "current_draft": request.prompt,
+            "reference_counts": {
+                "reference_video_count": request.reference_video_count,
+                "reference_image_count": request.reference_image_count,
+                "reference_audio_count": request.reference_audio_count,
+            },
+        }
+        user_prompt = "\n".join(
+            [
+                "请根据以下当前草稿和已选参考素材数量，优化为可直接使用的编辑类提示词。",
+                json.dumps(
+                    context,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            ]
+        )
+        return system_prompt, user_prompt
+
+    @staticmethod
+    def build_aigc_image_prompt_optimization_messages(
+        request: AigcImagePromptOptimizationRequest,
+    ) -> tuple[str, str]:
+        system_prompt = "\n".join(
+            [
+                "你是 Seedream 4.0-5.0 生图提示词优化器。",
+                "只输出一个 JSON 对象，且只能包含 optimized_text 和 "
+                "optimized_reference_instructions 两个字段；不得输出 Markdown、"
+                "解释、分析过程或多个候选。",
+                "optimized_reference_instructions 必须是字符串数组，长度和输入数组"
+                "完全一致，逐项对应且不得合并、拆分或重排。",
+                "使用简洁连贯的自然语言，避免关键词机械堆叠。",
+                "文生图提示词应明确主体、行为、环境和用途，并按需补充风格、色彩、"
+                "光影和构图；需要生成的画面文字必须放在双引号中。",
+                "图生图提示词应明确参考对象、编辑动作、必须保持不变的内容；多图输入"
+                "应明确不同参考图的替换、组合或风格迁移关系。",
+                "必须保留用户明确表达的主体、品牌、产品、文字内容、数量、颜色、"
+                "画幅和否定约束，不得新增用户未要求的品牌、文字、主体或创意目标。",
+                "不得生成 <bbox>、<point> 或固定的图N标签；引用坐标与图片编号由系统"
+                "在运行时编译。",
+                "optimized_text 不得超过 20000 字符；每条引用说明不得超过 4000 字符。",
+            ]
+        )
+        context = {
+            "current_text": request.text,
+            "reference_instructions": request.reference_instructions,
+            "generation_modes": request.generation_modes,
+            "reference_image_count": request.reference_image_count,
+        }
+        user_prompt = "\n".join(
+            [
+                "请在不改变用户意图和硬约束的前提下优化以下结构化生图提示词。",
+                json.dumps(
+                    context,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            ]
+        )
+        return system_prompt, user_prompt
+
     @classmethod
     def build_character_extraction_prompt(
         cls,
@@ -2986,6 +3653,12 @@ class HybridModelArkAdapter:
     ) -> GeneratedTextResult:
         return await self.character_adapter.generate_text(request)
 
+    async def generate_aigc_text(
+        self,
+        request: AigcTextGenerationRequest,
+    ) -> str:
+        return await self.character_adapter.generate_aigc_text(request)
+
     async def generate_image_prompt(
         self,
         request: ImagePromptGenerationRequest,
@@ -3004,6 +3677,18 @@ class HybridModelArkAdapter:
         request: VideoPromptOptimizationRequest,
     ) -> VideoPromptOptimizationResult:
         return await self.character_adapter.optimize_video_prompt(request)
+
+    async def optimize_tool_video_prompt(
+        self,
+        request: ToolVideoPromptOptimizationRequest,
+    ) -> VideoPromptOptimizationResult:
+        return await self.character_adapter.optimize_tool_video_prompt(request)
+
+    async def optimize_aigc_image_prompt(
+        self,
+        request: AigcImagePromptOptimizationRequest,
+    ) -> AigcImagePromptOptimizationResult:
+        return await self.character_adapter.optimize_aigc_image_prompt(request)
 
     async def stream_video_prompt_optimization(
         self,
@@ -3055,6 +3740,18 @@ class HybridModelArkAdapter:
         request: VideoGenerationRequest,
     ) -> GeneratedAssetResult:
         return await self.character_adapter.generate_video(request)
+
+    async def generate_tool_video(
+        self,
+        request: ToolVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        return await self.character_adapter.generate_tool_video(request)
+
+    async def generate_seedance_video(
+        self,
+        request: SeedanceVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        return await self.character_adapter.generate_seedance_video(request)
 
     async def edit_video(
         self,

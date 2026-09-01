@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from backend.app.db.models import (
+    AigcPipelineAssetORM,
+    AigcPipelineORM,
+    AigcPipelineRunNodeORM,
+    AigcPipelineRunORM,
+    AigcPipelineTaskAssetORM,
+    AigcPipelineTaskORM,
+    AigcPipelineTemplateORM,
+    AigcPipelineWorkerLeaseORM,
     AssetORM,
     BriefORM,
+    CanvasLayoutORM,
     CharacterCardORM,
     GenerationTaskORM,
     ImageLayerORM,
@@ -16,14 +26,39 @@ from backend.app.db.models import (
     ProjectORM,
     StoryboardShotORM,
     TextArtifactORM,
+    ToolTaskORM,
+    ToolTaskInputAssetORM,
 )
 from backend.app.db.session import get_engine, make_session_factory
 from backend.app.schemas import (
+    AigcAssetDirection,
+    AigcPipeline,
+    AigcPipelineAssetReference,
+    AigcPipelineCreate,
+    AigcPipelineRun,
+    AigcPipelineRunDetail,
+    AigcPipelineRunMode,
+    AigcPipelineRunNode,
+    AigcPipelineRunStatus,
+    AigcRunNodeStatus,
+    AigcPipelineTaskAssetReference,
+    AigcPipelineTaskAttempt,
+    AigcPipelineTemplate,
+    AigcPipelineTemplateCreate,
+    AigcPipelineTemplateUpdate,
+    AigcPipelineUpdate,
+    AigcTaskError,
+    AigcTaskMetrics,
+    AigcTaskResult,
+    AigcTaskStatus,
+    AigcWorkerLease,
     Asset,
     AssetCategory,
     AssetCreate,
     AssetRole,
     AssetType,
+    CanvasLayout,
+    CanvasNode,
     CharacterCard,
     CharacterCardCreate,
     GenerationTask,
@@ -35,6 +70,7 @@ from backend.app.schemas import (
     ImageLayerSet,
     ImageLayerSetCreate,
     ImageLayerUpdate,
+    ImageInputNode,
     Project,
     ProjectBase,
     ProjectCreate,
@@ -49,16 +85,26 @@ from backend.app.schemas import (
     TargetLanguage,
     TextArtifact,
     TextArtifactCreate,
+    ToolTask,
+    ToolTaskCreate,
+    ToolTaskError,
+    ToolTaskInputAsset,
 )
 from backend.app.schemas.brief import Brief
 from backend.app.schemas.common import utc_now
-from backend.app.schemas.enums import Stage, Status
+from backend.app.schemas.enums import Stage, Status, ToolTaskType
 from backend.app.video_prompt import (
     build_merged_shot_video_prompt,
     expand_atomic_shots,
 )
 
-from .base import NotFoundError, RevisionConflictError
+from .base import (
+    ActiveRunConflictError,
+    AssetReferenceConflictError,
+    NotFoundError,
+    PipelineRunConflictError,
+    RevisionConflictError,
+)
 
 
 class MySQLRepository:
@@ -66,6 +112,899 @@ class MySQLRepository:
 
     def __init__(self, session_factory: sessionmaker[Session] | None = None) -> None:
         self._session_factory = session_factory or make_session_factory(get_engine())
+
+    def create_aigc_template(
+        self,
+        data: AigcPipelineTemplateCreate,
+    ) -> AigcPipelineTemplate:
+        template = AigcPipelineTemplate(**data.model_dump())
+        with self._session_factory.begin() as session:
+            orm_template = AigcPipelineTemplateORM(
+                id=template.id,
+                name=template.name,
+                description=template.description,
+                definition_json=template.definition.model_dump(
+                    mode="json", by_alias=True
+                ),
+                schema_version=template.definition.schema_version,
+                revision=template.revision,
+                created_at=template.created_at,
+                updated_at=template.updated_at,
+            )
+            session.add(orm_template)
+            session.flush()
+            return self._aigc_template_from_orm(orm_template)
+
+    def get_aigc_template(self, template_id: str) -> AigcPipelineTemplate:
+        with self._session_factory() as session:
+            template = session.get(AigcPipelineTemplateORM, template_id)
+            if template is None:
+                raise NotFoundError(f"AIGC template not found: {template_id}")
+            return self._aigc_template_from_orm(template)
+
+    def list_aigc_templates(
+        self,
+        q: str | None = None,
+    ) -> list[AigcPipelineTemplate]:
+        keyword = (q or "").strip()
+        statement = select(AigcPipelineTemplateORM)
+        if keyword:
+            statement = statement.where(
+                AigcPipelineTemplateORM.name.icontains(keyword, autoescape=True)
+            )
+        statement = statement.order_by(
+            AigcPipelineTemplateORM.updated_at.desc(),
+            AigcPipelineTemplateORM.id.asc(),
+        )
+        with self._session_factory() as session:
+            return [
+                self._aigc_template_from_orm(item)
+                for item in session.scalars(statement).all()
+            ]
+
+    def update_aigc_template(
+        self,
+        template_id: str,
+        data: AigcPipelineTemplateUpdate,
+    ) -> AigcPipelineTemplate:
+        with self._session_factory.begin() as session:
+            result = session.execute(
+                update(AigcPipelineTemplateORM)
+                .where(
+                    AigcPipelineTemplateORM.id == template_id,
+                    AigcPipelineTemplateORM.revision == data.expected_revision,
+                )
+                .values(
+                    name=data.name,
+                    description=data.description,
+                    definition_json=data.definition.model_dump(
+                        mode="json", by_alias=True
+                    ),
+                    schema_version=data.definition.schema_version,
+                    revision=data.expected_revision + 1,
+                    updated_at=utc_now(),
+                )
+            )
+            if result.rowcount != 1:
+                if session.get(AigcPipelineTemplateORM, template_id) is None:
+                    raise NotFoundError(f"AIGC template not found: {template_id}")
+                raise RevisionConflictError("AIGC template revision conflict")
+            template = session.get(AigcPipelineTemplateORM, template_id)
+            assert template is not None
+            return self._aigc_template_from_orm(template)
+
+    def delete_aigc_template(self, template_id: str) -> None:
+        with self._session_factory.begin() as session:
+            template = session.get(AigcPipelineTemplateORM, template_id)
+            if template is None:
+                raise NotFoundError(f"AIGC template not found: {template_id}")
+            session.delete(template)
+            session.flush()
+
+    def create_aigc_pipeline(self, data: AigcPipelineCreate) -> AigcPipeline:
+        pipeline = AigcPipeline(**data.model_dump())
+        with self._session_factory.begin() as session:
+            if pipeline.source_template_id is not None:
+                template = session.get(
+                    AigcPipelineTemplateORM,
+                    pipeline.source_template_id,
+                )
+                if template is None:
+                    raise NotFoundError(
+                        f"AIGC template not found: {pipeline.source_template_id}"
+                    )
+                if template.revision != pipeline.source_template_revision:
+                    raise RevisionConflictError(
+                        "AIGC source template revision conflict"
+                    )
+            references = self._aigc_asset_references_for_pipeline(
+                session, pipeline
+            )
+            orm_pipeline = AigcPipelineORM(
+                id=pipeline.id,
+                name=pipeline.name,
+                description=pipeline.description,
+                source_template_id=pipeline.source_template_id,
+                source_template_revision=pipeline.source_template_revision,
+                definition_json=pipeline.definition.model_dump(
+                    mode="json", by_alias=True
+                ),
+                schema_version=pipeline.definition.schema_version,
+                revision=pipeline.revision,
+                latest_run_status=pipeline.latest_run_status,
+                created_at=pipeline.created_at,
+                updated_at=pipeline.updated_at,
+            )
+            session.add(orm_pipeline)
+            session.flush()
+            self._replace_aigc_pipeline_assets(
+                session,
+                pipeline.id,
+                references,
+            )
+            session.flush()
+            return self._aigc_pipeline_from_orm(orm_pipeline)
+
+    def get_aigc_pipeline(self, pipeline_id: str) -> AigcPipeline:
+        with self._session_factory() as session:
+            pipeline = session.scalar(
+                select(AigcPipelineORM).where(
+                    AigcPipelineORM.id == pipeline_id,
+                    AigcPipelineORM.deleted_at.is_(None),
+                )
+            )
+            if pipeline is None:
+                raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+            return self._aigc_pipeline_from_orm(pipeline)
+
+    def list_aigc_pipelines(self, q: str | None = None) -> list[AigcPipeline]:
+        keyword = (q or "").strip()
+        statement = select(AigcPipelineORM).where(
+            AigcPipelineORM.deleted_at.is_(None)
+        )
+        if keyword:
+            statement = statement.where(
+                AigcPipelineORM.name.icontains(keyword, autoescape=True)
+            )
+        statement = statement.order_by(
+            AigcPipelineORM.updated_at.desc(),
+            AigcPipelineORM.id.asc(),
+        )
+        with self._session_factory() as session:
+            return [
+                self._aigc_pipeline_from_orm(item)
+                for item in session.scalars(statement).all()
+            ]
+
+    def update_aigc_pipeline(
+        self,
+        pipeline_id: str,
+        data: AigcPipelineUpdate,
+    ) -> AigcPipeline:
+        with self._session_factory.begin() as session:
+            pipeline = session.scalar(
+                select(AigcPipelineORM)
+                .where(
+                    AigcPipelineORM.id == pipeline_id,
+                    AigcPipelineORM.deleted_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if pipeline is None:
+                raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+            if pipeline.revision != data.expected_revision:
+                raise RevisionConflictError("AIGC pipeline revision conflict")
+            candidate = AigcPipeline(
+                id=pipeline.id,
+                name=data.name,
+                description=data.description,
+                source_template_id=pipeline.source_template_id,
+                source_template_revision=pipeline.source_template_revision,
+                definition=data.definition,
+                revision=pipeline.revision + 1,
+                latest_run_status=pipeline.latest_run_status,
+                created_at=pipeline.created_at,
+                updated_at=utc_now(),
+            )
+            references = self._aigc_asset_references_for_pipeline(
+                session, candidate
+            )
+            pipeline.name = candidate.name
+            pipeline.description = candidate.description
+            pipeline.definition_json = candidate.definition.model_dump(
+                mode="json", by_alias=True
+            )
+            pipeline.schema_version = candidate.definition.schema_version
+            pipeline.revision = candidate.revision
+            pipeline.updated_at = candidate.updated_at
+            self._replace_aigc_pipeline_assets(
+                session,
+                pipeline_id,
+                references,
+            )
+            session.flush()
+            return self._aigc_pipeline_from_orm(pipeline)
+
+    def delete_aigc_pipeline(self, pipeline_id: str) -> None:
+        with self._session_factory.begin() as session:
+            pipeline = session.scalar(
+                select(AigcPipelineORM)
+                .where(
+                    AigcPipelineORM.id == pipeline_id,
+                    AigcPipelineORM.deleted_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if pipeline is None:
+                raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+            runs = session.scalars(
+                select(AigcPipelineRunORM)
+                .where(AigcPipelineRunORM.pipeline_id == pipeline_id)
+            ).all()
+            if any(
+                run.status
+                in {
+                    AigcPipelineRunStatus.QUEUED,
+                    AigcPipelineRunStatus.RUNNING,
+                }
+                for run in runs
+            ):
+                raise PipelineRunConflictError(
+                    f"AIGC pipeline has an active run: {pipeline_id}"
+                )
+            if runs:
+                pipeline.deleted_at = utc_now()
+                pipeline.updated_at = pipeline.deleted_at
+                session.flush()
+                return
+            session.execute(
+                delete(AigcPipelineAssetORM).where(
+                    AigcPipelineAssetORM.pipeline_id == pipeline_id
+                )
+            )
+            session.delete(pipeline)
+            session.flush()
+
+    def list_aigc_pipeline_assets(
+        self,
+        pipeline_id: str,
+    ) -> list[AigcPipelineAssetReference]:
+        with self._session_factory() as session:
+            pipeline = session.scalar(
+                select(AigcPipelineORM).where(
+                    AigcPipelineORM.id == pipeline_id,
+                    AigcPipelineORM.deleted_at.is_(None),
+                )
+            )
+            if pipeline is None:
+                raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+            return [
+                AigcPipelineAssetReference(
+                    pipeline_id=item.pipeline_id,
+                    node_id=item.node_id,
+                    slot=item.slot,
+                    asset_id=item.asset_id,
+                )
+                for item in session.scalars(
+                    select(AigcPipelineAssetORM)
+                    .where(AigcPipelineAssetORM.pipeline_id == pipeline_id)
+                    .order_by(
+                        AigcPipelineAssetORM.node_id,
+                        AigcPipelineAssetORM.slot,
+                    )
+                ).all()
+            ]
+
+    def create_aigc_run(
+        self,
+        run: AigcPipelineRun,
+        *,
+        idempotency_key: str,
+        nodes: Iterable[AigcPipelineRunNode],
+    ) -> AigcPipelineRunDetail:
+        run_nodes = list(nodes)
+        with self._session_factory.begin() as session:
+            pipeline = session.scalar(
+                select(AigcPipelineORM)
+                .where(
+                    AigcPipelineORM.id == run.pipeline_id,
+                    AigcPipelineORM.deleted_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if pipeline is None:
+                raise NotFoundError(f"AIGC pipeline not found: {run.pipeline_id}")
+            existing = session.scalar(
+                select(AigcPipelineRunORM).where(
+                    AigcPipelineRunORM.pipeline_id == run.pipeline_id,
+                    AigcPipelineRunORM.idempotency_key == idempotency_key,
+                )
+            )
+            if existing is not None:
+                return self._aigc_run_detail_from_orm(session, existing)
+            if (
+                run.pipeline_revision != pipeline.revision
+                and run.mode != AigcPipelineRunMode.RETRY_NODE
+            ):
+                raise RevisionConflictError("AIGC pipeline revision conflict")
+            active = session.scalar(
+                select(AigcPipelineRunORM)
+                .where(
+                    AigcPipelineRunORM.pipeline_id == run.pipeline_id,
+                    AigcPipelineRunORM.status.in_(
+                        [
+                            AigcPipelineRunStatus.QUEUED,
+                            AigcPipelineRunStatus.RUNNING,
+                        ]
+                    ),
+                )
+                .limit(1)
+            )
+            if active is not None:
+                raise ActiveRunConflictError(
+                    "AIGC pipeline already has an active run"
+                )
+            run_number = (
+                session.scalar(
+                    select(func.max(AigcPipelineRunORM.run_number)).where(
+                        AigcPipelineRunORM.pipeline_id == run.pipeline_id
+                    )
+                )
+                or 0
+            ) + 1
+            snapshot_ids = {node.id for node in run.definition_snapshot.nodes}
+            if {node.node_id for node in run_nodes} != snapshot_ids:
+                raise ValueError("AIGC run nodes must match the definition snapshot")
+            now = utc_now()
+            orm_run = AigcPipelineRunORM(
+                id=run.id,
+                pipeline_id=run.pipeline_id,
+                run_number=run_number,
+                idempotency_key=idempotency_key,
+                pipeline_revision=run.pipeline_revision,
+                mode=run.mode,
+                start_node_id=run.start_node_id,
+                source_run_id=run.source_run_id,
+                source_node_id=run.source_node_id,
+                status=run.status,
+                definition_snapshot=run.definition_snapshot.model_dump(
+                    mode="json", by_alias=True
+                ),
+                input_snapshot=run.input_snapshot,
+                error_json=run.error.model_dump(mode="json") if run.error else None,
+                cancellation_requested=run.cancellation_requested,
+                created_at=run.created_at,
+                updated_at=now,
+                started_at=run.started_at,
+                finished_at=run.finished_at,
+            )
+            session.add(orm_run)
+            # No ORM relationship links these rows, so SQLAlchemy cannot infer
+            # their insert dependency from object state. Persist the parent
+            # before adding children to satisfy MySQL's immediate FK checks.
+            session.flush()
+            session.add_all(
+                [
+                    AigcPipelineRunNodeORM(
+                        run_id=run.id,
+                        node_id=node.node_id,
+                        included_in_plan=node.included_in_plan,
+                        status=node.status,
+                        current_task_id=node.current_task_id,
+                        reused_from_task_id=node.reused_from_task_id,
+                        input_hash=node.input_hash,
+                        result_json=node.result.model_dump(mode="json"),
+                        error_json=(
+                            node.error.model_dump(mode="json") if node.error else None
+                        ),
+                        updated_at=now,
+                    )
+                    for node in run_nodes
+                ]
+            )
+            pipeline.latest_run_status = run.status
+            pipeline.updated_at = now
+            session.flush()
+            return self._aigc_run_detail_from_orm(session, orm_run)
+
+    def get_aigc_run(self, run_id: str) -> AigcPipelineRunDetail:
+        with self._session_factory() as session:
+            run = session.get(AigcPipelineRunORM, run_id)
+            if run is None:
+                raise NotFoundError(f"AIGC run not found: {run_id}")
+            return self._aigc_run_detail_from_orm(session, run)
+
+    def list_aigc_runs(self, pipeline_id: str) -> list[AigcPipelineRun]:
+        with self._session_factory() as session:
+            pipeline = session.scalar(
+                select(AigcPipelineORM).where(
+                    AigcPipelineORM.id == pipeline_id,
+                    AigcPipelineORM.deleted_at.is_(None),
+                )
+            )
+            if pipeline is None:
+                raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+            return [
+                self._aigc_run_from_orm(item)
+                for item in session.scalars(
+                    select(AigcPipelineRunORM)
+                    .where(AigcPipelineRunORM.pipeline_id == pipeline_id)
+                    .order_by(AigcPipelineRunORM.run_number.desc())
+                ).all()
+            ]
+
+    def get_aigc_run_asset(
+        self,
+        pipeline_id: str,
+        run_id: str,
+        asset_id: str,
+    ) -> Asset:
+        with self._session_factory() as session:
+            asset = session.scalar(
+                select(AssetORM)
+                .join(
+                    AigcPipelineTaskAssetORM,
+                    AigcPipelineTaskAssetORM.asset_id == AssetORM.id,
+                )
+                .join(
+                    AigcPipelineTaskORM,
+                    AigcPipelineTaskORM.id == AigcPipelineTaskAssetORM.task_id,
+                )
+                .join(
+                    AigcPipelineRunORM,
+                    AigcPipelineRunORM.id == AigcPipelineTaskORM.run_id,
+                )
+                .where(
+                    AigcPipelineRunORM.id == run_id,
+                    AigcPipelineRunORM.pipeline_id == pipeline_id,
+                    AssetORM.id == asset_id,
+                )
+                .limit(1)
+            )
+            if asset is None:
+                raise NotFoundError(f"AIGC run asset not found: {asset_id}")
+            return self._asset_from_orm(asset)
+
+    def update_aigc_run(
+        self,
+        run_id: str,
+        **changes: object,
+    ) -> AigcPipelineRun:
+        with self._session_factory.begin() as session:
+            run = session.get(AigcPipelineRunORM, run_id)
+            if run is None:
+                raise NotFoundError(f"AIGC run not found: {run_id}")
+            for key, value in changes.items():
+                if key == "error":
+                    run.error_json = (
+                        value.model_dump(mode="json")
+                        if isinstance(value, AigcTaskError)
+                        else None
+                    )
+                elif hasattr(run, key):
+                    setattr(run, key, value)
+            run.updated_at = utc_now()
+            pipeline = session.get(AigcPipelineORM, run.pipeline_id)
+            assert pipeline is not None
+            pipeline.latest_run_status = run.status
+            pipeline.updated_at = run.updated_at
+            session.flush()
+            return self._aigc_run_from_orm(run)
+
+    def update_aigc_run_node(
+        self,
+        run_id: str,
+        node_id: str,
+        **changes: object,
+    ) -> AigcPipelineRunNode:
+        with self._session_factory.begin() as session:
+            node = session.get(AigcPipelineRunNodeORM, (run_id, node_id))
+            if node is None:
+                raise NotFoundError(f"AIGC run node not found: {run_id}:{node_id}")
+            for key, value in changes.items():
+                if key == "result" and isinstance(value, AigcTaskResult):
+                    node.result_json = value.model_dump(mode="json")
+                elif key == "error":
+                    node.error_json = (
+                        value.model_dump(mode="json")
+                        if isinstance(value, AigcTaskError)
+                        else None
+                    )
+                elif hasattr(node, key):
+                    setattr(node, key, value)
+            node.updated_at = utc_now()
+            session.flush()
+            return self._aigc_run_node_from_orm(session, node)
+
+    def create_aigc_task_attempt(
+        self,
+        task: AigcPipelineTaskAttempt,
+        *,
+        idempotency_key: str,
+        retry_of_task_id: str | None = None,
+    ) -> AigcPipelineTaskAttempt:
+        with self._session_factory.begin() as session:
+            run_node = session.scalar(
+                select(AigcPipelineRunNodeORM)
+                .where(
+                    AigcPipelineRunNodeORM.run_id == task.run_id,
+                    AigcPipelineRunNodeORM.node_id == task.node_id,
+                )
+                .with_for_update()
+            )
+            if run_node is None:
+                raise NotFoundError(
+                    f"AIGC run node not found: {task.run_id}:{task.node_id}"
+                )
+            run = session.get(AigcPipelineRunORM, task.run_id)
+            assert run is not None
+            if run.pipeline_id != task.pipeline_id:
+                raise ValueError("AIGC task belongs to another pipeline")
+            existing = session.scalar(
+                select(AigcPipelineTaskORM).where(
+                    AigcPipelineTaskORM.run_id == task.run_id,
+                    AigcPipelineTaskORM.node_id == task.node_id,
+                    AigcPipelineTaskORM.idempotency_key == idempotency_key,
+                )
+            )
+            if existing is not None:
+                return self._aigc_task_from_orm(session, existing)
+            active = session.scalar(
+                select(AigcPipelineTaskORM)
+                .where(
+                    AigcPipelineTaskORM.run_id == task.run_id,
+                    AigcPipelineTaskORM.node_id == task.node_id,
+                    AigcPipelineTaskORM.status.in_(
+                        [AigcTaskStatus.QUEUED, AigcTaskStatus.RUNNING]
+                    ),
+                )
+                .limit(1)
+            )
+            if active is not None:
+                raise ActiveRunConflictError(
+                    "AIGC run node already has an active attempt"
+                )
+            if (
+                retry_of_task_id is not None
+                and session.get(AigcPipelineTaskORM, retry_of_task_id) is None
+            ):
+                raise NotFoundError(
+                    f"AIGC retry task not found: {retry_of_task_id}"
+                )
+            attempt = (
+                session.scalar(
+                    select(func.max(AigcPipelineTaskORM.attempt)).where(
+                        AigcPipelineTaskORM.run_id == task.run_id,
+                        AigcPipelineTaskORM.node_id == task.node_id,
+                    )
+                )
+                or 0
+            ) + 1
+            orm_task = AigcPipelineTaskORM(
+                id=task.task_id,
+                run_id=task.run_id,
+                node_id=task.node_id,
+                attempt=attempt,
+                idempotency_key=idempotency_key,
+                type=task.type,
+                status=task.status,
+                progress=task.progress,
+                params_json=task.params,
+                upstream_json=task.upstream,
+                result_json=task.result.model_dump(mode="json"),
+                error_json=task.error.model_dump(mode="json") if task.error else None,
+                metrics_json=task.metrics.model_dump(mode="json"),
+                retry_of_task_id=retry_of_task_id,
+                created_at=task.created_at,
+                updated_at=task.created_at,
+                started_at=task.started_at,
+                finished_at=task.finished_at,
+            )
+            session.add(orm_task)
+            session.flush()
+            run_node.current_task_id = task.task_id
+            run_node.status = AigcRunNodeStatus(task.status.value)
+            run_node.updated_at = utc_now()
+            session.flush()
+            return self._aigc_task_from_orm(session, orm_task)
+
+    def get_aigc_task_attempt(
+        self,
+        task_id: str,
+    ) -> AigcPipelineTaskAttempt:
+        with self._session_factory() as session:
+            task = session.get(AigcPipelineTaskORM, task_id)
+            if task is None:
+                raise NotFoundError(f"AIGC task not found: {task_id}")
+            return self._aigc_task_from_orm(session, task)
+
+    def update_aigc_task_attempt(
+        self,
+        task_id: str,
+        **changes: object,
+    ) -> AigcPipelineTaskAttempt:
+        with self._session_factory.begin() as session:
+            task = session.get(AigcPipelineTaskORM, task_id)
+            if task is None:
+                raise NotFoundError(f"AIGC task not found: {task_id}")
+            for key, value in changes.items():
+                if key == "result" and isinstance(value, AigcTaskResult):
+                    task.result_json = value.model_dump(mode="json")
+                elif key == "error":
+                    task.error_json = (
+                        value.model_dump(mode="json")
+                        if isinstance(value, AigcTaskError)
+                        else None
+                    )
+                elif key == "metrics" and isinstance(value, AigcTaskMetrics):
+                    task.metrics_json = value.model_dump(mode="json")
+                elif hasattr(task, key):
+                    setattr(task, key, value)
+            task.updated_at = utc_now()
+            run_node = session.get(
+                AigcPipelineRunNodeORM,
+                (task.run_id, task.node_id),
+            )
+            assert run_node is not None
+            if run_node.current_task_id == task.id:
+                run_node.status = AigcRunNodeStatus(task.status.value)
+                run_node.result_json = dict(task.result_json or {})
+                run_node.updated_at = task.updated_at
+            session.flush()
+            return self._aigc_task_from_orm(session, task)
+
+    def list_aigc_task_attempts(
+        self,
+        *,
+        statuses: set[AigcTaskStatus] | None = None,
+    ) -> list[AigcPipelineTaskAttempt]:
+        statement = select(AigcPipelineTaskORM).order_by(
+            AigcPipelineTaskORM.created_at,
+            AigcPipelineTaskORM.id,
+        )
+        if statuses is not None:
+            statement = statement.where(AigcPipelineTaskORM.status.in_(statuses))
+        with self._session_factory() as session:
+            return [
+                self._aigc_task_from_orm(session, task)
+                for task in session.scalars(statement).all()
+            ]
+
+    def claim_aigc_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+    ) -> AigcPipelineTaskAttempt | None:
+        with self._session_factory.begin() as session:
+            lease = session.get(AigcPipelineWorkerLeaseORM, "aigc_scheduler")
+            task = session.scalar(
+                select(AigcPipelineTaskORM)
+                .where(AigcPipelineTaskORM.id == task_id)
+                .with_for_update()
+            )
+            if (
+                lease is None
+                or lease.fencing_token != fencing_token
+                or self._as_utc(lease.lease_expires_at) <= utc_now()
+                or task is None
+                or task.status != AigcTaskStatus.QUEUED
+            ):
+                return None
+            now = utc_now()
+            task.status = AigcTaskStatus.RUNNING
+            task.started_at = now
+            task.updated_at = now
+            task.fencing_token = fencing_token
+            run_node = session.get(
+                AigcPipelineRunNodeORM,
+                (task.run_id, task.node_id),
+            )
+            assert run_node is not None
+            run_node.status = AigcRunNodeStatus.RUNNING
+            run_node.updated_at = now
+            session.flush()
+            return self._aigc_task_from_orm(session, task)
+
+    def commit_aigc_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+        status: AigcTaskStatus,
+        result: AigcTaskResult,
+        error: AigcTaskError | None,
+        metrics: AigcTaskMetrics,
+    ) -> tuple[AigcPipelineTaskAttempt, bool]:
+        with self._session_factory.begin() as session:
+            lease = session.get(AigcPipelineWorkerLeaseORM, "aigc_scheduler")
+            task = session.scalar(
+                select(AigcPipelineTaskORM)
+                .where(AigcPipelineTaskORM.id == task_id)
+                .with_for_update()
+            )
+            if task is None:
+                raise NotFoundError(f"AIGC task not found: {task_id}")
+            if (
+                lease is None
+                or lease.fencing_token != fencing_token
+                or task.fencing_token != fencing_token
+                or task.status != AigcTaskStatus.RUNNING
+            ):
+                return self._aigc_task_from_orm(session, task), False
+            run = session.scalar(
+                select(AigcPipelineRunORM)
+                .where(AigcPipelineRunORM.id == task.run_id)
+                .with_for_update()
+            )
+            assert run is not None
+            accepted = not run.cancellation_requested
+            final_status = status if accepted else AigcTaskStatus.CANCELED
+            final_result = result if accepted else AigcTaskResult()
+            now = utc_now()
+            task.status = final_status
+            task.progress = 100 if final_status == AigcTaskStatus.SUCCEEDED else task.progress
+            task.result_json = final_result.model_dump(mode="json")
+            task.error_json = (
+                error.model_dump(mode="json") if error is not None and accepted else None
+            )
+            task.metrics_json = metrics.model_dump(mode="json")
+            task.finished_at = now
+            task.updated_at = now
+            run_node = session.get(
+                AigcPipelineRunNodeORM,
+                (task.run_id, task.node_id),
+            )
+            assert run_node is not None
+            run_node.status = AigcRunNodeStatus(final_status.value)
+            run_node.result_json = final_result.model_dump(mode="json")
+            run_node.updated_at = now
+            session.flush()
+            return self._aigc_task_from_orm(session, task), accepted
+
+    def add_aigc_task_assets(
+        self,
+        references: Iterable[AigcPipelineTaskAssetReference],
+    ) -> list[AigcPipelineTaskAssetReference]:
+        items = list(references)
+        with self._session_factory.begin() as session:
+            for reference in items:
+                if session.get(AigcPipelineTaskORM, reference.task_id) is None:
+                    raise NotFoundError(
+                        f"AIGC task not found: {reference.task_id}"
+                    )
+                self._require_asset(session, reference.asset_id)
+                session.add(
+                    AigcPipelineTaskAssetORM(
+                        task_id=reference.task_id,
+                        direction=reference.direction,
+                        slot=reference.slot,
+                        ordinal=reference.ordinal,
+                        asset_id=reference.asset_id,
+                    )
+                )
+            session.flush()
+            return [item.model_copy(deep=True) for item in items]
+
+    def list_aigc_task_assets(
+        self,
+        task_id: str,
+    ) -> list[AigcPipelineTaskAssetReference]:
+        with self._session_factory() as session:
+            if session.get(AigcPipelineTaskORM, task_id) is None:
+                raise NotFoundError(f"AIGC task not found: {task_id}")
+            return [
+                AigcPipelineTaskAssetReference(
+                    task_id=item.task_id,
+                    direction=item.direction,
+                    slot=item.slot,
+                    ordinal=item.ordinal,
+                    asset_id=item.asset_id,
+                )
+                for item in session.scalars(
+                    select(AigcPipelineTaskAssetORM)
+                    .where(AigcPipelineTaskAssetORM.task_id == task_id)
+                    .order_by(
+                        AigcPipelineTaskAssetORM.direction,
+                        AigcPipelineTaskAssetORM.slot,
+                        AigcPipelineTaskAssetORM.ordinal,
+                    )
+                ).all()
+            ]
+
+    def remove_aigc_task_assets(
+        self,
+        task_id: str,
+        *,
+        direction: AigcAssetDirection | None = None,
+    ) -> list[AigcPipelineTaskAssetReference]:
+        with self._session_factory.begin() as session:
+            if session.get(AigcPipelineTaskORM, task_id) is None:
+                raise NotFoundError(f"AIGC task not found: {task_id}")
+            statement = select(AigcPipelineTaskAssetORM).where(
+                AigcPipelineTaskAssetORM.task_id == task_id
+            )
+            if direction is not None:
+                statement = statement.where(
+                    AigcPipelineTaskAssetORM.direction == direction
+                )
+            rows = list(session.scalars(statement).all())
+            removed = [
+                AigcPipelineTaskAssetReference(
+                    task_id=item.task_id,
+                    direction=item.direction,
+                    slot=item.slot,
+                    ordinal=item.ordinal,
+                    asset_id=item.asset_id,
+                )
+                for item in rows
+            ]
+            for row in rows:
+                session.delete(row)
+            session.flush()
+            return removed
+
+    def acquire_aigc_worker_lease(
+        self,
+        owner_id: str,
+        *,
+        now: datetime,
+        lease_seconds: int,
+    ) -> AigcWorkerLease | None:
+        with self._session_factory.begin() as session:
+            lease = session.scalar(
+                select(AigcPipelineWorkerLeaseORM)
+                .where(AigcPipelineWorkerLeaseORM.id == "aigc_scheduler")
+                .with_for_update()
+            )
+            if lease is None:
+                lease = AigcPipelineWorkerLeaseORM(
+                    id="aigc_scheduler",
+                    owner_id=owner_id,
+                    fencing_token=1,
+                    heartbeat_at=now,
+                    lease_expires_at=now + timedelta(seconds=lease_seconds),
+                )
+                session.add(lease)
+            elif (
+                lease.owner_id != owner_id
+                and self._as_utc(lease.lease_expires_at) > self._as_utc(now)
+            ):
+                return None
+            else:
+                if lease.owner_id != owner_id:
+                    lease.fencing_token += 1
+                lease.owner_id = owner_id
+                lease.heartbeat_at = now
+                lease.lease_expires_at = now + timedelta(seconds=lease_seconds)
+            session.flush()
+            return self._aigc_worker_lease_from_orm(lease)
+
+    def renew_aigc_worker_lease(
+        self,
+        owner_id: str,
+        fencing_token: int,
+        *,
+        now: datetime,
+        lease_seconds: int,
+    ) -> AigcWorkerLease | None:
+        with self._session_factory.begin() as session:
+            lease = session.scalar(
+                select(AigcPipelineWorkerLeaseORM)
+                .where(AigcPipelineWorkerLeaseORM.id == "aigc_scheduler")
+                .with_for_update()
+            )
+            if (
+                lease is None
+                or lease.owner_id != owner_id
+                or lease.fencing_token != fencing_token
+                or self._as_utc(lease.lease_expires_at) <= self._as_utc(now)
+            ):
+                return None
+            lease.heartbeat_at = now
+            lease.lease_expires_at = now + timedelta(seconds=lease_seconds)
+            session.flush()
+            return self._aigc_worker_lease_from_orm(lease)
 
     def create_project(self, data: ProjectCreate) -> Project:
         brief = Brief(**data.brief.model_dump())
@@ -93,6 +1032,7 @@ class MySQLRepository:
                 image_prompt_status=project.image_prompt_status,
                 current_image_asset_id=project.current_image_asset_id,
                 image_revision=project.image_revision,
+                image_reference_asset_ids=project.image_reference_asset_ids,
                 created_at=project.created_at,
                 updated_at=project.updated_at,
                 deleted_at=None,
@@ -282,6 +1222,18 @@ class MySQLRepository:
             session.flush()
             return self._project_from_orm(project)
 
+    def set_image_reference_asset_ids(
+        self,
+        project_id: str,
+        asset_ids: list[str],
+    ) -> Project:
+        with self._session_factory.begin() as session:
+            project = self._require_project(session, project_id)
+            project.image_reference_asset_ids = list(asset_ids)
+            project.updated_at = utc_now()
+            session.flush()
+            return self._project_from_orm(project)
+
     def set_current_image_asset(
         self,
         project_id: str,
@@ -294,7 +1246,7 @@ class MySQLRepository:
             asset = self._require_project_asset(session, project_id, asset_id)
             if (
                 asset.asset_role != AssetRole.PUBLIC
-                or asset.type != AssetType.GENERATED_IMAGE
+                or asset.type not in {AssetType.GENERATED_IMAGE, AssetType.UPLOADED_IMAGE}
                 or asset.status != Status.SUCCEEDED
             ):
                 raise ValueError("asset is not an eligible current image")
@@ -477,18 +1429,151 @@ class MySQLRepository:
             session.flush()
             return self._task_from_orm(task)
 
+    def create_tool_task(self, data: ToolTaskCreate) -> ToolTask:
+        return self.create_tool_task_with_input_assets(data, [])
+
+    def create_tool_task_with_input_assets(
+        self,
+        data: ToolTaskCreate,
+        inputs: Iterable[ToolTaskInputAsset],
+    ) -> ToolTask:
+        task = ToolTask(**data.model_dump())
+        task_inputs = [ToolTaskInputAsset(**item.model_dump()) for item in inputs]
+        if any(item.task_id != task.id for item in task_inputs):
+            raise ValueError("tool task input belongs to another task")
+        if len({item.asset_id for item in task_inputs}) != len(task_inputs):
+            raise ValueError("tool task input assets must be unique")
+        with self._session_factory.begin() as session:
+            for item in task_inputs:
+                self._require_asset(session, item.asset_id)
+            orm_task = ToolTaskORM(
+                id=task.id,
+                type=task.type,
+                status=task.status,
+                input_snapshot=task.input_snapshot,
+                provider_task_id=task.provider_task_id,
+                retry_of_task_id=task.retry_of_task_id,
+                created_at=task.created_at,
+                updated_at=task.updated_at,
+                started_at=task.started_at,
+                finished_at=task.finished_at,
+            )
+            self._set_tool_task_error(orm_task, task.error)
+            session.add(orm_task)
+            session.add_all(
+                [
+                    ToolTaskInputAssetORM(
+                        task_id=item.task_id,
+                        asset_id=item.asset_id,
+                        kind=item.kind,
+                        created_at=item.created_at,
+                    )
+                    for item in task_inputs
+                ]
+            )
+            session.flush()
+            return self._tool_task_from_orm(orm_task)
+
+    def get_tool_task(self, task_id: str) -> ToolTask:
+        with self._session_factory() as session:
+            task = session.get(ToolTaskORM, task_id)
+            if task is None:
+                raise NotFoundError(f"tool task not found: {task_id}")
+            return self._tool_task_from_orm(task)
+
+    def list_tool_task_input_assets(
+        self,
+        task_id: str,
+    ) -> list[ToolTaskInputAsset]:
+        with self._session_factory() as session:
+            if session.get(ToolTaskORM, task_id) is None:
+                raise NotFoundError(f"tool task not found: {task_id}")
+            return [
+                ToolTaskInputAsset(
+                    task_id=item.task_id,
+                    asset_id=item.asset_id,
+                    kind=item.kind,
+                    created_at=item.created_at,
+                )
+                for item in session.scalars(
+                    select(ToolTaskInputAssetORM)
+                    .where(ToolTaskInputAssetORM.task_id == task_id)
+                    .order_by(ToolTaskInputAssetORM.created_at, ToolTaskInputAssetORM.asset_id)
+                ).all()
+            ]
+
+    def list_tool_tasks(
+        self,
+        *,
+        task_type: ToolTaskType | None = None,
+    ) -> list[ToolTask]:
+        with self._session_factory() as session:
+            statement = select(ToolTaskORM).order_by(
+                ToolTaskORM.created_at.desc(), ToolTaskORM.id.desc()
+            )
+            if task_type is not None:
+                statement = statement.where(ToolTaskORM.type == task_type)
+            return [
+                self._tool_task_from_orm(task)
+                for task in session.scalars(statement).all()
+            ]
+
+    def update_tool_task(self, task_id: str, **changes: object) -> ToolTask:
+        with self._session_factory.begin() as session:
+            task = session.get(ToolTaskORM, task_id)
+            if task is None:
+                raise NotFoundError(f"tool task not found: {task_id}")
+            for key, value in changes.items():
+                if key == "error":
+                    self._set_tool_task_error(
+                        task, value if isinstance(value, ToolTaskError) else None
+                    )
+                elif hasattr(task, key):
+                    setattr(task, key, value)
+            task.updated_at = utc_now()
+            session.flush()
+            return self._tool_task_from_orm(task)
+
+    def delete_tool_task(self, task_id: str) -> ToolTask:
+        with self._session_factory.begin() as session:
+            task = session.get(ToolTaskORM, task_id)
+            if task is None:
+                raise NotFoundError(f"tool task not found: {task_id}")
+            deleted = self._tool_task_from_orm(task)
+            session.execute(
+                update(ToolTaskORM)
+                .where(ToolTaskORM.retry_of_task_id == task_id)
+                .values(retry_of_task_id=None)
+            )
+            session.execute(
+                update(AssetORM)
+                .where(AssetORM.tool_task_id == task_id)
+                .values(tool_task_id=None)
+            )
+            session.flush()
+            session.delete(task)
+            session.flush()
+            return deleted
+
     def create_asset(self, data: AssetCreate) -> Asset:
         return self.create_assets([data])[0]
 
     def create_assets(self, items: Iterable[AssetCreate]) -> list[Asset]:
         assets = [Asset(**item.model_dump()) for item in items]
         with self._session_factory.begin() as session:
-            for project_id in {asset.project_id for asset in assets}:
+            for project_id in {asset.project_id for asset in assets if asset.project_id}:
                 self._require_project(session, project_id)
+            for tool_task_id in {
+                asset.tool_task_id for asset in assets if asset.tool_task_id
+            }:
+                if session.get(ToolTaskORM, tool_task_id) is None:
+                    raise NotFoundError(f"tool task not found: {tool_task_id}")
             orm_assets = [
                 AssetORM(
                     id=asset.id,
                     project_id=asset.project_id,
+                    tool_task_id=asset.tool_task_id,
+                    tool_asset_role=asset.tool_asset_role,
                     type=asset.type,
                     category=asset.category,
                     asset_role=asset.asset_role,
@@ -506,7 +1591,7 @@ class MySQLRepository:
                 for asset in assets
             ]
             session.add_all(orm_assets)
-            for project_id in {asset.project_id for asset in assets}:
+            for project_id in {asset.project_id for asset in assets if asset.project_id}:
                 self._touch_project(session, project_id)
             session.flush()
             return [self._asset_from_orm(asset) for asset in orm_assets]
@@ -566,6 +1651,17 @@ class MySQLRepository:
         with self._session_factory() as session:
             return self._asset_from_orm(self._require_asset(session, asset_id))
 
+    def delete_tool_asset(self, asset_id: str) -> Asset:
+        with self._session_factory.begin() as session:
+            asset = self._require_asset(session, asset_id)
+            if asset.tool_asset_role is None:
+                raise NotFoundError(f"tool asset not found: {asset_id}")
+            self._prepare_aigc_asset_delete(session, asset_id)
+            deleted = self._asset_from_orm(asset)
+            session.delete(asset)
+            session.flush()
+            return deleted
+
     def create_image_layer_set(
         self,
         data: ImageLayerSetCreate,
@@ -614,7 +1710,7 @@ class MySQLRepository:
             )
             if (
                 source.asset_role != AssetRole.PUBLIC
-                or source.type != AssetType.GENERATED_IMAGE
+                or source.type not in {AssetType.GENERATED_IMAGE, AssetType.UPLOADED_IMAGE}
                 or source.status != Status.SUCCEEDED
             ):
                 raise ValueError("source asset is not a succeeded public image")
@@ -735,6 +1831,77 @@ class MySQLRepository:
             session.flush()
             return self._image_layer_set_from_orm(layer_set)
 
+    def replace_image_layer_asset(
+        self, project_id: str, set_id: str, *, expected_revision: int,
+        layer_id: str, asset: AssetCreate,
+    ) -> ImageLayerSet:
+        with self._session_factory.begin() as session:
+            self._require_project(session, project_id)
+            layer_set = session.scalar(
+                select(ImageLayerSetORM).options(selectinload(ImageLayerSetORM.layers))
+                .where(ImageLayerSetORM.id == set_id, ImageLayerSetORM.project_id == project_id)
+                .with_for_update()
+            )
+            if layer_set is None:
+                raise NotFoundError(f"image layer set not found: {set_id}")
+            if layer_set.revision != expected_revision:
+                raise RevisionConflictError("image layer set revision conflict")
+            layer = next((item for item in layer_set.layers if item.id == layer_id), None)
+            if layer is None:
+                raise ValueError("image layer not found")
+            if asset.project_id != project_id or asset.asset_role != AssetRole.INTERNAL_LAYER:
+                raise ValueError("replacement must be an internal layer asset")
+            orm_asset = session.get(AssetORM, asset.id)
+            if orm_asset is None:
+                orm_asset = self._asset_to_orm(Asset(**asset.model_dump()))
+                session.add(orm_asset)
+                session.flush()
+            layer.asset_id = orm_asset.id
+            layer_set.revision += 1
+            layer_set.updated_at = utc_now()
+            self._touch_project(session, project_id)
+            session.flush()
+            return self._image_layer_set_from_orm(layer_set)
+
+    def get_canvas_layout(self, project_id: str) -> CanvasLayout:
+        with self._session_factory() as session:
+            self._require_project(session, project_id)
+            layout = session.get(CanvasLayoutORM, project_id)
+            if layout is None:
+                return CanvasLayout(project_id=project_id, nodes=[], revision=0)
+            return self._canvas_layout_from_orm(layout)
+
+    def save_canvas_layout(
+        self,
+        project_id: str,
+        *,
+        expected_revision: int,
+        nodes: Iterable[CanvasNode],
+    ) -> CanvasLayout:
+        serialized_nodes = [node.model_dump(mode="json") for node in nodes]
+        with self._session_factory.begin() as session:
+            self._require_project(session, project_id)
+            layout = session.get(CanvasLayoutORM, project_id, with_for_update=True)
+            current_revision = layout.revision if layout is not None else 0
+            if current_revision != expected_revision:
+                raise RevisionConflictError("canvas layout revision conflict")
+            now = utc_now()
+            if layout is None:
+                layout = CanvasLayoutORM(
+                    project_id=project_id,
+                    nodes=serialized_nodes,
+                    revision=current_revision + 1,
+                    updated_at=now,
+                )
+                session.add(layout)
+            else:
+                layout.nodes = serialized_nodes
+                layout.revision = current_revision + 1
+                layout.updated_at = now
+            self._touch_project(session, project_id)
+            session.flush()
+            return self._canvas_layout_from_orm(layout)
+
     def list_project_assets(self, project_id: str) -> list[Asset]:
         return self.list_assets(project_id=project_id)
 
@@ -760,8 +1927,13 @@ class MySQLRepository:
                 conditions.append(AssetORM.asset_role == asset_role)
             assets = session.scalars(
                 select(AssetORM)
-                .join(ProjectORM, AssetORM.project_id == ProjectORM.id)
-                .where(ProjectORM.deleted_at.is_(None))
+                .outerjoin(ProjectORM, AssetORM.project_id == ProjectORM.id)
+                .where(
+                    or_(
+                        AssetORM.project_id.is_(None),
+                        ProjectORM.deleted_at.is_(None),
+                    )
+                )
                 .where(*conditions)
                 .order_by(AssetORM.created_at)
             ).all()
@@ -776,7 +1948,8 @@ class MySQLRepository:
                 elif hasattr(asset, key):
                     setattr(asset, key, value)
             asset.updated_at = utc_now()
-            self._touch_project(session, asset.project_id)
+            if asset.project_id is not None:
+                self._touch_project(session, asset.project_id)
             session.flush()
             return self._asset_from_orm(asset)
 
@@ -786,6 +1959,7 @@ class MySQLRepository:
             asset = self._require_asset(session, asset_id)
             if asset.project_id != project_id:
                 raise NotFoundError(f"asset not found: {asset_id}")
+            self._prepare_aigc_asset_delete(session, asset_id)
             deleted = self._asset_from_orm(asset)
 
             shots = session.scalars(
@@ -1539,7 +2713,8 @@ class MySQLRepository:
         asset = session.get(AssetORM, asset_id)
         if asset is None:
             raise NotFoundError(f"asset not found: {asset_id}")
-        MySQLRepository._require_project(session, asset.project_id)
+        if asset.project_id is not None:
+            MySQLRepository._require_project(session, asset.project_id)
         return asset
 
     @staticmethod
@@ -1615,6 +2790,257 @@ class MySQLRepository:
         task.error_message = error.message if error is not None else None
         task.error_detail = error.detail if error is not None else None
 
+    @staticmethod
+    def _aigc_template_from_orm(
+        template: AigcPipelineTemplateORM,
+    ) -> AigcPipelineTemplate:
+        return AigcPipelineTemplate(
+            id=template.id,
+            name=template.name,
+            description=template.description,
+            definition=template.definition_json,
+            revision=template.revision,
+            created_at=template.created_at,
+            updated_at=template.updated_at,
+        )
+
+    @staticmethod
+    def _aigc_pipeline_from_orm(pipeline: AigcPipelineORM) -> AigcPipeline:
+        return AigcPipeline(
+            id=pipeline.id,
+            name=pipeline.name,
+            description=pipeline.description,
+            source_template_id=pipeline.source_template_id,
+            source_template_revision=pipeline.source_template_revision,
+            definition=pipeline.definition_json,
+            revision=pipeline.revision,
+            latest_run_status=pipeline.latest_run_status,
+            created_at=pipeline.created_at,
+            updated_at=pipeline.updated_at,
+        )
+
+    @staticmethod
+    def _aigc_run_from_orm(run: AigcPipelineRunORM) -> AigcPipelineRun:
+        return AigcPipelineRun(
+            id=run.id,
+            pipeline_id=run.pipeline_id,
+            run_number=run.run_number,
+            pipeline_revision=run.pipeline_revision,
+            mode=run.mode,
+            start_node_id=run.start_node_id,
+            source_run_id=run.source_run_id,
+            source_node_id=run.source_node_id,
+            status=run.status,
+            definition_snapshot=run.definition_snapshot,
+            input_snapshot=run.input_snapshot or {},
+            error=(
+                AigcTaskError.model_validate(run.error_json)
+                if run.error_json
+                else None
+            ),
+            cancellation_requested=run.cancellation_requested,
+            created_at=run.created_at,
+            updated_at=run.updated_at,
+            started_at=run.started_at,
+            finished_at=run.finished_at,
+        )
+
+    @classmethod
+    def _aigc_task_from_orm(
+        cls,
+        session: Session,
+        task: AigcPipelineTaskORM,
+    ) -> AigcPipelineTaskAttempt:
+        run = session.get(AigcPipelineRunORM, task.run_id)
+        assert run is not None
+        return AigcPipelineTaskAttempt(
+            task_id=task.id,
+            pipeline_id=run.pipeline_id,
+            run_id=task.run_id,
+            node_id=task.node_id,
+            attempt=task.attempt,
+            type=task.type,
+            params=task.params_json or {},
+            upstream=task.upstream_json or [],
+            status=task.status,
+            progress=task.progress,
+            result=AigcTaskResult.model_validate(task.result_json or {}),
+            error=(
+                AigcTaskError.model_validate(task.error_json)
+                if task.error_json
+                else None
+            ),
+            metrics=AigcTaskMetrics.model_validate(task.metrics_json or {}),
+            created_at=task.created_at,
+            started_at=task.started_at,
+            finished_at=task.finished_at,
+        )
+
+    @classmethod
+    def _aigc_run_node_from_orm(
+        cls,
+        session: Session,
+        node: AigcPipelineRunNodeORM,
+    ) -> AigcPipelineRunNode:
+        attempts = session.scalars(
+            select(AigcPipelineTaskORM)
+            .where(
+                AigcPipelineTaskORM.run_id == node.run_id,
+                AigcPipelineTaskORM.node_id == node.node_id,
+            )
+            .order_by(AigcPipelineTaskORM.attempt)
+        ).all()
+        return AigcPipelineRunNode(
+            node_id=node.node_id,
+            included_in_plan=node.included_in_plan,
+            status=node.status,
+            current_task_id=node.current_task_id,
+            reused_from_task_id=node.reused_from_task_id,
+            input_hash=node.input_hash,
+            result=AigcTaskResult.model_validate(node.result_json or {}),
+            error=(
+                AigcTaskError.model_validate(node.error_json)
+                if node.error_json
+                else None
+            ),
+            attempts=[
+                cls._aigc_task_from_orm(session, task) for task in attempts
+            ],
+        )
+
+    @classmethod
+    def _aigc_run_detail_from_orm(
+        cls,
+        session: Session,
+        run: AigcPipelineRunORM,
+    ) -> AigcPipelineRunDetail:
+        nodes = session.scalars(
+            select(AigcPipelineRunNodeORM).where(
+                AigcPipelineRunNodeORM.run_id == run.id
+            )
+        ).all()
+        order = {
+            item["id"]: index
+            for index, item in enumerate(
+                (run.definition_snapshot or {}).get("nodes", [])
+            )
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        }
+        sorted_nodes = sorted(
+            nodes,
+            key=lambda item: (order.get(item.node_id, len(order)), item.node_id),
+        )
+        return AigcPipelineRunDetail(
+            run=cls._aigc_run_from_orm(run),
+            nodes=[
+                cls._aigc_run_node_from_orm(session, node)
+                for node in sorted_nodes
+            ],
+        )
+
+    @staticmethod
+    def _aigc_worker_lease_from_orm(
+        lease: AigcPipelineWorkerLeaseORM,
+    ) -> AigcWorkerLease:
+        return AigcWorkerLease(
+            owner_id=lease.owner_id,
+            fencing_token=lease.fencing_token,
+            lease_expires_at=lease.lease_expires_at,
+            heartbeat_at=lease.heartbeat_at,
+        )
+
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    @staticmethod
+    def _aigc_asset_references_for_pipeline(
+        session: Session,
+        pipeline: AigcPipeline,
+    ) -> list[AigcPipelineAssetReference]:
+        references = [
+            AigcPipelineAssetReference(
+                pipeline_id=pipeline.id,
+                node_id=node.id,
+                slot="image",
+                asset_id=node.config.asset_id,
+            )
+            for node in pipeline.definition.nodes
+            if isinstance(node, ImageInputNode) and node.config.asset_id is not None
+        ]
+        for reference in references:
+            if session.get(AssetORM, reference.asset_id) is None:
+                raise NotFoundError(f"asset not found: {reference.asset_id}")
+        return references
+
+    @staticmethod
+    def _replace_aigc_pipeline_assets(
+        session: Session,
+        pipeline_id: str,
+        references: Iterable[AigcPipelineAssetReference],
+    ) -> None:
+        session.execute(
+            delete(AigcPipelineAssetORM).where(
+                AigcPipelineAssetORM.pipeline_id == pipeline_id
+            )
+        )
+        session.add_all(
+            [
+                AigcPipelineAssetORM(
+                    pipeline_id=reference.pipeline_id,
+                    node_id=reference.node_id,
+                    slot=reference.slot,
+                    asset_id=reference.asset_id,
+                )
+                for reference in references
+            ]
+        )
+
+    @staticmethod
+    def _prepare_aigc_asset_delete(session: Session, asset_id: str) -> None:
+        pipeline_reference = session.scalar(
+            select(AigcPipelineAssetORM)
+            .where(AigcPipelineAssetORM.asset_id == asset_id)
+            .limit(1)
+        )
+        if pipeline_reference is not None:
+            raise AssetReferenceConflictError(
+                f"asset is referenced by AIGC pipeline: "
+                f"{pipeline_reference.pipeline_id}"
+            )
+        active_reference = session.scalar(
+            select(AigcPipelineTaskAssetORM)
+            .join(
+                AigcPipelineTaskORM,
+                AigcPipelineTaskORM.id == AigcPipelineTaskAssetORM.task_id,
+            )
+            .join(
+                AigcPipelineRunORM,
+                AigcPipelineRunORM.id == AigcPipelineTaskORM.run_id,
+            )
+            .where(
+                AigcPipelineTaskAssetORM.asset_id == asset_id,
+                AigcPipelineRunORM.status.in_(
+                    [
+                        AigcPipelineRunStatus.QUEUED,
+                        AigcPipelineRunStatus.RUNNING,
+                    ]
+                ),
+            )
+            .limit(1)
+        )
+        if active_reference is not None:
+            raise AssetReferenceConflictError(
+                "asset is referenced by an active AIGC run"
+            )
+        session.execute(
+            delete(AigcPipelineTaskAssetORM).where(
+                AigcPipelineTaskAssetORM.asset_id == asset_id
+            )
+        )
+
     @classmethod
     def _project_summary_from_orm(cls, project: ProjectORM) -> ProjectListItem:
         return ProjectListItem(
@@ -1628,6 +3054,7 @@ class MySQLRepository:
             image_prompt_status=project.image_prompt_status,
             current_image_asset_id=project.current_image_asset_id,
             image_revision=project.image_revision,
+            image_reference_asset_ids=project.image_reference_asset_ids,
             created_at=project.created_at,
             updated_at=project.updated_at,
         )
@@ -1645,6 +3072,7 @@ class MySQLRepository:
             image_prompt_status=project.image_prompt_status,
             current_image_asset_id=project.current_image_asset_id,
             image_revision=project.image_revision,
+            image_reference_asset_ids=project.image_reference_asset_ids,
             text_artifacts=[
                 cls._text_artifact_from_orm(artifact)
                 for artifact in sorted(
@@ -1747,10 +3175,62 @@ class MySQLRepository:
         )
 
     @staticmethod
+    def _set_tool_task_error(
+        task: ToolTaskORM,
+        error: ToolTaskError | None,
+    ) -> None:
+        task.error_code = error.code if error else None
+        task.error_message = error.message if error else None
+        task.error_provider_request_id = error.provider_request_id if error else None
+        task.error_provider_task_id = error.provider_task_id if error else None
+        task.error_stage = error.stage if error else None
+
+    @staticmethod
+    def _tool_task_from_orm(task: ToolTaskORM) -> ToolTask:
+        error = (
+            ToolTaskError(
+                code=task.error_code,
+                message=task.error_message,
+                provider_request_id=task.error_provider_request_id,
+                provider_task_id=task.error_provider_task_id,
+                stage=task.error_stage,
+            )
+            if task.error_code and task.error_message
+            else None
+        )
+        return ToolTask(
+            id=task.id,
+            type=task.type,
+            status=task.status,
+            input_snapshot=dict(task.input_snapshot or {}),
+            provider_task_id=task.provider_task_id,
+            error=error,
+            retry_of_task_id=task.retry_of_task_id,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
+            started_at=task.started_at,
+            finished_at=task.finished_at,
+            input_assets=[
+                ToolTaskInputAsset(
+                    task_id=item.task_id,
+                    asset_id=item.asset_id,
+                    kind=item.kind,
+                    created_at=item.created_at,
+                )
+                for item in sorted(
+                    task.input_assets,
+                    key=lambda item: (item.created_at, item.asset_id),
+                )
+            ],
+        )
+
+    @staticmethod
     def _asset_from_orm(asset: AssetORM) -> Asset:
         return Asset(
             id=asset.id,
             project_id=asset.project_id,
+            tool_task_id=asset.tool_task_id,
+            tool_asset_role=asset.tool_asset_role,
             type=asset.type,
             category=asset.category,
             asset_role=asset.asset_role,
@@ -1771,6 +3251,8 @@ class MySQLRepository:
         return AssetORM(
             id=asset.id,
             project_id=asset.project_id,
+            tool_task_id=asset.tool_task_id,
+            tool_asset_role=asset.tool_asset_role,
             type=asset.type,
             category=asset.category,
             asset_role=asset.asset_role,
@@ -1822,6 +3304,15 @@ class MySQLRepository:
             ],
             created_at=layer_set.created_at,
             updated_at=layer_set.updated_at,
+        )
+
+    @staticmethod
+    def _canvas_layout_from_orm(layout: CanvasLayoutORM) -> CanvasLayout:
+        return CanvasLayout(
+            project_id=layout.project_id,
+            nodes=[CanvasNode.model_validate(item) for item in layout.nodes],
+            revision=layout.revision,
+            updated_at=layout.updated_at,
         )
 
     @staticmethod

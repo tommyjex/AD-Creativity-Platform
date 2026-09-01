@@ -6,6 +6,7 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
+from backend.app.api.dependencies import get_asset_storage_service
 from backend.app.core.config import Settings
 from backend.app.repositories import InMemoryRepository
 from backend.app.repositories.mysql import MySQLRepository
@@ -13,10 +14,12 @@ from backend.app.schemas import (
     Asset,
     AssetCategory,
     AssetCreate,
+    AssetRole,
     AssetType,
     ProjectCreate,
     Stage,
     Status,
+    ToolAssetRole,
 )
 from backend.app.services.assets import (
     AssetStorageService,
@@ -169,6 +172,110 @@ def test_asset_content_proxy_preserves_video_range_response(
     assert response.headers["content-range"] == "bytes 100-103/1000"
     assert response.headers["etag"] == '"video-etag"'
     assert response.headers["content-type"] == "video/mp4"
+    assert "content-disposition" not in response.headers
+
+
+def test_asset_content_download_adds_attachment_disposition(
+    client,
+    repository: InMemoryRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = _create_project(repository)
+    asset = repository.create_asset(
+        AssetCreate(
+            project_id=project_id,
+            type=AssetType.GENERATED_IMAGE,
+            status=Status.SUCCEEDED,
+            stage=Stage.IMAGE,
+            object_key=f"projects/{project_id}/image/hero-result.png",
+            mime_type="image/png",
+            metadata={"name": "Hero Result"},
+        )
+    )
+    original_async_client = httpx.AsyncClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            status_code=200,
+            headers={"Content-Length": "7"},
+            content=b"pngdata",
+        )
+
+    monkeypatch.setattr(
+        "backend.app.api.routes.httpx.AsyncClient",
+        lambda **kwargs: original_async_client(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=kwargs.get("follow_redirects", False),
+            timeout=kwargs.get("timeout"),
+        ),
+    )
+
+    response = client.get(f"/api/assets/{asset.id}/content?download=1")
+
+    assert response.status_code == 200
+    assert response.content == b"pngdata"
+    assert response.headers["content-type"] == "image/png"
+    assert (
+        response.headers["content-disposition"]
+        == 'attachment; filename="Hero-Result.png"'
+    )
+
+    named_response = client.get(
+        f"/api/assets/{asset.id}/content",
+        params={"download": 1, "filename": "图片结果-1.png"},
+    )
+    assert named_response.status_code == 200
+    assert (
+        named_response.headers["content-disposition"]
+        == "attachment; filename=\"1.png\"; "
+        "filename*=UTF-8''%E5%9B%BE%E7%89%87%E7%BB%93%E6%9E%9C-1.png"
+    )
+
+
+def test_asset_content_download_proxies_external_url_without_storage_client(
+    client,
+    repository: InMemoryRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = _create_project(repository)
+    asset = repository.create_asset(
+        AssetCreate(
+            project_id=project_id,
+            type=AssetType.GENERATED_IMAGE,
+            status=Status.SUCCEEDED,
+            stage=Stage.IMAGE,
+            url="https://model.example/generated-image.png",
+            mime_type="image/png",
+        )
+    )
+    storage = AssetStorageService(
+        bucket="local-assets",
+        public_endpoint="https://assets.example.com",
+        client=None,
+    )
+    client.app.dependency_overrides[get_asset_storage_service] = lambda: storage
+    original_async_client = httpx.AsyncClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://model.example/generated-image.png"
+        return httpx.Response(status_code=200, content=b"external-png")
+
+    monkeypatch.setattr(
+        "backend.app.api.routes.httpx.AsyncClient",
+        lambda **kwargs: original_async_client(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=kwargs.get("follow_redirects", False),
+            timeout=kwargs.get("timeout"),
+        ),
+    )
+
+    response = client.get(f"/api/assets/{asset.id}/content?download=1")
+
+    assert response.status_code == 200
+    assert response.content == b"external-png"
+    assert response.headers["content-disposition"].startswith(
+        'attachment; filename="'
+    )
 
 
 def test_asset_storage_registers_generated_asset_with_stable_url_and_metadata() -> None:
@@ -525,6 +632,39 @@ def test_asset_storage_persists_tos_asset_records_with_mysql_repository(
             "content_type": "video/mp4",
         }
     ]
+
+
+def test_mysql_repository_updates_global_aigc_asset_metadata(
+    mysql_session_factory: sessionmaker[Session],
+) -> None:
+    repository = MySQLRepository(mysql_session_factory)
+    asset = repository.create_asset(
+        AssetCreate(
+            project_id=None,
+            tool_task_id=None,
+            tool_asset_role=ToolAssetRole.OUTPUT,
+            asset_role=AssetRole.PUBLIC,
+            type=AssetType.GENERATED_IMAGE,
+            status=Status.SUCCEEDED,
+            object_key="tools/library/generated_image/reference.png",
+            mime_type="image/png",
+            metadata={"origin": "aigc"},
+        )
+    )
+
+    updated = repository.update_asset(
+        asset.id,
+        metadata={
+            **asset.metadata,
+            "width": 1024,
+            "height": 1024,
+            "container": "png",
+        },
+    )
+
+    assert updated.project_id is None
+    assert updated.metadata["width"] == 1024
+    assert updated.metadata["height"] == 1024
 
 
 def test_asset_storage_uploads_character_batch_before_persisting() -> None:

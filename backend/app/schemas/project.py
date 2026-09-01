@@ -19,27 +19,12 @@ from .text_artifact import TextArtifact
 class ProjectCreate(SchemaModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     project_type: ProjectType = ProjectType.VIDEO_AD
-    brief: BriefCreate
+    brief: BriefCreate = Field(default_factory=BriefCreate)
 
     @model_validator(mode="after")
     def validate_brief_matrix(self) -> ProjectCreate:
         if self.project_type == ProjectType.IMAGE_ASSET:
-            required_fields = {
-                "prompt",
-                "product_name",
-                "audience",
-                "selling_points",
-                "target_platform",
-                "aspect_ratio",
-                "target_language",
-                "image_purpose",
-            }
-            missing_fields = required_fields - self.brief.model_fields_set
-            if missing_fields:
-                names = ", ".join(sorted(missing_fields))
-                raise ValueError(f"image_asset brief requires: {names}")
-            if "duration_seconds" not in self.brief.model_fields_set:
-                self.brief.duration_seconds = None
+            self.brief.duration_seconds = None
         _validate_brief_matrix(self.project_type, self.brief)
         return self
 
@@ -72,6 +57,7 @@ class ProjectBase(SchemaModel):
     image_prompt_status: Status = Status.DRAFT
     current_image_asset_id: Optional[str] = None
     image_revision: int = Field(default=0, ge=0)
+    image_reference_asset_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_brief_matrix(self) -> ProjectBase:
@@ -105,30 +91,13 @@ def _validate_brief_matrix(
     brief: Brief | BriefCreate,
 ) -> None:
     if project_type == ProjectType.VIDEO_AD:
+        if not brief.prompt.strip():
+            raise ValueError("video_ad brief requires a non-empty prompt")
         if brief.duration_seconds is None:
             raise ValueError("video_ad brief requires duration_seconds")
         if brief.image_purpose is not None:
             raise ValueError("video_ad brief requires image_purpose to be null")
         return
 
-    required_text_fields = {
-        "prompt": brief.prompt,
-        "product_name": brief.product_name,
-        "audience": brief.audience,
-        "target_platform": brief.target_platform,
-        "aspect_ratio": brief.aspect_ratio,
-        "target_language": brief.target_language,
-        "image_purpose": brief.image_purpose,
-    }
-    missing_fields = [
-        field
-        for field, value in required_text_fields.items()
-        if value is None or (isinstance(value, str) and not value.strip())
-    ]
-    if missing_fields:
-        names = ", ".join(sorted(missing_fields))
-        raise ValueError(f"image_asset brief requires non-empty values: {names}")
-    if not brief.selling_points:
-        raise ValueError("image_asset brief requires at least one selling_points item")
     if brief.duration_seconds is not None:
         raise ValueError("image_asset brief requires duration_seconds to be null")

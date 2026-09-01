@@ -4,6 +4,7 @@ import asyncio
 import io
 import math
 from dataclasses import dataclass
+from typing import Protocol, Sequence
 
 from PIL import Image, UnidentifiedImageError
 
@@ -52,6 +53,17 @@ class ImageLayerCompositionResult:
     mime_type: str = "image/png"
 
 
+class ComposableImageLayer(Protocol):
+    id: str
+    asset_id: str
+    z_index: int
+    bbox_absolute: tuple[int, int, int, int]
+    visible: bool
+    x: float
+    y: float
+    scale: float
+
+
 class ImageLayerCompositionService:
     def compose(
         self,
@@ -62,14 +74,31 @@ class ImageLayerCompositionService:
     ) -> ImageLayerCompositionResult:
         if layer_set.status != Status.SUCCEEDED:
             raise ValueError("image layer set is not ready for composition")
-        if layer_set.canvas_width <= 0 or layer_set.canvas_height <= 0:
+        return self.compose_pixels(
+            canvas_width=layer_set.canvas_width,
+            canvas_height=layer_set.canvas_height,
+            layers=layer_set.layers,
+            base_content=base_content,
+            layer_contents=layer_contents,
+        )
+
+    def compose_pixels(
+        self,
+        *,
+        canvas_width: int,
+        canvas_height: int,
+        layers: Sequence[ComposableImageLayer],
+        base_content: bytes,
+        layer_contents: dict[str, bytes],
+    ) -> ImageLayerCompositionResult:
+        if canvas_width <= 0 or canvas_height <= 0:
             raise ValueError("image layer canvas dimensions are invalid")
 
         canvas = self._decode(base_content, label="base").convert("RGBA")
-        if canvas.size != (layer_set.canvas_width, layer_set.canvas_height):
+        if canvas.size != (canvas_width, canvas_height):
             raise ValueError("base image dimensions do not match the canvas")
 
-        ordered = sorted(layer_set.layers, key=lambda item: item.z_index)
+        ordered = sorted(layers, key=lambda item: item.z_index)
         if [item.z_index for item in ordered] != list(range(1, len(ordered) + 1)):
             raise ValueError("image layer order is invalid")
 

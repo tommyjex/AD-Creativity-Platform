@@ -31,7 +31,10 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ImageEditDialog } from "@/components/workspace/image-edit-dialog";
+import {
+  ImageCanvasEditor,
+  type CanvasEditInput
+} from "@/components/workspace/image-canvas-editor";
 import { LayerDecomposeDialog } from "@/components/workspace/layer-decompose-dialog";
 import { LayerEditorDialog } from "@/components/workspace/layer-editor-dialog";
 import { getSafePreviewUrl } from "@/lib/asset-display";
@@ -58,6 +61,7 @@ const IMAGE_REFERENCE_MIME_TYPES = new Set([
   "image/webp"
 ]);
 const MAX_IMAGE_REFERENCE_BYTES = 20 * 1024 * 1024;
+const MAX_IMAGE_REFERENCES = 10;
 
 export function ImageProjectWorkspace({
   onProjectUpdated,
@@ -94,8 +98,9 @@ export function ImageProjectWorkspace({
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploadingReference, setIsUploadingReference] = useState(false);
+  const [isUpdatingCanvasAspectRatio, setIsUpdatingCanvasAspectRatio] =
+    useState(false);
   const [pendingAiPrompt, setPendingAiPrompt] = useState<string | null>(null);
-  const [referenceAsset, setReferenceAsset] = useState<Asset | null>(null);
   const [confirmLongPrompt, setConfirmLongPrompt] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [size, setSize] = useState<ImageGenerationSize>("2K");
@@ -148,6 +153,10 @@ export function ImageProjectWorkspace({
         )
         .toSorted((a, b) => b.created_at.localeCompare(a.created_at)),
     [workspaceProject.assets]
+  );
+  const referenceAssets = useMemo(
+    () => referenceAssetsFromProject(workspaceProject),
+    [workspaceProject]
   );
 
   const refreshProject = useCallback(
@@ -218,6 +227,9 @@ export function ImageProjectWorkspace({
         if (!ACTIVE_TASK_STATUSES.has(nextTask.status)) {
           await refreshProject();
           if (!cancelled) {
+            if (nextTask.status === "succeeded") {
+              setEditAsset(null);
+            }
             setFeedback(
               nextTask.status === "succeeded"
                 ? "图片版本已生成。"
@@ -318,9 +330,16 @@ export function ImageProjectWorkspace({
     }
   }
 
-  async function handleReferenceFile(file: File) {
+  async function handleReferenceFiles(files: File[]) {
     if (isUploadingReference) return;
-    const validationError = validateImageReference(file);
+    if (files.length === 0) return;
+    if (referenceAssets.length + files.length > MAX_IMAGE_REFERENCES) {
+      setFeedback(`参考图最多支持 ${MAX_IMAGE_REFERENCES} 张，请减少本次选择数量。`);
+      return;
+    }
+    const validationError = files
+      .map(validateImageReference)
+      .find((message) => message !== null);
     if (validationError) {
       setFeedback(validationError);
       return;
@@ -328,21 +347,100 @@ export function ImageProjectWorkspace({
 
     setIsUploadingReference(true);
     setFeedback(null);
+    const uploadedAssets: Asset[] = [];
     try {
-      const uploaded = await apiClient.uploadImageProjectReference(
+      for (const file of files) {
+        const uploaded = await apiClient.uploadImageProjectReference(
+          project.id,
+          file,
+          {
+            filename: file.name,
+            mimeType: file.type
+          }
+        );
+        uploadedAssets.push(uploaded);
+      }
+      const nextProject = await apiClient.setImageProjectReferenceSelection(
         project.id,
-        file,
         {
-          filename: file.name,
-          mimeType: file.type
+          asset_ids: [
+            ...(workspaceProject.image_reference_asset_ids ?? []),
+            ...uploadedAssets.map((asset) => asset.id)
+          ]
         }
       );
-      setReferenceAsset(uploaded);
-      setFeedback("参考图已上传并用于下一次图片生成。");
+      setWorkspaceProject(nextProject);
+      onProjectUpdated(nextProject);
+      setFeedback(`已添加 ${uploadedAssets.length} 张参考图。`);
+    } catch (error) {
+      if (uploadedAssets.length > 0) {
+        try {
+          const nextProject = await apiClient.setImageProjectReferenceSelection(
+            project.id,
+            {
+              asset_ids: [
+                ...(workspaceProject.image_reference_asset_ids ?? []),
+                ...uploadedAssets.map((asset) => asset.id)
+              ]
+            }
+          );
+          setWorkspaceProject(nextProject);
+          onProjectUpdated(nextProject);
+        } catch {
+          // Preserve the upload error because saving the partial selection failed too.
+        }
+      }
+      setFeedback(getUserFacingErrorMessage(error));
+    } finally {
+      setIsUploadingReference(false);
+    }
+  }
+
+  async function handleRemoveReference(assetId: string) {
+    if (isUploadingReference) return;
+    setIsUploadingReference(true);
+    setFeedback(null);
+    try {
+      const nextProject = await apiClient.setImageProjectReferenceSelection(
+        project.id,
+        {
+          asset_ids: (workspaceProject.image_reference_asset_ids ?? []).filter(
+            (id) => id !== assetId
+          )
+        }
+      );
+      setWorkspaceProject(nextProject);
+      onProjectUpdated(nextProject);
+      setFeedback("已从项目参考图中移除，后端资产仍保留。");
     } catch (error) {
       setFeedback(getUserFacingErrorMessage(error));
     } finally {
       setIsUploadingReference(false);
+    }
+  }
+
+  async function handleCanvasAspectRatioChange(
+    aspectRatio: Project["brief"]["aspect_ratio"]
+  ) {
+    if (
+      isUpdatingCanvasAspectRatio ||
+      workspaceProject.brief.aspect_ratio === aspectRatio
+    ) {
+      return;
+    }
+    setIsUpdatingCanvasAspectRatio(true);
+    setFeedback(null);
+    try {
+      const nextProject = await apiClient.updateProject(project.id, {
+        brief: { aspect_ratio: aspectRatio }
+      });
+      setWorkspaceProject(nextProject);
+      onProjectUpdated(nextProject);
+      setFeedback("画幅已更新；保存提示词后将用于新的图片版本。");
+    } catch (error) {
+      setFeedback(getUserFacingErrorMessage(error));
+    } finally {
+      setIsUpdatingCanvasAspectRatio(false);
     }
   }
 
@@ -395,8 +493,8 @@ export function ImageProjectWorkspace({
         format,
         operation: "text_to_image",
         prompt_version_id: promptVersionId,
-        ...(referenceAsset
-          ? { reference_asset_id: referenceAsset.id }
+        ...(referenceAssets.length > 0
+          ? { reference_asset_ids: referenceAssets.map((asset) => asset.id) }
           : {}),
         size
       });
@@ -444,14 +542,13 @@ export function ImageProjectWorkspace({
   async function handleEditSubmit({
     annotation,
     prompt: editPrompt
-  }: Parameters<
-    React.ComponentProps<typeof ImageEditDialog>["onSubmit"]
-  >[0]) {
+  }: CanvasEditInput) {
     if (!editAsset || isTaskRunning) return;
     setFeedback(null);
     try {
       const task = await apiClient.editProjectImage(project.id, {
         annotation,
+        edit_mode: "single_region",
         format,
         operation: "image_to_image",
         prompt: editPrompt,
@@ -461,7 +558,6 @@ export function ImageProjectWorkspace({
         source_asset_id: editAsset.id
       });
       setActiveTask(task);
-      setEditAsset(null);
       setFeedback("编辑任务已提交，结果将作为新版本保存。");
     } catch (error) {
       setFeedback(getUserFacingErrorMessage(error));
@@ -606,103 +702,90 @@ export function ImageProjectWorkspace({
                 <div className="min-w-0">
                   <Label htmlFor="image-reference-upload">参考图（可选）</Label>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    PNG、JPEG 或 WebP，最大 20 MB，仅支持 1 张。
+                    PNG、JPEG 或 WebP，单张最大 20 MB，最多 10 张。
                   </p>
                 </div>
-                {referenceAsset ? (
-                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                    1 / 1
-                  </span>
-                ) : null}
+                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                  {referenceAssets.length} / {MAX_IMAGE_REFERENCES}
+                </span>
               </div>
               <input
                 accept="image/png,image/jpeg,image/webp"
                 className="sr-only"
-                disabled={isUploadingReference}
+                disabled={
+                  isUploadingReference ||
+                  referenceAssets.length >= MAX_IMAGE_REFERENCES
+                }
                 id="image-reference-upload"
                 onChange={(event) => {
-                  const file = event.target.files?.[0];
+                  const files = Array.from(event.target.files ?? []);
                   event.target.value = "";
-                  if (file) void handleReferenceFile(file);
+                  if (files.length > 0) void handleReferenceFiles(files);
                 }}
+                multiple
                 ref={referenceInputRef}
                 type="file"
               />
-              {referenceAsset ? (
-                <div
-                  className="mt-3 flex min-w-0 items-center gap-3 rounded-xl border border-border bg-secondary/25 p-2"
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    const file = event.dataTransfer.files[0];
-                    if (file) void handleReferenceFile(file);
-                  }}
-                >
-                  <ReferenceThumbnail asset={referenceAsset} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {referenceAssetName(referenceAsset)}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {referenceAsset.mime_type ?? "image"}
-                    </p>
-                  </div>
-                  <Button
-                    aria-label="更换参考图"
-                    disabled={isUploadingReference}
-                    onClick={() => referenceInputRef.current?.click()}
-                    size="icon"
-                    title="更换参考图"
-                    type="button"
-                    variant="ghost"
-                  >
-                    {isUploadingReference ? (
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button
-                    aria-label="移除参考图"
-                    disabled={isUploadingReference}
-                    onClick={() => {
-                      setReferenceAsset(null);
-                      setFeedback("已从本次生成移除参考图，后端资产仍保留。");
-                    }}
-                    size="icon"
-                    title="移除参考图"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+              <button
+                className="mt-3 flex min-h-20 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground transition hover:border-primary/35 hover:bg-primary/[0.04] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={
+                  isUploadingReference ||
+                  referenceAssets.length >= MAX_IMAGE_REFERENCES
+                }
+                onClick={() => referenceInputRef.current?.click()}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const files = Array.from(event.dataTransfer.files);
+                  if (files.length > 0) void handleReferenceFiles(files);
+                }}
+                title="点击或拖拽上传参考图"
+                type="button"
+              >
+                {isUploadingReference ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                <span className="truncate">
+                  {isUploadingReference
+                    ? "参考图上传中..."
+                    : referenceAssets.length >= MAX_IMAGE_REFERENCES
+                      ? "已达到 10 张参考图上限"
+                      : "点击或拖拽添加参考图"}
+                </span>
+              </button>
+              {referenceAssets.length > 0 ? (
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {referenceAssets.map((asset) => {
+                    const name = referenceAssetName(asset);
+                    return (
+                      <div
+                        className="min-w-0 rounded-xl border border-border bg-secondary/25 p-2"
+                        key={asset.id}
+                      >
+                        <ReferenceThumbnail asset={asset} />
+                        <div className="mt-2 flex items-center gap-1">
+                          <p className="min-w-0 flex-1 truncate text-xs font-medium">
+                            {name}
+                          </p>
+                          <Button
+                            aria-label={`移除参考图：${name}`}
+                            disabled={isUploadingReference}
+                            onClick={() => void handleRemoveReference(asset.id)}
+                            size="icon"
+                            title={`移除参考图：${name}`}
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ) : (
-                <button
-                  className="mt-3 flex min-h-20 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground transition hover:border-primary/35 hover:bg-primary/[0.04] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={isUploadingReference}
-                  onClick={() => referenceInputRef.current?.click()}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    const file = event.dataTransfer.files[0];
-                    if (file) void handleReferenceFile(file);
-                  }}
-                  title="点击或拖拽上传参考图"
-                  type="button"
-                >
-                  {isUploadingReference ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4" />
-                  )}
-                  <span className="truncate">
-                    {isUploadingReference
-                      ? "参考图上传中..."
-                      : "点击或拖拽上传参考图"}
-                  </span>
-                </button>
-              )}
+              ) : null}
             </div>
             <div className="mt-4 flex justify-end">
               <Button
@@ -926,16 +1009,27 @@ export function ImageProjectWorkspace({
         </aside>
       </div>
 
-      <ImageEditDialog
-        asset={editAsset}
+      <ImageCanvasEditor
+        aspectRatio={workspaceProject.brief.aspect_ratio}
         format={format}
+        isUploadingReference={
+          isUploadingReference || isUpdatingCanvasAspectRatio
+        }
         isSubmitting={isTaskRunning}
+        onAspectRatioChange={(nextAspectRatio) =>
+          void handleCanvasAspectRatioChange(nextAspectRatio)
+        }
+        onFormatChange={setFormat}
         onOpenChange={(open) => {
           if (!open) setEditAsset(null);
         }}
+        onReferenceFiles={(files) => void handleReferenceFiles(files)}
+        onSizeChange={setSize}
         onSubmit={handleEditSubmit}
         open={editAsset !== null}
+        referenceAssets={referenceAssets}
         size={size}
+        targetAsset={editAsset}
       />
       <LayerDecomposeDialog
         asset={decomposeAsset}
@@ -1008,12 +1102,12 @@ export function ImageProjectWorkspace({
 function ReferenceThumbnail({ asset }: { asset: Asset }) {
   const previewUrl = getSafePreviewUrl(asset);
   return (
-    <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-950">
+    <div className="grid aspect-square w-full place-items-center overflow-hidden rounded-lg bg-slate-950">
       {previewUrl ? (
         // Signed assets intentionally retain the backend proxy URL.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          alt="当前参考图"
+          alt={referenceAssetName(asset)}
           className="h-full w-full object-cover"
           src={previewUrl}
         />
@@ -1233,6 +1327,22 @@ function metadataText(value: unknown) {
 
 function referenceAssetName(asset: Asset) {
   return metadataText(asset.metadata.name) ?? "已上传参考图";
+}
+
+function referenceAssetsFromProject(project: Project): Asset[] {
+  const assetsById = new Map(
+    project.assets
+      .filter(
+        (asset) =>
+          asset.type === "uploaded_image" &&
+          asset.asset_role === "public" &&
+          asset.status === "succeeded"
+      )
+      .map((asset) => [asset.id, asset])
+  );
+  return (project.image_reference_asset_ids ?? [])
+    .map((assetId) => assetsById.get(assetId))
+    .filter((asset): asset is Asset => asset !== undefined);
 }
 
 function hasUnsavedPromptChanges(

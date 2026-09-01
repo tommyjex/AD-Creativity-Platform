@@ -16,7 +16,7 @@ describe("AppShell top navigation", () => {
     navigationState.pathname = "/workspace/projects";
   });
 
-  it("exposes the projects and assets workspace entries", () => {
+  it("exposes the projects, assets, tools and AIGC workspace entries", () => {
     render(
       <AppShell>
         <div>首页内容</div>
@@ -25,9 +25,13 @@ describe("AppShell top navigation", () => {
 
     const projectLink = screen.getByRole("link", { name: "项目" });
     const assetLink = screen.getByRole("link", { name: "资产库" });
+    const toolsLink = screen.getByRole("link", { name: "工具" });
+    const aigcLink = screen.getByRole("link", { name: "AIGC工作台" });
 
     expect(projectLink).toHaveAttribute("href", "/workspace/projects");
     expect(assetLink).toHaveAttribute("href", "/workspace/assets");
+    expect(toolsLink).toHaveAttribute("href", "/workspace/tools");
+    expect(aigcLink).toHaveAttribute("href", "/workspace/aigc");
   });
 
   it("does not render the removed anchor navigation items", () => {
@@ -67,6 +71,40 @@ describe("AppShell top navigation", () => {
     );
 
     expect(screen.getByRole("link", { name: "资产库" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(screen.getByRole("link", { name: "项目" })).not.toHaveAttribute(
+      "aria-current"
+    );
+  });
+
+  it("marks the tools entry as current on the tools route", () => {
+    navigationState.pathname = "/workspace/tools";
+    render(
+      <AppShell>
+        <div>首页内容</div>
+      </AppShell>
+    );
+
+    expect(screen.getByRole("link", { name: "工具" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(screen.getByRole("link", { name: "项目" })).not.toHaveAttribute(
+      "aria-current"
+    );
+  });
+
+  it("keeps the AIGC entry current on editor subroutes", () => {
+    navigationState.pathname = "/workspace/aigc/pipelines/pipeline-1";
+    render(
+      <AppShell>
+        <div>首页内容</div>
+      </AppShell>
+    );
+
+    expect(screen.getByRole("link", { name: "AIGC工作台" })).toHaveAttribute(
       "aria-current",
       "page"
     );

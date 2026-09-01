@@ -544,6 +544,48 @@ describe("createApiClient", () => {
     expect(fetcher.mock.calls[0][0]).toBe("http://backend.local/api/assets");
   });
 
+  it("omits empty project filters when listing assets", async () => {
+    const fetcher = vi.fn<FetchFunction>(async () => jsonResponse([]));
+    const api = createApiClient({
+      baseUrl: "http://backend.local",
+      fetcher
+    });
+
+    await api.listAssets({ projectId: "" });
+
+    expect(fetcher.mock.calls[0][0]).toBe("http://backend.local/api/assets");
+  });
+
+  it("lists tool assets and tasks, then deletes encoded tool asset and task IDs", async () => {
+    const fetcher = vi
+      .fn<FetchFunction>()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const api = createApiClient({
+      baseUrl: "http://backend.local",
+      fetcher
+    });
+
+    await api.listToolAssets({ cache: "no-store" });
+    await api.listToolTasks();
+    await expect(api.deleteToolAsset("tool/asset 1")).resolves.toBeUndefined();
+    await expect(api.deleteToolTask("task/with space")).resolves.toBeUndefined();
+
+    expect(fetcher.mock.calls[0][0]).toBe("http://backend.local/api/tools/assets");
+    expect(fetcher.mock.calls[0][1]?.cache).toBe("no-store");
+    expect(fetcher.mock.calls[1][0]).toBe("http://backend.local/api/tools/tasks");
+    expect(fetcher.mock.calls[2][0]).toBe(
+      "http://backend.local/api/tools/assets/tool%2Fasset%201"
+    );
+    expect(fetcher.mock.calls[2][1]?.method).toBe("DELETE");
+    expect(fetcher.mock.calls[3][0]).toBe(
+      "http://backend.local/api/tools/tasks/task%2Fwith%20space"
+    );
+    expect(fetcher.mock.calls[3][1]?.method).toBe("DELETE");
+  });
+
   it("maps generation stages to the expected encoded API endpoints", async () => {
     const fetcher = vi.fn<FetchFunction>(async () => jsonResponse(taskFixture));
     const api = createApiClient({
@@ -1231,6 +1273,153 @@ describe("createApiClient", () => {
         "服务暂时不可用，请稍后重试。"
       );
     }
+  });
+});
+
+describe("AIGC API client", () => {
+  it("posts structured image prompt optimization requests", async () => {
+    const response = {
+      optimized_text: "优化后的产品主图",
+      optimized_reference_instructions: ["保持商标位置"]
+    };
+    const fetcher = vi.fn<FetchFunction>(async () => jsonResponse(response));
+    const api = createApiClient({ baseUrl: "http://backend.local", fetcher });
+    const payload = {
+      text: "产品图",
+      reference_instructions: ["保留商标"],
+      generation_modes: ["image_to_image" as const],
+      reference_image_count: 2
+    };
+
+    await expect(api.optimizeAigcImagePrompt(payload)).resolves.toEqual(response);
+    expect(fetcher).toHaveBeenCalledWith(
+      "http://backend.local/api/aigc/prompts/optimize",
+      expect.objectContaining({
+        body: JSON.stringify(payload),
+        method: "POST"
+      })
+    );
+  });
+
+  it("serializes list filters and template instantiation", async () => {
+    const fetcher = vi
+      .fn<FetchFunction>()
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [], page: 2, page_size: 20, total: 0 })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: "pipeline-1",
+          name: "实例",
+          description: "",
+          definition: {
+            schemaVersion: 1,
+            nodes: [],
+            edges: [],
+            viewport: { x: 0, y: 0, zoom: 1 }
+          },
+          source_template_id: "template/1",
+          source_template_revision: 1,
+          revision: 0,
+          latest_run_status: null,
+          created_at: "2026-08-29T01:00:00Z",
+          updated_at: "2026-08-29T01:00:00Z"
+        })
+      );
+    const api = createApiClient({ baseUrl: "http://backend.local", fetcher });
+
+    await api.listAigcTemplates({
+      page: 2,
+      pageSize: 20,
+      query: " 商品 主图 "
+    });
+    await api.instantiateAigcTemplate("template/1", { name: "实例" });
+
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      "http://backend.local/api/aigc/templates?q=%E5%95%86%E5%93%81+%E4%B8%BB%E5%9B%BE&page=2&page_size=20",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      "http://backend.local/api/aigc/templates/template%2F1/instantiate",
+      expect.objectContaining({
+        body: JSON.stringify({ name: "实例" }),
+        method: "POST"
+      })
+    );
+  });
+
+  it("deletes encoded AIGC template and pipeline IDs with empty responses", async () => {
+    const fetcher = vi
+      .fn<FetchFunction>()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const api = createApiClient({ baseUrl: "http://backend.local", fetcher });
+
+    await expect(
+      api.deleteAigcTemplate("template/with space")
+    ).resolves.toBeUndefined();
+    await expect(
+      api.deleteAigcPipeline("pipeline/with space")
+    ).resolves.toBeUndefined();
+
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      "http://backend.local/api/aigc/templates/template%2Fwith%20space",
+      expect.objectContaining({ method: "DELETE" })
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      "http://backend.local/api/aigc/pipelines/pipeline%2Fwith%20space",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("creates empty pipelines through the AIGC endpoint", async () => {
+    const fetcher = vi.fn<FetchFunction>(async () => jsonResponse({}));
+    const api = createApiClient({ baseUrl: "http://backend.local", fetcher });
+    const payload = {
+      name: "空白流程",
+      description: "",
+      definition: {
+        schemaVersion: 1 as const,
+        nodes: [],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      },
+      source_template_id: null,
+      source_template_revision: null
+    };
+
+    await api.createAigcPipeline(payload);
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "http://backend.local/api/aigc/pipelines",
+      expect.objectContaining({
+        body: JSON.stringify(payload),
+        method: "POST"
+      })
+    );
+  });
+
+  it("uploads AIGC media as binary content to the typed endpoint", async () => {
+    const fetcher = vi.fn<FetchFunction>(async () => jsonResponse({}));
+    const api = createApiClient({ baseUrl: "http://backend.local", fetcher });
+    const file = new Blob(["audio"], { type: "audio/mpeg" });
+
+    await api.uploadAigcMedia("audio", file, {
+      filename: "旁白.mp3",
+      mimeType: "audio/mpeg"
+    });
+
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe(
+      "http://backend.local/api/aigc/assets/audios?filename=%E6%97%81%E7%99%BD.mp3&mime_type=audio%2Fmpeg"
+    );
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(file);
+    expect((init?.headers as Headers).get("content-type")).toBe("audio/mpeg");
   });
 });
 
