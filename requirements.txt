@@ -8,3 +8,4 @@ httpx>=0.28.0,<1.0.0
 byteplus-python-sdk-v2[ark]
 sniffio>=1.3.0,<2.0.0
 Pillow>=11.0.0,<13.0.0
+pillow-heif>=0.18.0,<2.0.0

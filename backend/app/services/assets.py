@@ -21,6 +21,7 @@ from backend.app.schemas import (
     Project,
     Stage,
     Status,
+    ToolAssetRole,
 )
 
 
@@ -201,8 +202,10 @@ class TosObjectStorageClient:
 
 @dataclass(frozen=True)
 class StoredAssetInput:
-    project_id: str
     type: AssetType
+    project_id: str | None = None
+    tool_task_id: str | None = None
+    tool_asset_role: ToolAssetRole | None = None
     category: AssetCategory | None = None
     asset_role: AssetRole = AssetRole.PUBLIC
     stage: Stage | None = None
@@ -264,7 +267,8 @@ class AssetStorageService:
     def generate_object_key(
         self,
         *,
-        project_id: str,
+        project_id: str | None = None,
+        tool_task_id: str | None = None,
         asset_id: str,
         asset_type: AssetType,
         stage: Stage | None = None,
@@ -273,11 +277,17 @@ class AssetStorageService:
     ) -> str:
         extension = _extension_for(filename=filename, mime_type=mime_type)
         stage_or_type = _slug(stage.value if stage is not None else asset_type.value)
+        if project_id and tool_task_id:
+            raise ValueError("object key cannot have both project and tool task owners")
+        owner_prefix = (
+            [self.key_prefix, _slug(project_id or "")]
+            if project_id
+            else ["tools", _slug(tool_task_id or "library")]
+        )
         return "/".join(
             part
             for part in [
-                self.key_prefix,
-                _slug(project_id),
+                *owner_prefix,
                 stage_or_type,
                 f"{_slug(asset_id)}{extension}",
             ]
@@ -313,6 +323,8 @@ class AssetStorageService:
     ) -> Asset:
         asset = AssetCreate(
             project_id=data.project_id,
+            tool_task_id=data.tool_task_id,
+            tool_asset_role=data.tool_asset_role,
             type=data.type,
             category=data.category,
             asset_role=data.asset_role,
@@ -329,6 +341,7 @@ class AssetStorageService:
         )
         object_key = self.generate_object_key(
             project_id=data.project_id,
+            tool_task_id=data.tool_task_id,
             asset_id=asset.id,
             asset_type=data.type,
             stage=data.stage,
@@ -357,6 +370,8 @@ class AssetStorageService:
 
         asset = AssetCreate(
             project_id=data.project_id,
+            tool_task_id=data.tool_task_id,
+            tool_asset_role=data.tool_asset_role,
             type=data.type,
             category=data.category,
             asset_role=data.asset_role,
@@ -372,6 +387,7 @@ class AssetStorageService:
         )
         object_key = self.generate_object_key(
             project_id=data.project_id,
+            tool_task_id=data.tool_task_id,
             asset_id=asset.id,
             asset_type=data.type,
             stage=data.stage,
@@ -416,6 +432,20 @@ class AssetStorageService:
             },
             deep=True,
         )
+
+    async def read_asset_content(self, asset: Asset) -> bytes:
+        if self.client is not None and asset.object_key:
+            return await asyncio.to_thread(
+                self.client.get_object,
+                key=asset.object_key,
+            )
+        if asset.url:
+            downloaded = await self.downloader.fetch(
+                asset.url,
+                expected_mime_type=asset.mime_type,
+            )
+            return downloaded.content
+        raise ValueError("asset has no readable object")
 
     def signed_access_url(self, asset: Asset) -> str | None:
         if self.client is None or not asset.object_key:
@@ -465,6 +495,8 @@ class AssetStorageService:
             source_host = urlsplit(item.source_url or "").hostname
             asset = AssetCreate(
                 project_id=item.project_id,
+                tool_task_id=item.tool_task_id,
+                tool_asset_role=item.tool_asset_role,
                 type=item.type,
                 category=item.category,
                 asset_role=item.asset_role,
@@ -481,6 +513,7 @@ class AssetStorageService:
             )
             object_key = self.generate_object_key(
                 project_id=item.project_id,
+                tool_task_id=item.tool_task_id,
                 asset_id=asset.id,
                 asset_type=item.type,
                 stage=item.stage,

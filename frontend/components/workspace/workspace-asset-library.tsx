@@ -11,6 +11,7 @@ import {
   ImageIcon,
   LayoutGrid,
   Maximize2,
+  Music2,
   Package,
   Play,
   RotateCcw,
@@ -18,6 +19,7 @@ import {
   Sparkles,
   Trash2,
   UserRound,
+  Wrench,
   X
 } from "lucide-react";
 import { ProjectEmptyState } from "@/components/project-empty-state";
@@ -39,6 +41,7 @@ import {
   artifactMatchesKeyword,
   assetMatchesKeyword,
   buildArtifactItems,
+  getAssetDownloadUrl,
   getArtifactKindLabel,
   getArtifactKindTypeLabel,
   getAssetSectionDescription,
@@ -54,7 +57,14 @@ import {
   type AssetSection,
   type AssetSidebarOption
 } from "@/lib/asset-display";
-import type { Asset, ProjectListItem, Status } from "@/lib/api-types";
+import type {
+  Asset,
+  ProjectListItem,
+  Status,
+  ToolAssetRole,
+  ToolTask,
+  ToolTaskType
+} from "@/lib/api-types";
 import { STATUSES } from "@/lib/api-types";
 import { formatDate, statusVariant } from "@/lib/project-display";
 import { cn } from "@/lib/utils";
@@ -83,25 +93,33 @@ export interface WorkspaceAssetFilters {
   projectId?: string;
   section?: AssetSection;
   status?: Status;
+  source?: WorkspaceAssetSource;
 }
+
+export const WORKSPACE_ASSET_SOURCES = ["all", "projects", "tools"] as const;
+export type WorkspaceAssetSource = (typeof WORKSPACE_ASSET_SOURCES)[number];
 
 interface WorkspaceAssetLibraryProps {
   assets: Asset[];
   error?: string;
   filters: WorkspaceAssetFilters;
   projects: ProjectListItem[];
+  toolTasks?: ToolTask[];
 }
 
 interface DeleteTarget {
   assetId: string;
-  projectId: string;
+  isToolAsset: boolean;
   label: string;
   isLastFrame: boolean;
+  projectId: string | null;
 }
 
 interface PreviewTarget {
   asset?: Asset;
   createdAt: string;
+  downloadUrl?: string | null;
+  isAudio?: boolean;
   isVideo: boolean;
   projectName: string;
   status: Status;
@@ -114,7 +132,8 @@ export function WorkspaceAssetLibrary({
   assets: initialAssets,
   error,
   filters,
-  projects
+  projects,
+  toolTasks = []
 }: WorkspaceAssetLibraryProps) {
   const [assets, setAssets] = useState(initialAssets);
   const [prevInitialAssets, setPrevInitialAssets] = useState(initialAssets);
@@ -135,19 +154,34 @@ export function WorkspaceAssetLibrary({
     () => new Map(projects.map((project) => [project.id, project.name])),
     [projects]
   );
+  const toolTasksById = useMemo(
+    () => new Map(toolTasks.map((task) => [task.id, task])),
+    [toolTasks]
+  );
+  const projectAssets = useMemo(
+    () => assets.filter((asset) => asset.project_id !== null),
+    [assets]
+  );
+  const toolAssets = useMemo(
+    () => assets.filter((asset) => asset.tool_asset_role != null),
+    [assets]
+  );
 
   const characterAssets = useMemo(
-    () => assets.filter((asset) => asset.category === "character"),
-    [assets]
+    () => projectAssets.filter((asset) => asset.category === "character"),
+    [projectAssets]
   );
   const sceneAssets = useMemo(
-    () => assets.filter((asset) => asset.category === "scene"),
-    [assets]
+    () => projectAssets.filter((asset) => asset.category === "scene"),
+    [projectAssets]
   );
-  const artifactItems = useMemo(() => buildArtifactItems(assets), [assets]);
+  const artifactItems = useMemo(
+    () => buildArtifactItems(projectAssets),
+    [projectAssets]
+  );
   const imageProductAssets = useMemo(
-    () => assets.filter(isImageProductAsset),
-    [assets]
+    () => projectAssets.filter(isImageProductAsset),
+    [projectAssets]
   );
 
   const [activeOption, setActiveOption] = useState<AssetSidebarOption>(
@@ -178,6 +212,10 @@ export function WorkspaceAssetLibrary({
       ),
     [imageProductAssets, keyword]
   );
+  const filteredToolAssets = useMemo(
+    () => toolAssets.filter((asset) => assetMatchesKeyword(asset, keyword)),
+    [toolAssets, keyword]
+  );
 
   // Sidebar badges show unfiltered totals so switching sections is predictable.
   const sidebarCounts = useMemo<Record<AssetSidebarOption, number>>(() => {
@@ -200,7 +238,13 @@ export function WorkspaceAssetLibrary({
     imageProductAssets.length
   ]);
 
-  const managedCount = sidebarCounts.all;
+  const source = filters.source ?? "all";
+  const displayedAssetCount =
+    source === "projects"
+      ? sidebarCounts.all
+      : source === "tools"
+        ? toolAssets.length
+        : sidebarCounts.all + toolAssets.length;
 
   const selectedProject = filters.projectId
     ? projects.find((project) => project.id === filters.projectId)
@@ -209,16 +253,22 @@ export function WorkspaceAssetLibrary({
   const visibleSections: readonly AssetSection[] =
     activeOption === "all" ? ASSET_SECTIONS : [activeOption];
 
-  const visibleHasMatch = visibleSections.some((section) => {
+  const visibleHasProjectMatch = visibleSections.some((section) => {
     if (section === "character") return filteredCharacter.length > 0;
     if (section === "scene") return filteredScene.length > 0;
     if (section === "artifacts") return filteredArtifacts.length > 0;
     if (section === "product") return filteredProducts.length > 0;
     return false;
   });
+  const visibleHasMatch =
+    (source !== "tools" && visibleHasProjectMatch) ||
+    (source !== "projects" && filteredToolAssets.length > 0);
 
   const showGlobalEmptyState =
-    !error && !hasKeyword && activeOption === "all" && managedCount === 0;
+    !error &&
+    !hasKeyword &&
+    activeOption === "all" &&
+    displayedAssetCount === 0;
   const showNoMatchState = !error && hasKeyword && !visibleHasMatch;
 
   async function handleConfirmDelete() {
@@ -230,7 +280,13 @@ export function WorkspaceAssetLibrary({
     setDeleteError(null);
 
     try {
-      await api.deleteAsset(pendingDelete.projectId, pendingDelete.assetId);
+      if (pendingDelete.isToolAsset) {
+        await api.deleteToolAsset(pendingDelete.assetId);
+      } else if (pendingDelete.projectId) {
+        await api.deleteAsset(pendingDelete.projectId, pendingDelete.assetId);
+      } else {
+        return;
+      }
       setAssets((previous) =>
         previous.filter((asset) => asset.id !== pendingDelete.assetId)
       );
@@ -266,11 +322,11 @@ export function WorkspaceAssetLibrary({
               资产库
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-              按角色、场景、商品与产物集中查看创作资产，并可追溯所属项目、生成状态与删除治理。
+              集中管理项目与工具资产，可追溯来源、任务状态与创建信息。
             </p>
           </div>
           <Badge className="w-fit" variant="info">
-            {managedCount} 项资产
+            {displayedAssetCount} 项资产
           </Badge>
         </div>
       </div>
@@ -346,7 +402,8 @@ export function WorkspaceAssetLibrary({
             </div>
           ) : (
             <div className="mt-7 space-y-8">
-              {visibleSections.map((section) => {
+              {source !== "tools"
+                ? visibleSections.map((section) => {
                 if (section === "character" || section === "scene") {
                   return (
                     <CategoryAssetSection
@@ -385,7 +442,16 @@ export function WorkspaceAssetLibrary({
                     projectNames={projectNames}
                   />
                 );
-              })}
+              })
+                : null}
+              {source !== "projects" ? (
+                <ToolAssetsSection
+                  assets={filteredToolAssets}
+                  onRequestDelete={setPendingDelete}
+                  onRequestPreview={setPendingPreview}
+                  toolTasksById={toolTasksById}
+                />
+              ) : null}
             </div>
           )}
         </div>
@@ -397,6 +463,9 @@ export function WorkspaceAssetLibrary({
             <DialogTitle>删除资产</DialogTitle>
             <DialogDescription>
               确认删除“{pendingDelete?.label}”？该操作不可撤销。
+              {pendingDelete?.isToolAsset
+                ? "仅删除该工具资产，不会影响同一任务的其他资产。"
+                : null}
               {pendingDelete?.isLastFrame
                 ? "尾帧图依附于分镜视频，删除后将同时删除对应分镜视频片段。"
                 : null}
@@ -534,17 +603,39 @@ function AssetFilters({
   filters: WorkspaceAssetFilters;
   projects: ProjectListItem[];
 }) {
+  const [selectedSource, setSelectedSource] = useState<WorkspaceAssetSource>(
+    filters.source ?? "all"
+  );
+  const isToolSource = selectedSource === "tools";
+
   return (
     <form
       action="/workspace/assets"
       className="rounded-2xl border border-border bg-card p-4 shadow-sm"
       method="get"
     >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_auto] xl:items-end">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_1fr_auto] xl:items-end">
+        <FilterField label="来源" name="source">
+          <select
+            className={selectClassName}
+            defaultValue={filters.source ?? "all"}
+            id="source"
+            name="source"
+            onChange={(event) =>
+              setSelectedSource(event.target.value as WorkspaceAssetSource)
+            }
+          >
+            <option value="all">全部资产</option>
+            <option value="projects">项目资产</option>
+            <option value="tools">工具资产</option>
+          </select>
+        </FilterField>
+
         <FilterField label="项目" name="project_id">
           <select
             className={selectClassName}
-            defaultValue={filters.projectId ?? ""}
+            defaultValue={isToolSource ? "" : filters.projectId ?? ""}
+            disabled={isToolSource}
             id="project_id"
             name="project_id"
           >
@@ -744,7 +835,7 @@ function CategoryAssetSection({
                 key={asset.id}
                 onRequestDelete={onRequestDelete}
                 onRequestPreview={onRequestPreview}
-                projectName={projectNames.get(asset.project_id) ?? "未知项目"}
+                projectName={projectNames.get(asset.project_id ?? "") ?? "未知项目"}
               />
             ))}
           </div>
@@ -788,7 +879,9 @@ function ArtifactsSection({
                 key={item.key}
                 onRequestDelete={onRequestDelete}
                 onRequestPreview={onRequestPreview}
-                projectName={projectNames.get(item.asset.project_id) ?? "未知项目"}
+                projectName={
+                  projectNames.get(item.asset.project_id ?? "") ?? "未知项目"
+                }
               />
             ))}
           </div>
@@ -831,7 +924,7 @@ function ImageProductSection({
                 key={asset.id}
                 onRequestDelete={onRequestDelete}
                 onRequestPreview={onRequestPreview}
-                projectName={projectNames.get(asset.project_id) ?? "未知项目"}
+                projectName={projectNames.get(asset.project_id ?? "") ?? "未知项目"}
               />
             ))}
           </div>
@@ -841,6 +934,184 @@ function ImageProductSection({
         <SectionEmpty label="图片成品" />
       )}
     </section>
+  );
+}
+
+function ToolAssetsSection({
+  assets,
+  onRequestDelete,
+  onRequestPreview,
+  toolTasksById
+}: {
+  assets: Asset[];
+  onRequestDelete: (target: DeleteTarget) => void;
+  onRequestPreview: (target: PreviewTarget) => void;
+  toolTasksById: Map<string, ToolTask>;
+}) {
+  const { page, pageCount, pageItems, setPage } = usePagedItems(assets);
+
+  return (
+    <section aria-labelledby="tool-assets-title">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/[0.08] text-primary">
+          <Wrench aria-hidden="true" className="h-5 w-5" />
+        </div>
+        <div>
+          <h2
+            className="text-xl font-semibold tracking-[-0.025em]"
+            id="tool-assets-title"
+          >
+            工具资产
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {`${assets.length} 项 · 独立工具及 AIGC 工作台的输入素材与生成产物。`}
+          </p>
+        </div>
+      </div>
+      {assets.length > 0 ? (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+            {pageItems.map((asset) => (
+              <ToolAssetCard
+                asset={asset}
+                key={asset.id}
+                onRequestDelete={onRequestDelete}
+                onRequestPreview={onRequestPreview}
+                task={asset.tool_task_id ? toolTasksById.get(asset.tool_task_id) : undefined}
+              />
+            ))}
+          </div>
+          <SectionPager onChange={setPage} page={page} pageCount={pageCount} />
+        </>
+      ) : (
+        <SectionEmpty label="工具" />
+      )}
+    </section>
+  );
+}
+
+function ToolAssetCard({
+  asset,
+  onRequestDelete,
+  onRequestPreview,
+  task
+}: {
+  asset: Asset;
+  onRequestDelete: (target: DeleteTarget) => void;
+  onRequestPreview: (target: PreviewTarget) => void;
+  task?: ToolTask;
+}) {
+  const description = getWorkspaceAssetDescription(asset);
+  const previewUrl = getSafePreviewUrl(asset);
+  const isAudio = asset.type === "uploaded_audio";
+  const isVideo =
+    asset.type === "uploaded_video" ||
+    asset.type === "storyboard_video" ||
+    asset.type === "final_video";
+  const taskType = task?.type ?? metadataToolTaskType(asset);
+  const taskStatus = task?.status ?? metadataToolTaskStatus(asset) ?? asset.status;
+  const aigcAsset = metadataText(asset, "origin") === "aigc";
+  const typeLabel = aigcAsset ? "AIGC 工作台" : getToolTaskTypeLabel(taskType);
+
+  return (
+    <article className="group relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-glass">
+      <DeleteAssetButton
+        onClick={() =>
+          onRequestDelete({
+            assetId: asset.id,
+            isLastFrame: false,
+            isToolAsset: true,
+            label: description,
+            projectId: null
+          })
+        }
+      />
+      <div className="relative aspect-[16/10] overflow-hidden border-b border-border bg-secondary/50">
+        {isAudio ? (
+          <button
+            aria-label={`播放${description}预览`}
+            className="flex h-full w-full flex-col items-center justify-center gap-3 text-primary outline-none transition hover:bg-primary/[0.06] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/45"
+            onClick={() =>
+              previewUrl
+                ? onRequestPreview({
+                    asset,
+                    createdAt: asset.created_at,
+                    downloadUrl: getAssetDownloadUrl(asset),
+                    isAudio: true,
+                    isVideo: false,
+                    projectName: "工具任务",
+                    status: taskStatus,
+                    title: description,
+                    typeLabel,
+                    url: previewUrl
+                  })
+                : undefined
+            }
+            type="button"
+          >
+            <Music2 aria-hidden="true" className="h-8 w-8" />
+            <span className="text-xs font-medium">播放音频</span>
+          </button>
+        ) : (
+          <AssetPreview
+            alt={`${description}预览`}
+            isVideo={isVideo}
+            onOpen={
+              previewUrl
+                ? () =>
+                    onRequestPreview({
+                      asset,
+                      createdAt: asset.created_at,
+                      downloadUrl: getAssetDownloadUrl(asset),
+                      isVideo,
+                      projectName: "工具任务",
+                      status: taskStatus,
+                      title: description,
+                      typeLabel,
+                      url: previewUrl
+                    })
+                : undefined
+            }
+            url={previewUrl}
+          />
+        )}
+        <Badge
+          className="absolute left-3 top-3 border-white/70 bg-white/90 backdrop-blur"
+          variant={statusVariant(taskStatus)}
+        >
+          {getStatusLabel(taskStatus)}
+        </Badge>
+      </div>
+      <div className="p-4">
+        <p className="line-clamp-2 min-h-10 text-sm font-medium leading-5 text-foreground">
+          {description}
+        </p>
+        <dl className="mt-3 grid gap-2 border-t border-border pt-3 text-xs">
+          <MetadataRow label="工具类型" value={typeLabel} />
+          <MetadataRow
+            label="资产角色"
+            value={
+              aigcAsset
+                ? `AIGC ${getToolAssetRoleLabel(asset.tool_asset_role)}`
+                : getToolAssetRoleLabel(asset.tool_asset_role)
+            }
+          />
+          <MetadataRow label="任务状态" value={getStatusLabel(taskStatus)} />
+          <MetadataRow
+            label="创建时间"
+            value={<time dateTime={asset.created_at}>{formatDate(asset.created_at)}</time>}
+          />
+        </dl>
+        {previewUrl ? (
+          <Button asChild className="mt-4 w-full" size="sm" variant="outline">
+            <a download href={getAssetDownloadUrl(asset) ?? previewUrl}>
+              <Download aria-hidden="true" className="h-4 w-4" />
+              下载资产
+            </a>
+          </Button>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -946,6 +1217,7 @@ function WorkspaceAssetCard({
           onRequestDelete({
             assetId: asset.id,
             isLastFrame: false,
+            isToolAsset: false,
             label: description,
             projectId: asset.project_id
           })
@@ -1023,6 +1295,7 @@ function ArtifactCard({
           onRequestDelete({
             assetId: asset.id,
             isLastFrame,
+            isToolAsset: false,
             label: kindLabel,
             projectId: asset.project_id
           })
@@ -1102,7 +1375,9 @@ function AssetPreviewDialog({
         {target ? (
           <div className="flex max-h-[calc(100dvh-3rem)] flex-col">
             <div className="grid place-items-center bg-slate-950">
-              {target.isVideo ? (
+              {target.isAudio ? (
+                <audio aria-label={`${target.title}播放`} controls src={target.url} />
+              ) : target.isVideo ? (
                 <video
                   aria-label={`${target.title}播放`}
                   autoPlay
@@ -1176,7 +1451,12 @@ function AssetPreviewDialog({
                 ) : null}
               </dl>
               <Button asChild className="mt-4" variant="outline">
-                <a download href={target.url} rel="noreferrer" target="_blank">
+                <a
+                  download
+                  href={target.downloadUrl ?? target.url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
                   <Download className="h-4 w-4" />
                   下载资产
                 </a>
@@ -1192,6 +1472,30 @@ function AssetPreviewDialog({
 function metadataText(asset: Asset, key: string): string | null {
   const value = asset.metadata[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function metadataToolTaskType(asset: Asset): ToolTaskType | undefined {
+  const value = metadataText(asset, "tool_task_type");
+  return value === "face_blur_video" || value === "multimodal_video_generation"
+    ? value
+    : undefined;
+}
+
+function metadataToolTaskStatus(asset: Asset): Status | undefined {
+  const value = metadataText(asset, "tool_task_status");
+  return value && STATUSES.includes(value as Status) ? (value as Status) : undefined;
+}
+
+function getToolTaskTypeLabel(taskType: ToolTaskType | undefined): string {
+  if (taskType === "face_blur_video") return "视频人物打码";
+  if (taskType === "multimodal_video_generation") return "全模态参考生视频";
+  return "工具任务";
+}
+
+function getToolAssetRoleLabel(role: ToolAssetRole | null | undefined): string {
+  if (role === "input") return "输入素材";
+  if (role === "output") return "输出产物";
+  return "未标注";
 }
 
 function imageSizeText(asset: Asset): string {

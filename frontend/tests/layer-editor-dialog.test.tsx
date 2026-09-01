@@ -18,6 +18,7 @@ import type {
 
 const apiMocks = vi.hoisted(() => ({
   composeImageLayers: vi.fn(),
+  editImageLayerContent: vi.fn(),
   getAsset: vi.fn(),
   getImageLayerSet: vi.fn(),
   getTask: vi.fn(),
@@ -124,6 +125,7 @@ function renderEditor(
 describe("图层编辑器", () => {
   beforeEach(() => {
     apiMocks.composeImageLayers.mockReset();
+    apiMocks.editImageLayerContent.mockReset();
     apiMocks.getAsset.mockReset();
     apiMocks.getImageLayerSet.mockReset();
     apiMocks.getTask.mockReset();
@@ -398,6 +400,77 @@ describe("图层编辑器", () => {
     fireEvent.click(screen.getByRole("button", { name: "关闭图层编辑器" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
     confirm.mockRestore();
+  });
+
+  it("为选中非底图提交内容编辑并在成功后刷新集合", async () => {
+    apiMocks.editImageLayerContent.mockResolvedValue({
+      error: null, id: "task-edit", output_asset_ids: [], status: "succeeded"
+    });
+    apiMocks.getImageLayerSet.mockResolvedValue({
+      ...layerSet,
+      revision: 4,
+      layers: [{ ...layers[0], asset_id: "replacement-1" }, layers[1]]
+    });
+    renderEditor();
+
+    fireEvent.change(screen.getByLabelText("编辑图层内容"), {
+      target: { value: "改为深蓝色磨砂材质" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "生成替换图层" }));
+
+    await waitFor(() => {
+      expect(apiMocks.editImageLayerContent).toHaveBeenCalledWith(
+        "project-1", "set-1", {
+          expected_revision: 3, format: "png", layer_id: "layer-2",
+          prompt: "改为深蓝色磨砂材质", size: "2K"
+        }
+      );
+    });
+    expect(await screen.findByText("图层内容已替换。")).toBeInTheDocument();
+  });
+
+  it("有未保存改动时先自动保存布局再提交内容编辑", async () => {
+    apiMocks.updateImageLayerSet.mockResolvedValue({
+      ...layerSet,
+      revision: 4,
+      layers: [{ ...layers[0], scale: 1.5 }, layers[1]]
+    });
+    apiMocks.editImageLayerContent.mockResolvedValue({
+      error: null, id: "task-edit", output_asset_ids: [], status: "succeeded"
+    });
+    apiMocks.getImageLayerSet.mockResolvedValue({
+      ...layerSet,
+      revision: 5,
+      layers: [{ ...layers[0], asset_id: "replacement-1" }, layers[1]]
+    });
+    renderEditor();
+
+    fireEvent.change(screen.getByLabelText("图层缩放数值"), {
+      target: { value: "1.5" }
+    });
+    const contentInput = screen.getByLabelText("编辑图层内容");
+    expect(contentInput).not.toBeDisabled();
+    fireEvent.change(contentInput, {
+      target: { value: "改为深蓝色磨砂材质" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "生成替换图层" }));
+
+    await waitFor(() =>
+      expect(apiMocks.updateImageLayerSet).toHaveBeenCalledWith(
+        "project-1",
+        "set-1",
+        expect.objectContaining({ expected_revision: 3 })
+      )
+    );
+    await waitFor(() =>
+      expect(apiMocks.editImageLayerContent).toHaveBeenCalledWith(
+        "project-1", "set-1", {
+          expected_revision: 4, format: "png", layer_id: "layer-2",
+          prompt: "改为深蓝色磨砂材质", size: "2K"
+        }
+      )
+    );
+    expect(await screen.findByText("图层内容已替换。")).toBeInTheDocument();
   });
 
   it("仅导出已保存 revision，并在成功后显示成品", async () => {

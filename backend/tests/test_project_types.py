@@ -54,37 +54,42 @@ def test_image_project_create_accepts_complete_brief_and_normalizes_duration() -
     assert project.brief.target_platform == "legacy_custom_marketplace"
 
 
-@pytest.mark.parametrize(
-    "missing_field",
-    [
-        "prompt",
-        "product_name",
-        "audience",
-        "selling_points",
-        "target_platform",
-        "aspect_ratio",
-        "target_language",
-        "image_purpose",
-    ],
-)
-def test_image_project_create_requires_complete_brief(missing_field: str) -> None:
-    payload = _image_project_payload()
-    brief = payload["brief"]
-    assert isinstance(brief, dict)
-    brief.pop(missing_field)
+def test_image_project_create_requires_only_a_name() -> None:
+    project = ProjectCreate.model_validate(
+        {"name": "Untitled Image", "project_type": "image_asset"}
+    )
 
-    with pytest.raises(ValidationError) as exc_info:
-        ProjectCreate.model_validate(payload)
+    assert project.name == "Untitled Image"
+    assert project.project_type == ProjectType.IMAGE_ASSET
+    assert project.brief.prompt == ""
+    assert project.brief.duration_seconds is None
+    assert project.brief.product_name is None
+    assert project.brief.audience is None
+    assert project.brief.selling_points == []
+    assert project.brief.image_purpose is None
 
-    assert missing_field in str(exc_info.value)
+
+@pytest.mark.parametrize("client_fixture", ["client", "mysql_client"])
+def test_image_project_api_create_requires_only_a_name(
+    client_fixture: str,
+    request: pytest.FixtureRequest,
+) -> None:
+    client: TestClient = request.getfixturevalue(client_fixture)
+
+    response = client.post(
+        "/api/projects",
+        json={"name": "Untitled Image", "project_type": "image_asset"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "Untitled Image"
+    assert response.json()["brief"]["prompt"] == ""
+    assert response.json()["brief"]["duration_seconds"] is None
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        _image_project_payload(duration_seconds=30),
-        _image_project_payload(selling_points=[]),
-        _image_project_payload(selling_points=[""]),
         {
             "project_type": "video_ad",
             "brief": {
@@ -305,6 +310,7 @@ def test_project_type_migration_backfills_legacy_rows_and_is_idempotent(
     assert project_columns["image_prompt_status"]["nullable"] is False
     assert project_columns["current_image_asset_id"]["nullable"] is True
     assert project_columns["image_revision"]["nullable"] is False
+    assert project_columns["image_reference_asset_ids"]["nullable"] is False
     assert brief_columns["duration_seconds"]["nullable"] is True
     assert brief_columns["image_purpose"]["nullable"] is True
     assert "ix_projects_legacy_name" in {

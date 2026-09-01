@@ -5,9 +5,11 @@ import hashlib
 import json
 import logging
 import mimetypes
+import os
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
-from urllib.parse import urlsplit, urlunsplit
+from pathlib import Path
+from urllib.parse import quote, urlsplit, urlunsplit
 from uuid import uuid4
 
 import httpx
@@ -21,11 +23,14 @@ from backend.app.api.dependencies import (
     get_asr_subtitle_client,
     get_asset_storage_service,
     get_composer_service,
+    get_face_blur_video_client_factory,
     get_modelark_generation_service,
     get_repository,
+    get_video_normalizer_service,
     get_workflow_service,
 )
 from backend.app.repositories import (
+    AssetReferenceConflictError,
     NotFoundError,
     Repository,
     RevisionConflictError,
@@ -41,17 +46,25 @@ from backend.app.schemas import (
     CharacterCard,
     CharacterCardImageGenerationResponse,
     CharacterCardUpdate,
+    CanvasLayout,
+    CanvasLayoutUpdate,
     ErrorCode,
+    FaceBlurVideoRequest,
     GenerationTask,
     GenerationTaskCreate,
     FrozenImageGenerationInput,
+    FrozenImageReference,
+    FrozenImageReferenceRegion,
     FrozenImageLayerCompositionInput,
+    FrozenImageLayerContentEditInput,
     FrozenImageLayerDecompositionInput,
     ImageGenerationOperation,
+    ImageReferenceSelectionUpdate,
     ImagePromptSuggestion,
     ImagePromptSuggestionRequest,
     ImageLayerDecompositionRequest,
     ImageLayerCompositionRequest,
+    ImageLayerContentEditRequest,
     ImageLayerSet,
     ImageLayerSetDetail,
     ImageLayerSetUpdate,
@@ -86,6 +99,15 @@ from backend.app.schemas import (
     TextToImageGenerationRequest,
     TextGenerationInputRequest,
     ReferenceAssetKind,
+    ToolAssetRole,
+    ToolTask,
+    ToolTaskCreate,
+    ToolTaskError,
+    ToolTaskInputAsset,
+    ToolTaskType,
+    ToolVideoGenerationRequest,
+    ToolVideoPromptOptimizeRequest,
+    ToolVideoPromptOptimizeResponse,
     validate_visible_selling_copy,
 )
 from backend.app.services.assets import AssetStorageService, StoredAssetInput
@@ -104,7 +126,15 @@ from backend.app.services.modelark import (
     ModelArkProviderError,
     ModelArkTextParseError,
     SEEDREAM_5_PRO_MODEL,
+    ToolVideoGenerationRequest as ModelArkToolVideoGenerationRequest,
 )
+from backend.app.services.mediakit_face_blur import (
+    FaceBlurTaskStatus,
+    FaceBlurVideoClient,
+    MediaKitFaceBlurError,
+)
+from backend.app.services.video_normalizer import VideoNormalizationError, VideoNormalizer
+from backend.app.schemas.common import utc_now
 from backend.app.services.image_layers import (
     ImageLayerCompositionService,
     inspect_layer_image_content,
@@ -442,6 +472,44 @@ async def upload_image_project_reference(
         ) from exc
 
 
+@router.put(
+    "/projects/{project_id}/image-reference-selection",
+    response_model=Project,
+    tags=["image-generation"],
+)
+def set_image_project_reference_selection(
+    project_id: str,
+    payload: ImageReferenceSelectionUpdate,
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+) -> Project:
+    try:
+        project = repository.get_project(project_id)
+        _require_image_project(project)
+        for asset_id in payload.asset_ids:
+            asset = repository.get_asset(asset_id)
+            _validate_image_generation_reference(asset, project_id=project_id)
+            if asset.type != AssetType.UPLOADED_IMAGE:
+                raise _http_error(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    ErrorCode.VALIDATION_ERROR,
+                    "project reference selection only accepts uploaded images",
+                )
+        updated = repository.set_image_reference_asset_ids(
+            project_id,
+            payload.asset_ids,
+        )
+        return asset_storage.with_project_access_urls(updated)
+    except WorkflowError as exc:
+        raise _workflow_http_error(exc) from exc
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            f"project or reference asset not found: {project_id}",
+        ) from exc
+
+
 @router.post(
     "/projects/{project_id}/image-generations",
     response_model=GenerationTask,
@@ -485,7 +553,8 @@ async def submit_image_generation(
                 ),
             ) from exc
         source_asset: Asset | None = None
-        reference_asset: Asset | None = None
+        reference_assets: list[Asset] = []
+        reference_regions: list[FrozenImageReferenceRegion] = []
         prompt = prompt_version.prompt
         annotation = None
         if isinstance(payload, ImageToImageGenerationRequest):
@@ -504,16 +573,48 @@ async def submit_image_generation(
                 )
             prompt = payload.prompt
             annotation = payload.annotation
-        elif payload.reference_asset_id is not None:
-            reference_asset = repository.get_asset(payload.reference_asset_id)
-            _validate_image_generation_reference(
-                reference_asset,
-                project_id=project_id,
-            )
+            if payload.edit_mode == "reference_replace":
+                assert payload.target_bbox is not None
+                for region in payload.reference_regions:
+                    if region.asset_id == source_asset.id:
+                        raise _http_error(
+                            status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            ErrorCode.VALIDATION_ERROR,
+                            "reference region must not use the target image",
+                        )
+                    reference_asset = repository.get_asset(region.asset_id)
+                    _validate_image_generation_reference(
+                        reference_asset,
+                        project_id=project_id,
+                    )
+                    reference_assets.append(reference_asset)
+                    reference_regions.append(
+                        FrozenImageReferenceRegion(
+                            asset_id=reference_asset.id,
+                            object_key=reference_asset.object_key or "",
+                            created_at=reference_asset.created_at.isoformat(),
+                            image_index=region.image_index,
+                            bbox=region.bbox,
+                        )
+                    )
+        else:
+            for asset_id in payload.reference_asset_ids:
+                reference_asset = repository.get_asset(asset_id)
+                _validate_image_generation_reference(
+                    reference_asset,
+                    project_id=project_id,
+                )
+                reference_assets.append(reference_asset)
 
         prompt_with_annotation = generation.build_image_edit_prompt(
             prompt,
             annotation=annotation,
+            target_bbox=(
+                payload.target_bbox
+                if isinstance(payload, ImageToImageGenerationRequest)
+                else None
+            ),
+            reference_regions=reference_regions,
             target_language=prompt_version.target_language,
         )
         final_prompt = generation.normalize_project_image_prompt(
@@ -530,17 +631,34 @@ async def submit_image_generation(
             source_asset_created_at=(
                 source_asset.created_at.isoformat() if source_asset else None
             ),
-            reference_asset_id=(
-                reference_asset.id if reference_asset else None
-            ),
+            reference_asset_id=reference_assets[0].id if reference_assets else None,
             reference_object_key=(
-                reference_asset.object_key if reference_asset else None
+                reference_assets[0].object_key if reference_assets else None
             ),
             reference_asset_created_at=(
-                reference_asset.created_at.isoformat()
-                if reference_asset
+                reference_assets[0].created_at.isoformat()
+                if reference_assets
                 else None
             ),
+            reference_assets=[
+                {
+                    "asset_id": asset.id,
+                    "object_key": asset.object_key,
+                    "created_at": asset.created_at.isoformat(),
+                }
+                for asset in reference_assets
+            ],
+            edit_mode=(
+                payload.edit_mode
+                if isinstance(payload, ImageToImageGenerationRequest)
+                else "single_region"
+            ),
+            target_bbox=(
+                payload.target_bbox
+                if isinstance(payload, ImageToImageGenerationRequest)
+                else None
+            ),
+            reference_regions=reference_regions,
             prompt_version_id=prompt_version.id,
             prompt_version=prompt_version.version,
             prompt=prompt,
@@ -649,14 +767,14 @@ async def submit_image_layer_decomposition(
         if (
             source.project_id != project_id
             or source.asset_role != AssetRole.PUBLIC
-            or source.type != AssetType.GENERATED_IMAGE
+            or source.type not in {AssetType.UPLOADED_IMAGE, AssetType.GENERATED_IMAGE}
             or source.status != Status.SUCCEEDED
             or not source.object_key
         ):
             raise _http_error(
                 status.HTTP_409_CONFLICT,
                 ErrorCode.INVALID_STATE,
-                "layer decomposition requires a succeeded public generated image",
+                "layer decomposition requires a succeeded public image",
             )
         final_prompt = generation.build_layer_decomposition_prompt(
             payload.prompt,
@@ -703,6 +821,53 @@ async def submit_image_layer_decomposition(
             ErrorCode.NOT_FOUND,
             "image project or source asset not found",
         ) from exc
+
+
+@router.post(
+    "/projects/{project_id}/image-layer-sets/{set_id}/content-edits",
+    response_model=GenerationTask,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["image-layers"],
+)
+async def submit_image_layer_content_edit(
+    project_id: str,
+    set_id: str,
+    payload: ImageLayerContentEditRequest,
+    repository: Repository = Depends(get_repository),
+    generation: ModelArkGenerationService = Depends(get_modelark_generation_service),
+    workflow: WorkflowService = Depends(get_workflow_service),
+    background_runner: BackgroundTaskRunner = Depends(get_background_task_runner),
+) -> GenerationTask:
+    try:
+        _require_image_project(repository.get_project(project_id))
+        layer_set = repository.get_image_layer_set(project_id, set_id)
+        layer = next((item for item in layer_set.layers if item.id == payload.layer_id), None)
+        if layer is None or layer_set.revision != payload.expected_revision:
+            raise _http_error(status.HTTP_409_CONFLICT, ErrorCode.TASK_CONFLICT, "image layer set revision conflict")
+        source = repository.get_asset(layer.asset_id)
+        if source.asset_role != AssetRole.INTERNAL_LAYER or not source.object_key:
+            raise _http_error(status.HTTP_409_CONFLICT, ErrorCode.INVALID_STATE, "image layer is not editable")
+        frozen = FrozenImageLayerContentEditInput(
+            project_id=project_id, layer_set_id=set_id, layer_id=layer.id,
+            expected_revision=layer_set.revision, source_asset_id=source.id,
+            source_object_key=source.object_key, source_asset_created_at=source.created_at.isoformat(),
+            prompt=payload.prompt, size=payload.size, format=payload.format,
+            model=SEEDREAM_5_PRO_MODEL,
+        )
+        task, created = repository.create_task_if_no_active_hash(
+            GenerationTaskCreate(project_id=project_id, stage=Stage.IMAGE,
+                input_hash=_frozen_input_hash(frozen.model_dump(mode="json")),
+                frozen_input=frozen.model_dump(mode="json"))
+        )
+        if created:
+            background_runner.schedule(_run_image_layer_content_edit_task(
+                task_id=task.id, frozen=frozen, repository=repository,
+                workflow=workflow, generation=generation))
+        return task
+    except HTTPException:
+        raise
+    except NotFoundError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, ErrorCode.NOT_FOUND, "image layer set not found") from exc
 
 
 @router.get(
@@ -796,6 +961,59 @@ def update_image_layer_set(
             status.HTTP_404_NOT_FOUND,
             ErrorCode.NOT_FOUND,
             "image layer set not found",
+        ) from exc
+
+
+@router.get(
+    "/projects/{project_id}/canvas-layout",
+    response_model=CanvasLayout,
+    tags=["image-canvas"],
+)
+def get_canvas_layout(
+    project_id: str,
+    repository: Repository = Depends(get_repository),
+) -> CanvasLayout:
+    try:
+        project = repository.get_project(project_id)
+        _require_image_project(project)
+        return repository.get_canvas_layout(project_id)
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "image project not found",
+        ) from exc
+
+
+@router.put(
+    "/projects/{project_id}/canvas-layout",
+    response_model=CanvasLayout,
+    tags=["image-canvas"],
+)
+def save_canvas_layout(
+    project_id: str,
+    payload: CanvasLayoutUpdate,
+    repository: Repository = Depends(get_repository),
+) -> CanvasLayout:
+    try:
+        project = repository.get_project(project_id)
+        _require_image_project(project)
+        return repository.save_canvas_layout(
+            project_id,
+            expected_revision=payload.expected_revision,
+            nodes=payload.nodes,
+        )
+    except RevisionConflictError as exc:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.TASK_CONFLICT,
+            "canvas layout revision conflict",
+        ) from exc
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "image project not found",
         ) from exc
 
 
@@ -1004,6 +1222,8 @@ def list_assets(
 async def get_asset_content(
     asset_id: str,
     request: Request,
+    download: bool = False,
+    filename: str | None = Query(default=None, max_length=180),
     repository: Repository = Depends(get_repository),
     asset_storage: AssetStorageService = Depends(get_asset_storage_service),
 ):
@@ -1030,7 +1250,7 @@ async def get_asset_content(
             "asset content is not available",
         )
 
-    if asset_storage.client is None:
+    if asset_storage.client is None and not download:
         return RedirectResponse(access_url)
 
     content_type = asset.mime_type or mimetypes.guess_type(asset.object_key or "")[0]
@@ -1056,6 +1276,11 @@ async def get_asset_content(
     headers = {"Cache-Control": "private, max-age=300"}
     if content_type:
         headers["Content-Type"] = content_type
+    if download:
+        download_filename = _asset_download_filename(asset, preferred=filename)
+        headers["Content-Disposition"] = _asset_content_disposition(
+            download_filename
+        )
     for header in (
         "Accept-Ranges",
         "Content-Length",
@@ -1078,6 +1303,723 @@ async def get_asset_content(
         stream_content(),
         status_code=upstream.status_code,
         headers=headers,
+    )
+
+
+@router.post(
+    "/tools/tasks",
+    response_model=ToolTask,
+    status_code=status.HTTP_201_CREATED,
+    tags=["tools"],
+)
+def create_tool_task(
+    payload: ToolTaskCreate,
+    repository: Repository = Depends(get_repository),
+) -> ToolTask:
+    try:
+        return repository.create_tool_task(payload)
+    except ValueError as exc:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.TASK_CONFLICT,
+            "tool task could not be created",
+        ) from exc
+
+
+@router.get("/tools/tasks", response_model=list[ToolTask], tags=["tools"])
+def list_tool_tasks(
+    task_type: ToolTaskType | None = Query(default=None, alias="type"),
+    repository: Repository = Depends(get_repository),
+) -> list[ToolTask]:
+    return repository.list_tool_tasks(task_type=task_type)
+
+
+@router.delete(
+    "/tools/tasks/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["tools"],
+)
+def delete_tool_task(
+    task_id: str,
+    repository: Repository = Depends(get_repository),
+) -> None:
+    try:
+        repository.delete_tool_task(task_id)
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "tool task not found",
+        ) from exc
+
+
+@router.get("/tools/tasks/{task_id}", response_model=ToolTask, tags=["tools"])
+async def get_tool_task(
+    task_id: str,
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+    face_blur_client_factory: Callable[[], FaceBlurVideoClient] = Depends(
+        get_face_blur_video_client_factory
+    ),
+) -> ToolTask:
+    try:
+        task = repository.get_tool_task(task_id)
+        if (
+            task.type == ToolTaskType.FACE_BLUR_VIDEO
+            and task.status in {Status.QUEUED, Status.RUNNING}
+        ):
+            return await _refresh_face_blur_tool_task(
+                task,
+                repository=repository,
+                asset_storage=asset_storage,
+                face_blur_client_factory=face_blur_client_factory,
+            )
+        return task
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "tool task not found",
+        ) from exc
+
+
+@router.post(
+    "/tools/face-blur-video",
+    response_model=ToolTask,
+    status_code=status.HTTP_201_CREATED,
+    tags=["tools"],
+)
+async def submit_face_blur_video(
+    payload: FaceBlurVideoRequest,
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+    face_blur_client_factory: Callable[[], FaceBlurVideoClient] = Depends(
+        get_face_blur_video_client_factory
+    ),
+) -> ToolTask:
+    try:
+        input_asset = repository.get_asset(payload.video_asset_id)
+        _validate_tool_asset_reference(input_asset, ReferenceAssetKind.VIDEO)
+        video_url = asset_storage.signed_access_url(input_asset)
+        if not video_url:
+            raise WorkflowError(ErrorCode.INVALID_STATE, "tool video is not accessible")
+        task_data = ToolTaskCreate(
+            type=ToolTaskType.FACE_BLUR_VIDEO,
+            input_snapshot={
+                "video_asset_id": input_asset.id,
+                "mask_mode": payload.mask_mode,
+                "mask_strength": payload.mask_strength,
+            },
+        )
+        task = repository.create_tool_task_with_input_assets(
+            task_data,
+            [
+                ToolTaskInputAsset(
+                    task_id=task_data.id,
+                    asset_id=input_asset.id,
+                    kind=ReferenceAssetKind.VIDEO,
+                )
+            ],
+        )
+        return await _submit_face_blur_tool_task(
+            task,
+            video_url=video_url,
+            repository=repository,
+            face_blur_client_factory=face_blur_client_factory,
+        )
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "tool video not found",
+        ) from exc
+    except WorkflowError as exc:
+        raise _workflow_http_error(exc) from exc
+
+
+@router.post(
+    "/tools/videos",
+    response_model=ToolTask,
+    status_code=status.HTTP_201_CREATED,
+    tags=["tools"],
+)
+async def generate_tool_video(
+    payload: ToolVideoGenerationRequest,
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+    generation: ModelArkGenerationService = Depends(get_modelark_generation_service),
+    background_runner: BackgroundTaskRunner = Depends(get_background_task_runner),
+) -> ToolTask:
+    try:
+        reference_urls = _tool_reference_urls(
+            payload, repository=repository, asset_storage=asset_storage
+        )
+        task_data = ToolTaskCreate(
+            type=ToolTaskType.MULTIMODAL_VIDEO_GENERATION,
+            input_snapshot=payload.model_dump(),
+        )
+        task = repository.create_tool_task_with_input_assets(
+            task_data,
+            _tool_task_inputs(task_data.id, payload),
+        )
+        background_runner.schedule(
+            _run_tool_video_generation(
+                task_id=task.id,
+                request=ModelArkToolVideoGenerationRequest(
+                    model=payload.model,
+                    prompt=payload.prompt,
+                    duration_seconds=payload.duration_seconds,
+                    resolution=payload.resolution,
+                    aspect_ratio=payload.aspect_ratio,
+                    **reference_urls,
+                ),
+                repository=repository,
+                asset_storage=asset_storage,
+                generation=generation,
+            )
+        )
+        return task
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND, ErrorCode.NOT_FOUND, "tool reference asset not found"
+        ) from exc
+    except WorkflowError as exc:
+        raise _workflow_http_error(exc) from exc
+
+
+@router.post(
+    "/tools/videos/optimize-prompt",
+    response_model=ToolVideoPromptOptimizeResponse,
+    tags=["tools"],
+)
+async def optimize_tool_video_prompt(
+    payload: ToolVideoPromptOptimizeRequest,
+    generation: ModelArkGenerationService = Depends(get_modelark_generation_service),
+) -> ToolVideoPromptOptimizeResponse:
+    try:
+        optimized_prompt = await generation.optimize_tool_video_prompt(
+            prompt=payload.prompt,
+            reference_image_count=payload.reference_image_count,
+            reference_video_count=payload.reference_video_count,
+            reference_audio_count=payload.reference_audio_count,
+        )
+        return ToolVideoPromptOptimizeResponse(optimized_prompt=optimized_prompt)
+    except (ModelArkProviderError, ModelArkTextParseError) as exc:
+        logger.warning(
+            "tool video prompt optimization provider failure",
+            extra=exc.safe_log_fields(),
+        )
+        raise _http_error(
+            status.HTTP_502_BAD_GATEWAY,
+            ErrorCode.EXTERNAL_SERVICE_ERROR,
+            "tool video prompt optimization failed",
+            exc.safe_detail(),
+        ) from exc
+
+
+@router.post(
+    "/tools/tasks/{task_id}/retry",
+    response_model=ToolTask,
+    tags=["tools"],
+)
+async def retry_tool_task(
+    task_id: str,
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+    generation: ModelArkGenerationService = Depends(get_modelark_generation_service),
+    background_runner: BackgroundTaskRunner = Depends(get_background_task_runner),
+    face_blur_client_factory: Callable[[], FaceBlurVideoClient] = Depends(
+        get_face_blur_video_client_factory
+    ),
+) -> ToolTask:
+    try:
+        failed = repository.get_tool_task(task_id)
+        if failed.status != Status.FAILED:
+            raise WorkflowError(ErrorCode.INVALID_STATE, "tool task is not retryable")
+        video_payload = (
+            ToolVideoGenerationRequest.model_validate(failed.input_snapshot)
+            if failed.type == ToolTaskType.MULTIMODAL_VIDEO_GENERATION
+            else None
+        )
+        video_url: str | None = None
+        reference_urls: dict[str, list[str]] | None = None
+        if failed.type == ToolTaskType.FACE_BLUR_VIDEO:
+            input_asset = repository.get_asset(
+                str(failed.input_snapshot["video_asset_id"])
+            )
+            _validate_tool_asset_reference(input_asset, ReferenceAssetKind.VIDEO)
+            video_url = asset_storage.signed_access_url(input_asset)
+            if not video_url:
+                raise WorkflowError(ErrorCode.INVALID_STATE, "tool video is not accessible")
+        else:
+            assert video_payload is not None
+            reference_urls = _tool_reference_urls(
+                video_payload,
+                repository=repository,
+                asset_storage=asset_storage,
+            )
+        retry_data = ToolTaskCreate(
+            type=failed.type,
+            input_snapshot=failed.input_snapshot,
+            retry_of_task_id=failed.id,
+        )
+        retry = repository.create_tool_task_with_input_assets(
+            retry_data,
+            [
+                ToolTaskInputAsset(
+                    task_id=retry_data.id,
+                    asset_id=item.asset_id,
+                    kind=item.kind,
+                )
+                for item in failed.input_assets
+            ],
+        )
+        if retry.type == ToolTaskType.FACE_BLUR_VIDEO:
+            assert video_url is not None
+            return await _submit_face_blur_tool_task(
+                retry,
+                video_url=video_url,
+                repository=repository,
+                face_blur_client_factory=face_blur_client_factory,
+            )
+
+        assert video_payload is not None
+        assert reference_urls is not None
+        background_runner.schedule(
+            _run_tool_video_generation(
+                task_id=retry.id,
+                request=ModelArkToolVideoGenerationRequest(
+                    model=video_payload.model,
+                    prompt=video_payload.prompt,
+                    duration_seconds=video_payload.duration_seconds,
+                    resolution=video_payload.resolution,
+                    aspect_ratio=video_payload.aspect_ratio,
+                    **reference_urls,
+                ),
+                repository=repository,
+                asset_storage=asset_storage,
+                generation=generation,
+            )
+        )
+        return retry
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND, ErrorCode.NOT_FOUND, "tool task or asset not found"
+        ) from exc
+    except (KeyError, ValidationError) as exc:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.INVALID_STATE,
+            "tool task has no valid retry input",
+        ) from exc
+    except WorkflowError as exc:
+        raise _workflow_http_error(exc) from exc
+
+
+@router.post(
+    "/tools/assets/upload",
+    response_model=Asset,
+    status_code=status.HTTP_201_CREATED,
+    tags=["tools"],
+)
+async def upload_tool_asset(
+    kind: ReferenceAssetKind,
+    filename: str | None = Query(default=None),
+    mime_type: str | None = Query(default=None),
+    content: bytes = Body(..., media_type="application/octet-stream"),
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+    video_normalizer: VideoNormalizer = Depends(get_video_normalizer_service),
+) -> Asset:
+    try:
+        normalized_mime_type = _validate_uploaded_reference(
+            kind,
+            filename=filename,
+            mime_type=mime_type,
+            content_size=len(content),
+        )
+        metadata = {
+            "tool_asset_kind": kind.value,
+            "name": filename or f"tool-{kind.value}",
+        }
+        stored_filename = filename
+        if kind == ReferenceAssetKind.VIDEO:
+            normalized_video = await video_normalizer.normalize_if_needed(content)
+            content = normalized_video.content
+            normalized_mime_type = "video/mp4"
+            stored_filename = _normalized_video_filename(filename)
+            metadata["name"] = stored_filename
+            metadata["original_filename"] = filename or f"tool-{kind.value}"
+            metadata["source_container"] = normalized_video.source_format
+            metadata["video_normalized"] = normalized_video.normalized
+        asset = asset_storage.upload_asset(
+            repository,
+            StoredAssetInput(
+                type=_uploaded_asset_type(kind),
+                tool_asset_role=ToolAssetRole.INPUT,
+                status=Status.SUCCEEDED,
+                mime_type=normalized_mime_type,
+                filename=stored_filename,
+                metadata=metadata,
+            ),
+            content=content,
+        )
+        return asset_storage.with_access_url(asset)
+    except VideoNormalizationError as exc:
+        raise _http_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.VALIDATION_ERROR,
+            "uploaded video could not be normalized to MP4",
+        ) from exc
+    except WorkflowError as exc:
+        raise _workflow_http_error(exc) from exc
+    except (ConfigurationError, ValueError) as exc:
+        raise _http_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.VALIDATION_ERROR,
+            "tool asset upload is invalid",
+        ) from exc
+    except Exception as exc:
+        raise _http_error(
+            status.HTTP_502_BAD_GATEWAY,
+            ErrorCode.EXTERNAL_SERVICE_ERROR,
+            "tool asset upload failed",
+        ) from exc
+
+
+@router.get("/tools/assets", response_model=list[Asset], tags=["tools"])
+def list_tool_assets(
+    kind: ReferenceAssetKind | None = None,
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+) -> list[Asset]:
+    assets: list[Asset] = []
+    for asset in repository.list_assets(status=Status.SUCCEEDED):
+        if asset.project_id is not None or asset.tool_asset_role is None:
+            continue
+        if asset.asset_role != AssetRole.PUBLIC:
+            continue
+        if kind is None and not any(
+            _tool_asset_matches_kind(asset, candidate)
+            for candidate in ReferenceAssetKind
+        ):
+            continue
+        if kind is not None and not _tool_asset_matches_kind(asset, kind):
+            continue
+        if asset_storage.signed_access_url(asset) is None:
+            continue
+        assets.append(asset_storage.with_access_url(asset))
+    return assets
+
+
+@router.delete("/tools/assets/{asset_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["tools"])
+def delete_tool_asset(
+    asset_id: str,
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+) -> None:
+    try:
+        asset = repository.get_asset(asset_id)
+        deleted = repository.delete_tool_asset(asset_id)
+        asset_storage.delete_asset_objects(asset)
+        assert deleted.id == asset.id
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "tool asset not found",
+        ) from exc
+    except AssetReferenceConflictError as exc:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.INVALID_STATE,
+            str(exc),
+        ) from exc
+
+
+def _tool_reference_urls(
+    payload: ToolVideoGenerationRequest,
+    *,
+    repository: Repository,
+    asset_storage: AssetStorageService,
+) -> dict[str, list[str]]:
+    references = (
+        ("reference_image_asset_ids", payload.reference_image_asset_ids, ReferenceAssetKind.IMAGE),
+        ("reference_video_asset_ids", payload.reference_video_asset_ids, ReferenceAssetKind.VIDEO),
+        ("reference_audio_asset_ids", payload.reference_audio_asset_ids, ReferenceAssetKind.AUDIO),
+    )
+    urls: dict[str, list[str]] = {}
+    for field, asset_ids, kind in references:
+        resolved: list[str] = []
+        for asset_id in asset_ids:
+            asset = repository.get_asset(asset_id)
+            _validate_tool_reference_asset(asset, kind)
+            access_url = asset_storage.signed_access_url(asset)
+            if not access_url:
+                raise WorkflowError(ErrorCode.INVALID_STATE, "tool reference is not accessible")
+            resolved.append(access_url)
+        urls[field.replace("_asset_ids", "_urls")] = resolved
+    return urls
+
+
+def _tool_task_inputs(
+    task_id: str,
+    payload: ToolVideoGenerationRequest,
+) -> list[ToolTaskInputAsset]:
+    inputs: list[ToolTaskInputAsset] = []
+    for asset_ids, kind in (
+        (payload.reference_image_asset_ids, ReferenceAssetKind.IMAGE),
+        (payload.reference_video_asset_ids, ReferenceAssetKind.VIDEO),
+        (payload.reference_audio_asset_ids, ReferenceAssetKind.AUDIO),
+    ):
+        inputs.extend(
+            ToolTaskInputAsset(task_id=task_id, asset_id=asset_id, kind=kind)
+            for asset_id in asset_ids
+        )
+    return inputs
+
+
+async def _submit_face_blur_tool_task(
+    task: ToolTask,
+    *,
+    video_url: str,
+    repository: Repository,
+    face_blur_client_factory: Callable[[], FaceBlurVideoClient],
+) -> ToolTask:
+    try:
+        submitted = await face_blur_client_factory().submit(
+            video_url=video_url,
+            mask_mode=str(task.input_snapshot["mask_mode"]),
+            mask_strength=str(task.input_snapshot["mask_strength"]),
+        )
+        return repository.update_tool_task(
+            task.id,
+            status=Status.QUEUED,
+            provider_task_id=submitted.task_id,
+            started_at=utc_now(),
+            error=None,
+        )
+    except MediaKitFaceBlurError as exc:
+        return _fail_tool_task(
+            task,
+            repository=repository,
+            message="人物打码提交失败",
+            stage="submit",
+            provider_task_id=task.provider_task_id,
+            safe_detail=exc.detail,
+        )
+    except Exception as exc:
+        logger.warning("face blur submission failed", extra={"task_id": task.id, "error_type": type(exc).__name__})
+        return _fail_tool_task(
+            task,
+            repository=repository,
+            message="人物打码提交失败",
+            stage="submit",
+        )
+
+
+async def _refresh_face_blur_tool_task(
+    task: ToolTask,
+    *,
+    repository: Repository,
+    asset_storage: AssetStorageService,
+    face_blur_client_factory: Callable[[], FaceBlurVideoClient],
+) -> ToolTask:
+    if not task.provider_task_id:
+        return _fail_tool_task(
+            task,
+            repository=repository,
+            message="人物打码任务缺少供应商标识",
+            stage="query",
+        )
+    try:
+        remote = await face_blur_client_factory().get_task(task_id=task.provider_task_id)
+        if remote.status == FaceBlurTaskStatus.QUEUED:
+            return repository.update_tool_task(task.id, status=Status.QUEUED)
+        if remote.status == FaceBlurTaskStatus.RUNNING:
+            return repository.update_tool_task(task.id, status=Status.RUNNING)
+        assert remote.output_video_url is not None
+        assets = await asset_storage.upload_assets_from_sources(
+            repository,
+            [
+                StoredAssetInput(
+                    tool_task_id=task.id,
+                    tool_asset_role=ToolAssetRole.OUTPUT,
+                    type=AssetType.FINAL_VIDEO,
+                    stage=Stage.VIDEO,
+                    status=Status.SUCCEEDED,
+                    source_url=remote.output_video_url,
+                    mime_type="video/mp4",
+                    filename="face-blur-video.mp4",
+                    metadata={
+                        "provider": "mediakit",
+                        "operation": "face_blur_video",
+                        "provider_task_id": remote.task_id,
+                        "mask_mode": task.input_snapshot.get("mask_mode"),
+                        "mask_strength": task.input_snapshot.get("mask_strength"),
+                        "duration_seconds": remote.duration_seconds,
+                    },
+                )
+            ],
+        )
+        assert assets
+        return repository.update_tool_task(
+            task.id,
+            status=Status.SUCCEEDED,
+            finished_at=utc_now(),
+            error=None,
+        )
+    except MediaKitFaceBlurError as exc:
+        return _fail_tool_task(
+            task,
+            repository=repository,
+            message="人物打码处理失败",
+            stage="query",
+            provider_task_id=task.provider_task_id,
+            safe_detail=exc.detail,
+        )
+    except Exception as exc:
+        logger.warning("face blur task refresh failed", extra={"task_id": task.id, "error_type": type(exc).__name__})
+        return _fail_tool_task(
+            task,
+            repository=repository,
+            message="人物打码结果转存失败",
+            stage="transfer",
+            provider_task_id=task.provider_task_id,
+        )
+
+
+async def _run_tool_video_generation(
+    *,
+    task_id: str,
+    request: ModelArkToolVideoGenerationRequest,
+    repository: Repository,
+    asset_storage: AssetStorageService,
+    generation: ModelArkGenerationService,
+) -> None:
+    task = repository.get_tool_task(task_id)
+    try:
+        repository.update_tool_task(task_id, status=Status.RUNNING, started_at=utc_now())
+        generated = await generation.generate_tool_video(request)
+        provider_task_id = generated.metadata.get("provider_task_id")
+        assets = await asset_storage.upload_assets_from_sources(
+            repository,
+            [
+                StoredAssetInput(
+                    tool_task_id=task_id,
+                    tool_asset_role=ToolAssetRole.OUTPUT,
+                    type=AssetType.FINAL_VIDEO,
+                    stage=Stage.VIDEO,
+                    status=Status.SUCCEEDED,
+                    source_url=generated.url,
+                    mime_type=generated.mime_type,
+                    filename="generated-tool-video.mp4",
+                    metadata=generated.metadata,
+                )
+            ],
+        )
+        assert assets
+        repository.update_tool_task(
+            task_id,
+            status=Status.SUCCEEDED,
+            provider_task_id=provider_task_id if isinstance(provider_task_id, str) else None,
+            finished_at=utc_now(),
+            error=None,
+        )
+    except ModelArkProviderError as exc:
+        _fail_tool_task(
+            task,
+            repository=repository,
+            message="视频生成失败",
+            stage=exc.phase or "generate",
+            provider_task_id=exc.provider_task_id,
+            provider_request_id=exc.request_id,
+            provider_code=exc.provider_code,
+        )
+    except Exception as exc:
+        logger.warning("tool video generation failed", extra={"task_id": task_id, "error_type": type(exc).__name__})
+        _fail_tool_task(
+            task,
+            repository=repository,
+            message="视频生成或结果转存失败",
+            stage="transfer",
+        )
+
+
+def _fail_tool_task(
+    task: ToolTask,
+    *,
+    repository: Repository,
+    message: str,
+    stage: str,
+    provider_task_id: str | None = None,
+    provider_request_id: str | None = None,
+    provider_code: str | None = None,
+    safe_detail: str | None = None,
+) -> ToolTask:
+    code = (
+        ErrorCode.EXTERNAL_SERVICE_ERROR
+        if provider_code or safe_detail is not None
+        else ErrorCode.GENERATION_FAILED
+    )
+    return repository.update_tool_task(
+        task.id,
+        status=Status.FAILED,
+        finished_at=utc_now(),
+        error=ToolTaskError(
+            code=code,
+            message=message,
+            provider_request_id=provider_request_id,
+            provider_task_id=provider_task_id,
+            stage=stage,
+        ),
+    )
+
+
+def _asset_download_filename(asset: Asset, *, preferred: str | None = None) -> str:
+    metadata_name = asset.metadata.get("name")
+    if preferred and preferred.strip():
+        candidate = preferred.strip()
+        preserve_unicode = True
+    elif isinstance(metadata_name, str) and metadata_name.strip():
+        candidate = metadata_name.strip()
+        preserve_unicode = False
+    elif asset.object_key:
+        candidate = os.path.basename(urlsplit(asset.object_key).path)
+        preserve_unicode = False
+    else:
+        candidate = asset.id
+        preserve_unicode = False
+
+    candidate = re.sub(r"[\x00-\x1f<>:\"/\\|?*]+", "-", candidate).strip(
+        ". -_"
+    )
+    if not preserve_unicode:
+        candidate = re.sub(r"[^A-Za-z0-9._-]+", "-", candidate).strip(". -_")
+    if not candidate:
+        candidate = asset.id
+    candidate = candidate[:180]
+
+    stem, extension = os.path.splitext(candidate)
+    if not extension:
+        guessed = mimetypes.guess_extension(asset.mime_type or "") or ""
+        candidate = f"{candidate}{guessed}"
+    elif not stem:
+        candidate = f"{asset.id}{extension}"
+    return candidate
+
+
+def _asset_content_disposition(filename: str) -> str:
+    ascii_name = re.sub(r"[^A-Za-z0-9._-]+", "-", filename).strip(". -_")
+    _, extension = os.path.splitext(filename)
+    if not ascii_name or not os.path.splitext(ascii_name)[0]:
+        ascii_name = f"download{extension}"
+    if ascii_name == filename:
+        return f'attachment; filename="{ascii_name}"'
+    encoded = quote(filename, safe="")
+    return (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{encoded}"
     )
 
 
@@ -4248,6 +5190,7 @@ def _validate_uploaded_reference(
         return normalized
     if kind == ReferenceAssetKind.VIDEO and normalized in {
         "video/mp4",
+        "video/mpeg",
         "video/quicktime",
         "video/webm",
     }:
@@ -4265,6 +5208,13 @@ def _validate_uploaded_reference(
         ErrorCode.VALIDATION_ERROR,
         f"reference file MIME type is not valid for {kind.value}",
     )
+
+
+def _normalized_video_filename(filename: str | None) -> str:
+    if not filename:
+        return "tool-video.mp4"
+    stem = Path(filename).stem.strip()
+    return f"{stem or 'tool-video'}.mp4"
 
 
 def _validate_uploaded_image_reference(
@@ -4340,6 +5290,50 @@ def _uploaded_asset_type(kind: ReferenceAssetKind) -> AssetType:
         ReferenceAssetKind.VIDEO: AssetType.UPLOADED_VIDEO,
         ReferenceAssetKind.AUDIO: AssetType.UPLOADED_AUDIO,
     }[kind]
+
+
+def _tool_asset_matches_kind(asset: Asset, kind: ReferenceAssetKind) -> bool:
+    type_matches = {
+        ReferenceAssetKind.IMAGE: asset.type
+        in {AssetType.UPLOADED_IMAGE, AssetType.GENERATED_IMAGE},
+        ReferenceAssetKind.VIDEO: asset.type
+        in {
+            AssetType.UPLOADED_VIDEO,
+            AssetType.STORYBOARD_VIDEO,
+            AssetType.FINAL_VIDEO,
+        },
+        ReferenceAssetKind.AUDIO: asset.type == AssetType.UPLOADED_AUDIO,
+    }[kind]
+    mime_type = (asset.mime_type or "").lower()
+    return type_matches and mime_type.startswith(f"{kind.value}/")
+
+
+def _validate_tool_asset_reference(
+    asset: Asset,
+    kind: ReferenceAssetKind,
+) -> None:
+    if asset.tool_asset_role is None:
+        raise WorkflowError(ErrorCode.NOT_FOUND, "tool asset not found")
+    if asset.asset_role != AssetRole.PUBLIC or asset.status != Status.SUCCEEDED:
+        raise WorkflowError(ErrorCode.INVALID_STATE, "tool asset is not available")
+    if not _tool_asset_matches_kind(asset, kind):
+        raise WorkflowError(
+            ErrorCode.VALIDATION_ERROR,
+            f"tool asset is not a valid {kind.value}",
+        )
+
+
+def _validate_tool_reference_asset(
+    asset: Asset,
+    kind: ReferenceAssetKind,
+) -> None:
+    if asset.asset_role != AssetRole.PUBLIC or asset.status != Status.SUCCEEDED:
+        raise WorkflowError(ErrorCode.INVALID_STATE, "tool reference is not available")
+    if not _tool_asset_matches_kind(asset, kind):
+        raise WorkflowError(
+            ErrorCode.VALIDATION_ERROR,
+            f"tool reference is not a valid {kind.value}",
+        )
 
 
 def _validate_reference_asset(
@@ -4805,6 +5799,58 @@ async def _run_image_layer_composition_task(
         )
 
 
+async def _run_image_layer_content_edit_task(
+    *,
+    task_id: str,
+    frozen: FrozenImageLayerContentEditInput,
+    repository: Repository,
+    workflow: WorkflowService,
+    generation: ModelArkGenerationService,
+) -> None:
+    try:
+        workflow.start_task(task_id)
+        source = repository.get_asset(frozen.source_asset_id)
+        if (
+            source.object_key != frozen.source_object_key
+            or source.created_at.isoformat() != frozen.source_asset_created_at
+            or source.asset_role != AssetRole.INTERNAL_LAYER
+        ):
+            raise ValueError("frozen layer source snapshot no longer matches")
+        source_url = workflow.asset_storage.signed_access_url(source)
+        if not source_url:
+            raise ValueError("layer source image is not accessible")
+        generated = await generation.edit_layer_image(
+            project_id=frozen.project_id, source_image_url=source_url,
+            prompt=frozen.prompt, size=frozen.size, output_format=frozen.format)
+        assets = await workflow.asset_storage.upload_assets_from_sources(
+            repository,
+            [StoredAssetInput(
+                project_id=frozen.project_id, type=AssetType.GENERATED_IMAGE,
+                asset_role=AssetRole.INTERNAL_LAYER, stage=Stage.IMAGE,
+                status=Status.SUCCEEDED, source_url=generated.url,
+                mime_type=generated.mime_type, source_task_id=task_id,
+                validate_image_content=True,
+                metadata={**generated.metadata, "replaced_layer_asset_id": source.id,
+                    "layer_set_id": frozen.layer_set_id, "layer_id": frozen.layer_id,
+                    "final_prompt": frozen.prompt, "model": frozen.model})],
+        )
+        replacement = assets[0]
+        repository.replace_image_layer_asset(
+            frozen.project_id, frozen.layer_set_id,
+            expected_revision=frozen.expected_revision, layer_id=frozen.layer_id,
+            asset=replacement)
+        workflow.complete_task(task_id, output_asset_ids=[replacement.id])
+    except RevisionConflictError:
+        workflow.fail_task(task_id, code=ErrorCode.TASK_CONFLICT,
+                           message="image layer set revision conflict", detail=None)
+    except ModelArkProviderError as exc:
+        workflow.fail_task(task_id, code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+                           message="layer content edit failed", detail=exc.safe_detail())
+    except Exception as exc:
+        logger.warning("image layer content edit failed", extra={"task_id": task_id, "error_type": type(exc).__name__})
+        workflow.fail_task(task_id, message="layer content edit failed", detail=type(exc).__name__)
+
+
 async def _run_image_layer_decomposition_task(
     *,
     task_id: str,
@@ -4819,7 +5865,7 @@ async def _run_image_layer_decomposition_task(
         if (
             source.project_id != frozen.project_id
             or source.asset_role != AssetRole.PUBLIC
-            or source.type != AssetType.GENERATED_IMAGE
+            or source.type not in {AssetType.UPLOADED_IMAGE, AssetType.GENERATED_IMAGE}
             or source.status != Status.SUCCEEDED
             or source.object_key != frozen.source_object_key
             or source.created_at.isoformat() != frozen.source_asset_created_at
@@ -4917,7 +5963,7 @@ async def _run_image_generation_task(
     try:
         workflow.start_task(task_id)
         source_url: str | None = None
-        reference_url: str | None = None
+        reference_urls: list[str] = []
         if frozen.operation == ImageGenerationOperation.IMAGE_TO_IMAGE:
             if not frozen.source_asset_id:
                 raise ValueError("frozen source asset is missing")
@@ -4931,13 +5977,21 @@ async def _run_image_generation_task(
             source_url = workflow.asset_storage.signed_access_url(source)
             if not source_url:
                 raise ValueError("source image asset is not accessible")
-        elif frozen.reference_asset_id is not None:
-            reference = repository.get_asset(frozen.reference_asset_id)
+        reference_snapshots = list(frozen.reference_assets)
+        if not reference_snapshots and frozen.reference_asset_id is not None:
+            reference_snapshots = [
+                FrozenImageReference(
+                    asset_id=frozen.reference_asset_id,
+                    object_key=frozen.reference_object_key or "",
+                    created_at=frozen.reference_asset_created_at or "",
+                )
+            ]
+        for snapshot in reference_snapshots:
+            reference = repository.get_asset(snapshot.asset_id)
             if (
                 reference.project_id != frozen.project_id
-                or reference.object_key != frozen.reference_object_key
-                or reference.created_at.isoformat()
-                != frozen.reference_asset_created_at
+                or reference.object_key != snapshot.object_key
+                or reference.created_at.isoformat() != snapshot.created_at
             ):
                 raise ValueError(
                     "frozen reference asset snapshot no longer matches"
@@ -4945,11 +5999,12 @@ async def _run_image_generation_task(
             reference_url = workflow.asset_storage.signed_access_url(reference)
             if not reference_url:
                 raise ValueError("reference image asset is not accessible")
+            reference_urls.append(reference_url)
 
         generated = await generation.generate_project_image(
             frozen,
             source_image_url=source_url,
-            reference_image_url=reference_url,
+            reference_image_urls=reference_urls,
         )
         prompt_digest = hashlib.sha256(
             frozen.prompt.encode("utf-8")
@@ -4972,8 +6027,10 @@ async def _run_image_generation_task(
                         "operation": frozen.operation.value,
                         "source_asset_id": frozen.source_asset_id,
                         "generation_mode": (
-                            "reference_guided"
-                            if frozen.reference_asset_id
+                            "reference_replace"
+                            if frozen.edit_mode == "reference_replace"
+                            else "reference_guided"
+                            if reference_urls
                             else (
                                 "text_only"
                                 if frozen.operation
@@ -4982,9 +6039,26 @@ async def _run_image_generation_task(
                             )
                         ),
                         "reference_asset_id": frozen.reference_asset_id,
-                        "reference_image_count": (
-                            1 if frozen.reference_asset_id else 0
+                        "reference_asset_ids": [
+                            snapshot.asset_id
+                            for snapshot in frozen.reference_assets
+                        ]
+                        or (
+                            [frozen.reference_asset_id]
+                            if frozen.reference_asset_id is not None
+                            else []
                         ),
+                        "reference_image_count": len(reference_urls),
+                        "edit_mode": frozen.edit_mode,
+                        "target_bbox": (
+                            frozen.target_bbox.model_dump(mode="json")
+                            if frozen.target_bbox is not None
+                            else None
+                        ),
+                        "reference_regions": [
+                            region.model_dump(mode="json")
+                            for region in frozen.reference_regions
+                        ],
                         "prompt_version_id": frozen.prompt_version_id,
                         "prompt_version": frozen.prompt_version,
                         "prompt_summary": frozen.prompt[:240],
@@ -5004,7 +6078,15 @@ async def _run_image_generation_task(
                 )
             ],
         )
-        workflow.complete_task(task_id, output_asset_ids=[assets[0].id])
+        created = assets[0]
+        project = repository.get_project(frozen.project_id)
+        if project.current_image_asset_id is None:
+            repository.set_current_image_asset(
+                frozen.project_id,
+                created.id,
+                expected_revision=project.image_revision,
+            )
+        workflow.complete_task(task_id, output_asset_ids=[created.id])
     except ModelArkProviderError as exc:
         logger.warning(
             "image generation provider failure",

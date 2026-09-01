@@ -177,6 +177,52 @@ def test_image_layer_repository_atomic_create_read_and_update(
         )
 
 
+@pytest.mark.parametrize("repository_fixture", ["repository", "mysql_repository"])
+def test_image_layer_asset_replacement_preserves_old_asset_and_uses_revision(
+    repository_fixture: str,
+    request: pytest.FixtureRequest,
+) -> None:
+    repository: Repository = request.getfixturevalue(repository_fixture)
+    project = repository.create_project(_image_project())
+    source = _source_asset(repository, project.id)
+    layer_set_data, assets, layers = _atomic_layer_input(project.id, source.id)
+    created = repository.create_image_layer_set(
+        layer_set_data, assets=assets, layers=layers
+    )
+    old_asset_id = created.layers[0].asset_id
+    replacement = AssetCreate(
+        project_id=project.id,
+        type=AssetType.GENERATED_IMAGE,
+        asset_role=AssetRole.INTERNAL_LAYER,
+        status=Status.SUCCEEDED,
+        stage=Stage.IMAGE,
+        object_key="private/replacement.png",
+        mime_type="image/png",
+        metadata={"replaced_layer_asset_id": old_asset_id},
+    )
+
+    updated = repository.replace_image_layer_asset(
+        project.id,
+        created.id,
+        expected_revision=created.revision,
+        layer_id=created.layers[0].id,
+        asset=replacement,
+    )
+
+    assert updated.revision == created.revision + 1
+    assert updated.layers[0].asset_id == replacement.id
+    assert repository.get_asset(old_asset_id).id == old_asset_id
+    assert repository.get_asset(replacement.id).metadata["replaced_layer_asset_id"] == old_asset_id
+    with pytest.raises(RevisionConflictError):
+        repository.replace_image_layer_asset(
+            project.id,
+            created.id,
+            expected_revision=created.revision,
+            layer_id=created.layers[0].id,
+            asset=replacement.model_copy(update={"id": "replacement-2"}),
+        )
+
+
 class _ImagesClient:
     def __init__(self, response: object) -> None:
         self.response = response
@@ -463,12 +509,27 @@ class _LayerDownloader:
         return DownloadedAsset(_png(1024, 1024, transparent=True), "image/png")
 
 
-def _create_api_source(client: TestClient, repository: Repository) -> tuple[str, str]:
+def _create_api_source(
+    client: TestClient,
+    repository: Repository,
+    *,
+    asset_type: AssetType = AssetType.GENERATED_IMAGE,
+) -> tuple[str, str]:
     project = client.post(
         "/api/projects",
         json=_image_project().model_dump(mode="json"),
     ).json()
-    source = _source_asset(repository, project["id"])
+    source = repository.create_asset(
+        AssetCreate(
+            project_id=project["id"],
+            type=asset_type,
+            asset_role=AssetRole.PUBLIC,
+            status=Status.SUCCEEDED,
+            stage=Stage.IMAGE,
+            object_key=f"projects/{project['id']}/image/source.png",
+            mime_type="image/png",
+        )
+    )
     return project["id"], source.id
 
 
@@ -642,7 +703,6 @@ def test_layer_task_retry_reuses_frozen_input(
     ("role", "asset_type", "asset_status"),
     [
         (AssetRole.INTERNAL_LAYER, AssetType.GENERATED_IMAGE, Status.SUCCEEDED),
-        (AssetRole.PUBLIC, AssetType.UPLOADED_IMAGE, Status.SUCCEEDED),
         (AssetRole.PUBLIC, AssetType.GENERATED_IMAGE, Status.STALE),
         (AssetRole.PUBLIC, AssetType.GENERATED_IMAGE, Status.FAILED),
     ],
@@ -674,6 +734,32 @@ def test_layer_api_rejects_ineligible_sources(
         json={"source_asset_id": source.id},
     )
     assert response.status_code == 409
+
+
+def test_layer_api_accepts_uploaded_public_image_source(
+    client: TestClient,
+    repository: Repository,
+    test_asset_storage,
+    background_task_runner,
+) -> None:
+    test_asset_storage.downloader = _LayerDownloader()
+    project_id, source_id = _create_api_source(
+        client,
+        repository,
+        asset_type=AssetType.UPLOADED_IMAGE,
+    )
+
+    submitted = client.post(
+        f"/api/projects/{project_id}/image-layer-sets",
+        json={"source_asset_id": source_id},
+    )
+
+    assert submitted.status_code == 202
+    asyncio.run(background_task_runner.run_pending())
+    task = repository.get_task(submitted.json()["id"])
+    assert task.status == Status.SUCCEEDED
+    sets = repository.list_image_layer_sets(project_id)
+    assert sets[0].source_asset_id == source_id
 
 
 def _real_png(

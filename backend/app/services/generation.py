@@ -9,6 +9,7 @@ from pydantic import Field, ValidationError
 
 from ..core.config import get_settings
 from ..schemas import (
+    AigcPromptOptimizeResponse,
     AssetCreate,
     Brief,
     CharacterAssetIterationOperation,
@@ -17,6 +18,11 @@ from ..schemas import (
     FrozenImageLayerDecompositionInput,
     ImageBboxAnnotation,
     ImageEditAnnotation,
+    FrozenImageReferenceRegion,
+    ImageGenerationOperation,
+    ImageGenerationSize,
+    ImageLayerDecompositionSize,
+    ImageOutputFormat,
     ImagePurpose,
     ImagePromptSuggestion,
     Stage,
@@ -26,6 +32,7 @@ from ..schemas import (
     TargetLanguage,
     TextArtifactCreate,
 )
+from ..schemas.image_generation import COORDINATE_TAG_PATTERN
 from ..schemas.common import SchemaModel
 from ..video_prompt import (
     build_single_shot_video_prompt,
@@ -37,6 +44,8 @@ from ..video_prompt import (
     validate_optimized_video_prompt,
 )
 from .modelark import (
+    AigcImagePromptOptimizationRequest,
+    AigcTextGenerationRequest,
     BytePlusModelArkAdapter,
     CharacterGenerationRequest,
     CharacterImageEditRequest,
@@ -55,7 +64,10 @@ from .modelark import (
     ModelArkStreamEvent,
     ModelArkTextParseError,
     ProjectImageGenerationRequest,
+    SeedanceVideoGenerationRequest,
     TextGenerationRequest,
+    ToolVideoGenerationRequest,
+    ToolVideoPromptOptimizationRequest,
     VideoEditRequest,
     VideoGenerationRequest,
     VideoPromptOptimizationRequest,
@@ -97,6 +109,73 @@ class ModelArkGenerationService:
     def __init__(self, adapter: Optional[ModelArkAdapter] = None) -> None:
         self.adapter = adapter or MockModelArkAdapter()
         self.settings = get_settings()
+
+    async def generate_aigc_text(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        system_prompt: str = "",
+        temperature: float = 0.7,
+    ) -> str:
+        return await self.adapter.generate_aigc_text(
+            AigcTextGenerationRequest(
+                model=model,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                temperature=temperature,
+            )
+        )
+
+    async def generate_aigc_image(
+        self,
+        *,
+        pipeline_id: str,
+        model: str,
+        operation: ImageGenerationOperation,
+        prompt: str,
+        size: ImageGenerationSize,
+        output_format: ImageOutputFormat,
+        source_image_url: str | None = None,
+        reference_image_urls: Sequence[str] | None = None,
+    ) -> GeneratedAssetResult:
+        return await self.adapter.generate_project_image(
+            ProjectImageGenerationRequest(
+                project_id=pipeline_id,
+                model=model,
+                operation=operation,
+                prompt=prompt,
+                size=size,
+                output_format=output_format,
+                source_image_url=source_image_url,
+                reference_image_urls=list(reference_image_urls or []),
+            )
+        )
+
+    async def decompose_aigc_image_layers(
+        self,
+        *,
+        pipeline_id: str,
+        model: str,
+        source_image_url: str,
+        canvas_width: int,
+        canvas_height: int,
+        prompt: str | None,
+        size: ImageLayerDecompositionSize,
+        output_format: ImageOutputFormat,
+    ) -> LayerDecompositionResult:
+        return await self.adapter.decompose_image_layers(
+            LayerDecompositionRequest(
+                project_id=pipeline_id,
+                model=model,
+                image_url=source_image_url,
+                canvas_width=canvas_width,
+                canvas_height=canvas_height,
+                prompt=prompt,
+                size=size,
+                output_format=output_format,
+            )
+        )
 
     async def generate_story(
         self,
@@ -285,7 +364,7 @@ class ModelArkGenerationService:
         frozen_input: FrozenImageGenerationInput,
         *,
         source_image_url: str | None = None,
-        reference_image_url: str | None = None,
+        reference_image_urls: Sequence[str] | None = None,
     ) -> GeneratedAssetResult:
         return await self.adapter.generate_project_image(
             ProjectImageGenerationRequest(
@@ -296,7 +375,28 @@ class ModelArkGenerationService:
                 size=frozen_input.size,
                 output_format=frozen_input.format,
                 source_image_url=source_image_url,
-                reference_image_url=reference_image_url,
+                reference_image_urls=list(reference_image_urls or []),
+            )
+        )
+
+    async def edit_layer_image(
+        self,
+        *,
+        project_id: str,
+        source_image_url: str,
+        prompt: str,
+        size,
+        output_format,
+    ) -> GeneratedAssetResult:
+        return await self.adapter.generate_project_image(
+            ProjectImageGenerationRequest(
+                project_id=project_id,
+                model="doubao-seedream-5-0-pro-260628",
+                operation="image_to_image",
+                prompt=prompt,
+                size=size,
+                output_format=output_format,
+                source_image_url=source_image_url,
             )
         )
 
@@ -359,11 +459,51 @@ class ModelArkGenerationService:
         prompt: str,
         *,
         annotation: ImageEditAnnotation | None,
+        target_bbox: ImageBboxAnnotation | None = None,
+        reference_regions: Sequence[FrozenImageReferenceRegion] | None = None,
         target_language: TargetLanguage,
     ) -> str:
         normalized = prompt.strip()
         if not normalized:
             raise ValueError("image edit prompt must not be blank")
+        if target_bbox is not None:
+            references = list(reference_regions or [])
+            if not references:
+                raise ValueError(
+                    "reference replacement requires at least one reference region"
+                )
+            image_prefix = "图" if target_language == TargetLanguage.ZH else "Image "
+            target_location = (
+                f"{image_prefix}1<bbox>{target_bbox.x1} {target_bbox.y1} "
+                f"{target_bbox.x2} {target_bbox.y2}</bbox>"
+            )
+            reference_locations = [
+                (
+                    f"{image_prefix}{region.image_index}<bbox>"
+                    f"{region.bbox.x1} {region.bbox.y1} "
+                    f"{region.bbox.x2} {region.bbox.y2}</bbox>"
+                )
+                for region in references
+            ]
+            if target_language == TargetLanguage.ZH:
+                instruction = (
+                    "将参考区域中的对象引用或替换到目标区域，"
+                    "保持目标图其余内容不变。"
+                )
+                context = (
+                    f"目标区域：{target_location}\n"
+                    f"参考区域：{'；'.join(reference_locations)}"
+                )
+            else:
+                instruction = (
+                    "Reference or replace the objects from the reference regions "
+                    "into the target region while preserving the rest of Image 1."
+                )
+                context = (
+                    f"Target region: {target_location}\n"
+                    f"Reference regions: {'; '.join(reference_locations)}"
+                )
+            return f"{normalized}\n\n{instruction}\n{context}"
         if annotation is None:
             return normalized
 
@@ -555,6 +695,18 @@ class ModelArkGenerationService:
             assets.append(self._to_asset_create(project_id, generated))
         return AssetBatchGenerationResult(assets=assets)
 
+    async def generate_tool_video(
+        self,
+        request: ToolVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        return await self.adapter.generate_tool_video(request)
+
+    async def generate_seedance_video(
+        self,
+        request: SeedanceVideoGenerationRequest,
+    ) -> GeneratedAssetResult:
+        return await self.adapter.generate_seedance_video(request)
+
     async def generate_storyboard_shot_video_asset(
         self,
         project_id: str,
@@ -642,6 +794,90 @@ class ModelArkGenerationService:
             ) from exc
         except Exception as exc:
             raise ModelArkProviderError("video prompt optimization failed") from exc
+
+    async def optimize_tool_video_prompt(
+        self,
+        *,
+        prompt: str,
+        reference_image_count: int = 0,
+        reference_video_count: int = 0,
+        reference_audio_count: int = 0,
+    ) -> str:
+        request = ToolVideoPromptOptimizationRequest(
+            prompt=prompt,
+            reference_image_count=reference_image_count,
+            reference_video_count=reference_video_count,
+            reference_audio_count=reference_audio_count,
+        )
+        try:
+            result = await self.adapter.optimize_tool_video_prompt(request)
+            optimized = result.optimized_prompt.strip()
+            if not optimized or len(optimized) > 12000:
+                raise ModelArkTextParseError(
+                    "tool video prompt optimization output failed validation"
+                )
+            return optimized
+        except ModelArkProviderError:
+            raise
+        except (ValidationError, ValueError) as exc:
+            raise ModelArkTextParseError(
+                "tool video prompt optimization output failed validation"
+            ) from exc
+        except Exception as exc:
+            raise ModelArkProviderError(
+                "tool video prompt optimization failed"
+            ) from exc
+
+    async def optimize_aigc_image_prompt(
+        self,
+        *,
+        text: str,
+        reference_instructions: list[str],
+        generation_modes: list[Literal["text_to_image", "image_to_image"]],
+        reference_image_count: int,
+    ) -> AigcPromptOptimizeResponse:
+        request = AigcImagePromptOptimizationRequest(
+            text=text,
+            reference_instructions=reference_instructions,
+            generation_modes=generation_modes,
+            reference_image_count=reference_image_count,
+        )
+        try:
+            result = await self.adapter.optimize_aigc_image_prompt(request)
+            optimized_text = result.optimized_text.strip()
+            optimized_references = [
+                value.strip()
+                for value in result.optimized_reference_instructions
+            ]
+            if len(optimized_references) != len(reference_instructions):
+                raise ModelArkTextParseError(
+                    "AIGC image prompt optimization changed reference count"
+                )
+            if not optimized_text and not any(optimized_references):
+                raise ModelArkTextParseError(
+                    "AIGC image prompt optimization returned empty content"
+                )
+            if COORDINATE_TAG_PATTERN.search(optimized_text) or any(
+                COORDINATE_TAG_PATTERN.search(value)
+                for value in optimized_references
+            ):
+                raise ModelArkTextParseError(
+                    "AIGC image prompt optimization returned coordinate tags"
+                )
+            return AigcPromptOptimizeResponse(
+                optimized_text=optimized_text,
+                optimized_reference_instructions=optimized_references,
+            )
+        except (ModelArkProviderError, ModelArkTextParseError):
+            raise
+        except (ValidationError, ValueError) as exc:
+            raise ModelArkTextParseError(
+                "AIGC image prompt optimization output failed validation"
+            ) from exc
+        except Exception as exc:
+            raise ModelArkProviderError(
+                "AIGC image prompt optimization failed"
+            ) from exc
 
     async def stream_storyboard_shot_video_prompt_optimization(
         self,

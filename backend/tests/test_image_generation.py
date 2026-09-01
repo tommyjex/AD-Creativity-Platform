@@ -17,11 +17,13 @@ from backend.app.schemas import (
     AssetCategory,
     AssetRole,
     AssetType,
+    FrozenImageReferenceRegion,
     ImageBboxAnnotation,
     ImageGenerationOperation,
     ImageGenerationSize,
     ImageOutputFormat,
     ImagePointAnnotation,
+    ImageReferenceRegion,
     ImageToImageGenerationRequest,
     ProjectCreate,
     Stage,
@@ -93,25 +95,41 @@ def _settings() -> Settings:
 
 
 @pytest.mark.parametrize(
-    ("operation", "source_url", "reference_url"),
+    ("operation", "source_url", "reference_urls"),
     [
-        (ImageGenerationOperation.TEXT_TO_IMAGE, None, None),
+        (ImageGenerationOperation.TEXT_TO_IMAGE, None, []),
         (
             ImageGenerationOperation.TEXT_TO_IMAGE,
             None,
-            "https://assets.example.com/reference.png",
+        ["https://assets.example.com/reference.png"],
+    ),
+    (
+        ImageGenerationOperation.TEXT_TO_IMAGE,
+        None,
+        [
+            "https://assets.example.com/reference-1.png",
+            "https://assets.example.com/reference-2.png",
+        ],
         ),
         (
             ImageGenerationOperation.IMAGE_TO_IMAGE,
             "https://assets.example.com/source.png",
-            None,
+            [],
+        ),
+        (
+            ImageGenerationOperation.IMAGE_TO_IMAGE,
+            "https://assets.example.com/target.png",
+            [
+                "https://assets.example.com/reference-1.png",
+                "https://assets.example.com/reference-2.png",
+            ],
         ),
     ],
 )
 def test_byteplus_project_image_request_uses_fixed_single_image_parameters(
     operation: ImageGenerationOperation,
     source_url: str | None,
-    reference_url: str | None,
+    reference_urls: list[str],
 ) -> None:
     client = _ArkClient()
     adapter = BytePlusModelArkAdapter(_settings(), client=client)
@@ -123,7 +141,7 @@ def test_byteplus_project_image_request_uses_fixed_single_image_parameters(
         size=ImageGenerationSize.ONE_POINT_FIVE_K,
         output_format=ImageOutputFormat.JPEG,
         source_image_url=source_url,
-        reference_image_url=reference_url,
+        reference_image_urls=reference_urls,
     )
 
     result = asyncio.run(adapter.generate_project_image(request))
@@ -138,8 +156,19 @@ def test_byteplus_project_image_request_uses_fixed_single_image_parameters(
         "watermark": False,
         "stream": False,
         **(
-            {"image": source_url or reference_url}
-            if source_url or reference_url
+            {
+                "image": (
+                    ([source_url, *reference_urls])
+                    if source_url and reference_urls
+                    else source_url
+                    or (
+                        reference_urls[0]
+                        if len(reference_urls) == 1
+                        else reference_urls
+                    )
+                )
+            }
+            if source_url or reference_urls
             else {}
         ),
     }
@@ -282,8 +311,8 @@ def test_reference_guided_generation_freezes_snapshot_deduplicates_and_sets_meta
     request = adapter.project_image_requests[0]
     assert request.operation == ImageGenerationOperation.TEXT_TO_IMAGE
     assert request.source_image_url is None
-    assert request.reference_image_url is not None
-    assert "X-Tos-Signature=test" in request.reference_image_url
+    assert len(request.reference_image_urls) == 1
+    assert "X-Tos-Signature=test" in request.reference_image_urls[0]
     asset = repository.get_asset(
         repository.get_task(first.json()["id"]).output_asset_ids[0]
     )
@@ -347,6 +376,169 @@ def test_reference_guided_generation_rejects_invalid_assets(
     assert response.status_code == expected_status
 
 
+def test_reference_replace_request_requires_target_and_unique_reference_regions() -> None:
+    target_bbox = {
+        "type": "bbox",
+        "x1": 100,
+        "y1": 200,
+        "x2": 700,
+        "y2": 800,
+    }
+    reference_region = {
+        "asset_id": "reference-1",
+        "image_index": 2,
+        "bbox": target_bbox,
+    }
+
+    request = ImageToImageGenerationRequest.model_validate(
+        {
+            "operation": "image_to_image",
+            "source_asset_id": "target-1",
+            "prompt": "Replace the selected subject.",
+            "edit_mode": "reference_replace",
+            "target_bbox": target_bbox,
+            "reference_regions": [reference_region],
+        }
+    )
+
+    assert request.target_bbox == ImageBboxAnnotation(**target_bbox)
+    assert request.reference_regions == [ImageReferenceRegion(**reference_region)]
+
+    with pytest.raises(ValidationError, match="reference_replace requires target_bbox"):
+        ImageToImageGenerationRequest.model_validate(
+            {
+                "operation": "image_to_image",
+                "source_asset_id": "target-1",
+                "prompt": "Replace the selected subject.",
+                "edit_mode": "reference_replace",
+                "reference_regions": [reference_region],
+            }
+        )
+    with pytest.raises(ValidationError, match="image indexes must be unique"):
+        ImageToImageGenerationRequest.model_validate(
+            {
+                "operation": "image_to_image",
+                "source_asset_id": "target-1",
+                "prompt": "Replace the selected subject.",
+                "edit_mode": "reference_replace",
+                "target_bbox": target_bbox,
+                "reference_regions": [
+                    reference_region,
+                    {
+                        **reference_region,
+                        "asset_id": "reference-2",
+                    },
+                ],
+            }
+        )
+
+
+def test_reference_replace_freezes_regions_and_rejects_target_as_reference(
+    client: TestClient,
+    repository: Repository,
+) -> None:
+    project, _ = _create_project_and_prompt(client)
+    target = repository.create_asset(
+        AssetCreate(
+            project_id=str(project["id"]),
+            type=AssetType.GENERATED_IMAGE,
+            asset_role=AssetRole.PUBLIC,
+            stage=Stage.IMAGE,
+            status=Status.SUCCEEDED,
+            object_key="projects/target.png",
+            mime_type="image/png",
+        )
+    )
+    reference = repository.create_asset(
+        AssetCreate(
+            project_id=str(project["id"]),
+            type=AssetType.UPLOADED_IMAGE,
+            asset_role=AssetRole.PUBLIC,
+            stage=Stage.IMAGE,
+            status=Status.SUCCEEDED,
+            object_key="projects/reference.png",
+            mime_type="image/png",
+        )
+    )
+    bbox = {"type": "bbox", "x1": 120, "y1": 220, "x2": 720, "y2": 820}
+    response = client.post(
+        f"/api/projects/{project['id']}/image-generations",
+        json={
+            "operation": "image_to_image",
+            "source_asset_id": target.id,
+            "prompt": "Replace the selected subject.",
+            "edit_mode": "reference_replace",
+            "target_bbox": bbox,
+            "reference_regions": [
+                {"asset_id": reference.id, "image_index": 2, "bbox": bbox}
+            ],
+        },
+    )
+
+    assert response.status_code == 202
+    frozen = response.json()["frozen_input"]
+    assert frozen["edit_mode"] == "reference_replace"
+    assert frozen["target_bbox"] == bbox
+    assert frozen["reference_regions"] == [
+        {
+            "asset_id": reference.id,
+            "object_key": reference.object_key,
+            "created_at": reference.created_at.isoformat(),
+            "image_index": 2,
+            "bbox": bbox,
+        }
+    ]
+
+    invalid = client.post(
+        f"/api/projects/{project['id']}/image-generations",
+        json={
+            "operation": "image_to_image",
+            "source_asset_id": target.id,
+            "prompt": "Replace the selected subject.",
+            "edit_mode": "reference_replace",
+            "target_bbox": bbox,
+            "reference_regions": [
+                {"asset_id": target.id, "image_index": 2, "bbox": bbox}
+            ],
+        },
+    )
+    assert invalid.status_code == 422
+
+
+def test_image_reference_selection_persists_and_enforces_ten_asset_limit(
+    client: TestClient,
+) -> None:
+    project, _ = _create_project_and_prompt(client)
+    uploaded = [
+        client.post(
+            f"/api/projects/{project['id']}/image-references/upload",
+            params={"filename": f"reference-{index}.png", "mime_type": "image/png"},
+            content=b"\x89PNG\r\n\x1a\nreference",
+            headers={"content-type": "application/octet-stream"},
+        ).json()
+        for index in range(2)
+    ]
+
+    selected = client.put(
+        f"/api/projects/{project['id']}/image-reference-selection",
+        json={"asset_ids": [asset["id"] for asset in uploaded]},
+    )
+
+    assert selected.status_code == 200
+    assert selected.json()["image_reference_asset_ids"] == [
+        asset["id"] for asset in uploaded
+    ]
+    assert client.get(f"/api/projects/{project['id']}").json()[
+        "image_reference_asset_ids"
+    ] == [asset["id"] for asset in uploaded]
+
+    too_many = client.put(
+        f"/api/projects/{project['id']}/image-reference-selection",
+        json={"asset_ids": [str(index) for index in range(11)]},
+    )
+    assert too_many.status_code == 422
+
+
 @pytest.mark.parametrize("client_fixture", ["client", "mysql_client"])
 def test_image_generation_freezes_prompt_deduplicates_and_persists_asset(
     client_fixture: str,
@@ -393,6 +585,9 @@ def test_image_generation_freezes_prompt_deduplicates_and_persists_asset(
     asset = assets[0]
     assert asset["asset_role"] == "public"
     assert asset["type"] == "generated_image"
+    refreshed = client.get(f"/api/projects/{project['id']}").json()
+    assert refreshed["current_image_asset_id"] == asset["id"]
+    assert refreshed["image_revision"] == 1
     assert asset["metadata"]["operation"] == "text_to_image"
     assert asset["metadata"]["generation_mode"] == "text_only"
     assert asset["metadata"]["reference_image_count"] == 0
@@ -576,11 +771,67 @@ def test_image_edit_prompt_uses_language_specific_structured_labels() -> None:
     )
 
 
+def test_reference_replace_prompt_uses_target_and_reference_region_labels() -> None:
+    target_bbox = ImageBboxAnnotation(
+        type="bbox",
+        x1=100,
+        y1=200,
+        x2=800,
+        y2=900,
+    )
+    reference_region = FrozenImageReferenceRegion(
+        asset_id="reference-1",
+        object_key="projects/reference.png",
+        created_at="2026-08-24T00:00:00+00:00",
+        image_index=2,
+        bbox=ImageBboxAnnotation(
+            type="bbox",
+            x1=120,
+            y1=220,
+            x2=720,
+            y2=820,
+        ),
+    )
+
+    zh_prompt = ModelArkGenerationService.build_image_edit_prompt(
+        "将孔雀替换为小狗",
+        annotation=None,
+        target_bbox=target_bbox,
+        reference_regions=[reference_region],
+        target_language=TargetLanguage.ZH,
+    )
+    assert "目标区域：图1<bbox>100 200 800 900</bbox>" in zh_prompt
+    assert "参考区域：图2<bbox>120 220 720 820</bbox>" in zh_prompt
+
+    en_prompt = ModelArkGenerationService.build_image_edit_prompt(
+        "Replace the peacock with the dog.",
+        annotation=None,
+        target_bbox=target_bbox,
+        reference_regions=[reference_region],
+        target_language=TargetLanguage.EN,
+    )
+    assert "Target region: Image 1<bbox>100 200 800 900</bbox>" in en_prompt
+    assert "Reference regions: Image 2<bbox>120 220 720 820</bbox>" in en_prompt
+
+
 def test_image_edit_freezes_annotation_final_prompt_and_asset_metadata(
     client: TestClient,
     repository: Repository,
     background_task_runner,
 ) -> None:
+    class CapturingAdapter(MockModelArkAdapter):
+        def __init__(self) -> None:
+            super().__init__(_settings())
+            self.project_image_requests = []
+
+        async def generate_project_image(self, request):
+            self.project_image_requests.append(request)
+            return await super().generate_project_image(request)
+
+    adapter = CapturingAdapter()
+    client.app.dependency_overrides[get_modelark_generation_service] = lambda: (
+        ModelArkGenerationService(adapter)
+    )
     project, _ = _create_project_and_prompt(client)
     source = repository.create_asset(
         AssetCreate(
@@ -611,10 +862,88 @@ def test_image_edit_freezes_annotation_final_prompt_and_asset_metadata(
     assert "图1<bbox>100 200 800 900</bbox>" in frozen["final_prompt"]
     assert frozen["final_prompt"] == frozen["normalized_prompt"]
     asyncio.run(background_task_runner.run_pending())
+    request = adapter.project_image_requests[0]
+    assert request.source_image_url is not None
+    assert request.reference_image_urls == []
+    assert "图1<bbox>100 200 800 900</bbox>" in request.prompt
     task = repository.get_task(response.json()["id"])
     asset = repository.get_asset(task.output_asset_ids[0])
     assert asset.metadata["annotation"] == annotation
     assert asset.metadata["final_prompt"] == frozen["final_prompt"]
+    assert asset.metadata["generation_mode"] == "image_edit"
+    assert asset.metadata["reference_asset_ids"] == []
+    assert asset.metadata["reference_image_count"] == 0
+
+
+def test_reference_replace_uses_target_and_reference_images_in_order(
+    client: TestClient,
+    repository: Repository,
+    background_task_runner,
+) -> None:
+    class CapturingAdapter(MockModelArkAdapter):
+        def __init__(self) -> None:
+            super().__init__(_settings())
+            self.project_image_requests = []
+
+        async def generate_project_image(self, request):
+            self.project_image_requests.append(request)
+            return await super().generate_project_image(request)
+
+    adapter = CapturingAdapter()
+    client.app.dependency_overrides[get_modelark_generation_service] = lambda: (
+        ModelArkGenerationService(adapter)
+    )
+    project, _ = _create_project_and_prompt(client)
+    target = repository.create_asset(
+        AssetCreate(
+            project_id=str(project["id"]),
+            type=AssetType.GENERATED_IMAGE,
+            asset_role=AssetRole.PUBLIC,
+            stage=Stage.IMAGE,
+            status=Status.SUCCEEDED,
+            object_key="projects/target.png",
+            mime_type="image/png",
+        )
+    )
+    reference = repository.create_asset(
+        AssetCreate(
+            project_id=str(project["id"]),
+            type=AssetType.UPLOADED_IMAGE,
+            asset_role=AssetRole.PUBLIC,
+            stage=Stage.IMAGE,
+            status=Status.SUCCEEDED,
+            object_key="projects/reference.png",
+            mime_type="image/png",
+        )
+    )
+    bbox = {"type": "bbox", "x1": 100, "y1": 200, "x2": 800, "y2": 900}
+    submitted = client.post(
+        f"/api/projects/{project['id']}/image-generations",
+        json={
+            "operation": "image_to_image",
+            "source_asset_id": target.id,
+            "prompt": "Replace the selected subject.",
+            "edit_mode": "reference_replace",
+            "target_bbox": bbox,
+            "reference_regions": [
+                {"asset_id": reference.id, "image_index": 2, "bbox": bbox}
+            ],
+        },
+    )
+
+    assert submitted.status_code == 202
+    asyncio.run(background_task_runner.run_pending())
+    request = adapter.project_image_requests[0]
+    assert request.source_image_url is not None
+    assert request.reference_image_urls and len(request.reference_image_urls) == 1
+    assert "图1<bbox>100 200 800 900</bbox>" in request.prompt
+    assert "图2<bbox>100 200 800 900</bbox>" in request.prompt
+    asset = repository.get_asset(
+        repository.get_task(submitted.json()["id"]).output_asset_ids[0]
+    )
+    assert asset.metadata["generation_mode"] == "reference_replace"
+    assert asset.metadata["reference_asset_ids"] == [reference.id]
+    assert asset.metadata["target_bbox"] == bbox
 
 
 def test_failed_image_task_retry_copies_frozen_input_and_hash(
@@ -782,11 +1111,9 @@ def test_brief_change_stales_only_prompt_derived_public_images_and_blocks_curren
             mime_type="image/png",
         )
     )
-    selected = client.patch(
-        f"/api/projects/{project['id']}/current-image",
-        json={"asset_id": generated.id, "expected_image_revision": 0},
-    )
+    selected = client.get(f"/api/projects/{project['id']}")
     assert selected.status_code == 200
+    assert selected.json()["current_image_asset_id"] == generated.id
     assert selected.json()["image_revision"] == 1
 
     changed = client.patch(
@@ -899,6 +1226,18 @@ def test_set_current_image_uses_optimistic_revision(
         )
         for index in range(2)
     ]
+    uploaded = repository.create_asset(
+        AssetCreate(
+            project_id=str(project["id"]),
+            type=AssetType.UPLOADED_IMAGE,
+            asset_role=AssetRole.PUBLIC,
+            stage=Stage.IMAGE,
+            status=Status.SUCCEEDED,
+            object_key="projects/uploaded-reference.png",
+            mime_type="image/png",
+            metadata={"name": "uploaded-reference.png"},
+        )
+    )
 
     first = client.patch(
         f"/api/projects/{project['id']}/current-image",
@@ -913,6 +1252,13 @@ def test_set_current_image_uses_optimistic_revision(
     assert first.json()["current_image_asset_id"] == assets[0].id
     assert first.json()["image_revision"] == 1
     assert stale_write.status_code == 409
+    uploaded_write = client.patch(
+        f"/api/projects/{project['id']}/current-image",
+        json={"asset_id": uploaded.id, "expected_image_revision": 1},
+    )
+    assert uploaded_write.status_code == 200
+    assert uploaded_write.json()["current_image_asset_id"] == uploaded.id
+    assert uploaded_write.json()["image_revision"] == 2
 
 
 def test_asset_role_migration_backfills_public_and_is_idempotent(tmp_path) -> None:

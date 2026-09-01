@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal, Optional
 from uuid import uuid4
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from .common import SchemaModel, utc_now
 from .enums import (
@@ -14,12 +14,15 @@ from .enums import (
     CharacterAssetIterationOperation,
     Stage,
     Status,
+    ToolAssetRole,
 )
 from .task import GenerationTask
 
 
 class AssetBase(SchemaModel):
-    project_id: str = Field(..., min_length=1)
+    project_id: Optional[str] = Field(default=None, min_length=1)
+    tool_task_id: Optional[str] = Field(default=None, min_length=1)
+    tool_asset_role: Optional[ToolAssetRole] = None
     type: AssetType
     category: Optional[AssetCategory] = None
     asset_role: AssetRole = AssetRole.PUBLIC
@@ -31,6 +34,28 @@ class AssetBase(SchemaModel):
     size_bytes: Optional[int] = Field(default=None, ge=0)
     source_task_id: Optional[str] = None
     metadata: dict[str, object] = Field(default_factory=dict)
+
+    @field_validator("tool_task_id")
+    @classmethod
+    def strip_tool_task_id(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() if value else value
+
+    @field_validator("project_id")
+    @classmethod
+    def strip_project_id(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() if value else value
+
+    @model_validator(mode="after")
+    def validate_ownership(self) -> "AssetBase":
+        if self.project_id and self.tool_task_id:
+            raise ValueError("asset cannot belong to both a project and tool task")
+        if self.tool_task_id and self.tool_asset_role is None:
+            raise ValueError("tool assets require a tool_asset_role")
+        if self.project_id and self.tool_asset_role is not None:
+            raise ValueError("project assets cannot have a tool_asset_role")
+        if not self.project_id and not self.tool_task_id and self.tool_asset_role is None:
+            raise ValueError("unowned tool assets require a tool_asset_role")
+        return self
 
 
 class AssetCreate(AssetBase):

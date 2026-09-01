@@ -1,0 +1,15 @@
+- [x] 运行历史选项显示 Run 编号、状态和创建时间
+- [x] 当前 Run 摘要显示状态、开始时间、结束时间和耗时
+- [x] queued/running Run 的结束时间显示“进行中”
+- [x] 缺失时间字段显示“-”且不产生无效日期
+- [x] 执行计划内节点显示状态和 attempt 数量
+- [x] 存在 TaskAttempt 的节点显示最新相关 attempt 的时间与耗时
+- [x] Run 级调度失败即使没有 TaskAttempt 也显示失败原因
+- [x] failed/timed_out 节点显示 Task 或 Provider 的脱敏失败原因
+- [x] blocked 节点显示“因上游失败被阻塞”
+- [x] 缺少错误消息时显示稳定回退文案
+- [x] 可用时显示错误码、阶段和 request ID
+- [x] 日志不展示密钥、签名 URL、原始供应商响应或堆栈
+- [x] 切换历史 Run 后状态、时间和错误不跨 Run 混用
+- [x] 现有取消、重试和活动 Run 轮询行为保持不变
+- [x] 相关 Vitest、TypeScript typecheck 和 ESLint 通过

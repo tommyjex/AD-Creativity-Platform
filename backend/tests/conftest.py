@@ -7,8 +7,10 @@ from backend.app.api.dependencies import (
     get_background_task_runner,
     get_asset_storage_service,
     get_composer_service,
+    get_media_inspector_service,
     get_modelark_generation_service,
     get_repository,
+    get_video_normalizer_service,
     get_workflow_service,
 )
 from backend.app.db import create_database_engine, init_database, make_session_factory
@@ -18,7 +20,9 @@ from backend.app.services.assets import AssetStorageService, DownloadedAsset
 from backend.app.services.background import BackgroundTaskRunner
 from backend.app.services.composer import CompositionResult, CompositionSource
 from backend.app.services.generation import ModelArkGenerationService
+from backend.app.services.media_inspector import MediaInspection
 from backend.app.services.workflow import WorkflowService
+from backend.app.services.video_normalizer import NormalizedVideo
 
 
 class FakeObjectStorageClient:
@@ -160,6 +164,58 @@ class FakeVideoComposer:
         )
 
 
+class FakeVideoNormalizer:
+    async def normalize_if_needed(self, content: bytes) -> NormalizedVideo:
+        return NormalizedVideo(
+            content=content,
+            normalized=False,
+            source_format="mov,mp4,m4a,3gp,3g2,mj2",
+        )
+
+
+class FakeMediaInspector:
+    async def inspect(self, kind, content, *, filename, mime_type):
+        if content.startswith(b"not-a-") or (
+            kind.value == "audio" and (mime_type or "").startswith("video/")
+        ):
+            raise ValueError(f"unsupported {kind.value} content")
+        if kind.value == "image":
+            return MediaInspection(
+                kind=kind,
+                mime_type="image/png",
+                container="png",
+                width=1024,
+                height=1024,
+            )
+        if kind.value == "video":
+            return MediaInspection(
+                kind=kind,
+                mime_type=(
+                    "video/quicktime"
+                    if (filename or "").lower().endswith(".mov")
+                    else "video/mp4"
+                ),
+                container=(
+                    "mov"
+                    if (filename or "").lower().endswith(".mov")
+                    else "mp4"
+                ),
+                width=1280,
+                height=720,
+                duration_seconds=10,
+                fps=30,
+                video_codec="h264",
+                audio_codec="aac",
+            )
+        return MediaInspection(
+            kind=kind,
+            mime_type="audio/mpeg",
+            container="mp3",
+            duration_seconds=10,
+            audio_codec="mp3",
+        )
+
+
 @pytest.fixture
 def repository() -> InMemoryRepository:
     return InMemoryRepository()
@@ -204,11 +260,23 @@ def video_composer() -> FakeVideoComposer:
 
 
 @pytest.fixture
+def video_normalizer() -> FakeVideoNormalizer:
+    return FakeVideoNormalizer()
+
+
+@pytest.fixture
+def media_inspector() -> FakeMediaInspector:
+    return FakeMediaInspector()
+
+
+@pytest.fixture
 def client(
     repository: InMemoryRepository,
     test_asset_storage: AssetStorageService,
     background_task_runner: CapturingBackgroundTaskRunner,
     video_composer: FakeVideoComposer,
+    video_normalizer: FakeVideoNormalizer,
+    media_inspector: FakeMediaInspector,
 ) -> Iterator[TestClient]:
     app = create_app()
 
@@ -222,6 +290,8 @@ def client(
         lambda: ModelArkGenerationService()
     )
     app.dependency_overrides[get_composer_service] = lambda: video_composer
+    app.dependency_overrides[get_video_normalizer_service] = lambda: video_normalizer
+    app.dependency_overrides[get_media_inspector_service] = lambda: media_inspector
     app.dependency_overrides[get_background_task_runner] = lambda: background_task_runner
 
     with TestClient(app) as test_client:
@@ -236,6 +306,8 @@ def mysql_client(
     test_asset_storage: AssetStorageService,
     background_task_runner: CapturingBackgroundTaskRunner,
     video_composer: FakeVideoComposer,
+    video_normalizer: FakeVideoNormalizer,
+    media_inspector: FakeMediaInspector,
 ) -> Iterator[TestClient]:
     app = create_app()
 
@@ -249,6 +321,8 @@ def mysql_client(
         lambda: ModelArkGenerationService()
     )
     app.dependency_overrides[get_composer_service] = lambda: video_composer
+    app.dependency_overrides[get_video_normalizer_service] = lambda: video_normalizer
+    app.dependency_overrides[get_media_inspector_service] = lambda: media_inspector
     app.dependency_overrides[get_background_task_runner] = lambda: background_task_runner
 
     with TestClient(app) as test_client:

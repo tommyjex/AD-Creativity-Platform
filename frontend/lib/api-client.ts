@@ -2,6 +2,8 @@ import type {
   ApiErrorPayload,
   Asset,
   AssetCategory,
+  CanvasLayout,
+  CanvasLayoutUpdate,
   CharacterAssetIterationRequest,
   CharacterAssetIterationResponse,
   CharacterCard,
@@ -12,7 +14,9 @@ import type {
   GenerationStage,
   GenerationTask,
   ImageGenerationRequest,
+  ImageReferenceSelectionUpdate,
   ImageLayerCompositionRequest,
+  ImageLayerContentEditRequest,
   ImageLayerDecompositionRequest,
   ImageLayerSetDetail,
   ImageLayerSetUpdate,
@@ -43,8 +47,29 @@ import type {
   StoryboardTailFrameReferenceApplyResponse,
   TextStreamStage,
   TextArtifactUpdate,
-  TextArtifactUpdateStage
+  TextArtifactUpdateStage,
+  ToolTask,
+  ToolTaskCreate,
+  FaceBlurVideoRequest,
+  ToolVideoGenerationRequest,
+  ToolVideoPromptOptimizeRequest,
+  ToolVideoPromptOptimizeResponse
 } from "@/lib/api-types";
+import type {
+  AigcPage,
+  AigcPipeline,
+  AigcPipelineCreate,
+  AigcPipelineRunCreate,
+  AigcPipelineRunDetail,
+  AigcPipelineRun,
+  AigcPipelineTemplate,
+  AigcPipelineTemplateUpdate,
+  AigcPipelineUpdate,
+  AigcPromptOptimizeRequest,
+  AigcPromptOptimizeResponse,
+  AigcSaveAsTemplateRequest,
+  AigcTemplateInstantiateRequest
+} from "@/lib/aigc/types";
 import { ERROR_CODES } from "@/lib/api-types";
 
 const DEFAULT_BACKEND_BASE_URL = "http://localhost:8000";
@@ -81,10 +106,16 @@ export interface AssetFilters {
   status?: Status;
 }
 
+export interface AigcListFilters {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+}
+
 interface RequestConfig extends RequestOptions {
   body?: BodyInit | unknown;
   json?: boolean;
-  method?: "DELETE" | "GET" | "PATCH" | "POST";
+  method?: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
 }
 
 interface FastApiValidationError {
@@ -419,6 +450,24 @@ export function createApiClient(options: ApiClientOptions = {}) {
       );
     },
 
+    setImageProjectReferenceSelection(
+      projectId: string,
+      payload: ImageReferenceSelectionUpdate,
+      requestOptions?: RequestOptions
+    ) {
+      return request<Project>(
+        fetcher,
+        baseUrl,
+        `/api/projects/${encodeURIComponent(projectId)}/image-reference-selection`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "PUT"
+        }
+      );
+    },
+
     generateProjectImage(
       projectId: string,
       payload: ImageGenerationRequest,
@@ -523,6 +572,36 @@ export function createApiClient(options: ApiClientOptions = {}) {
       );
     },
 
+    getCanvasLayout(projectId: string, requestOptions?: RequestOptions) {
+      return request<CanvasLayout>(
+        fetcher,
+        baseUrl,
+        `/api/projects/${encodeURIComponent(projectId)}/canvas-layout`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    saveCanvasLayout(
+      projectId: string,
+      payload: CanvasLayoutUpdate,
+      requestOptions?: RequestOptions
+    ) {
+      return request<CanvasLayout>(
+        fetcher,
+        baseUrl,
+        `/api/projects/${encodeURIComponent(projectId)}/canvas-layout`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "PUT"
+        }
+      );
+    },
+
     composeImageLayers(
       projectId: string,
       payload: ImageLayerCompositionRequest,
@@ -532,6 +611,25 @@ export function createApiClient(options: ApiClientOptions = {}) {
         fetcher,
         baseUrl,
         `/api/projects/${encodeURIComponent(projectId)}/image-layer-compositions`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "POST"
+        }
+      );
+    },
+
+    editImageLayerContent(
+      projectId: string,
+      setId: string,
+      payload: ImageLayerContentEditRequest,
+      requestOptions?: RequestOptions
+    ) {
+      return request<GenerationTask>(
+        fetcher,
+        baseUrl,
+        `/api/projects/${encodeURIComponent(projectId)}/image-layer-sets/${encodeURIComponent(setId)}/content-edits`,
         {
           ...requestOptions,
           body: payload,
@@ -637,6 +735,134 @@ export function createApiClient(options: ApiClientOptions = {}) {
       );
     },
 
+    listToolAssets(requestOptions?: RequestOptions) {
+      return request<Asset[]>(fetcher, baseUrl, "/api/tools/assets", {
+        ...requestOptions,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    listToolTasks(requestOptions?: RequestOptions) {
+      return request<ToolTask[]>(fetcher, baseUrl, "/api/tools/tasks", {
+        ...requestOptions,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    getToolTask(taskId: string, requestOptions?: RequestOptions) {
+      return request<ToolTask>(
+        fetcher,
+        baseUrl,
+        `/api/tools/tasks/${encodeURIComponent(taskId)}`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    deleteToolTask(taskId: string, requestOptions?: RequestOptions) {
+      return request<void>(
+        fetcher,
+        baseUrl,
+        `/api/tools/tasks/${encodeURIComponent(taskId)}`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "DELETE"
+        }
+      );
+    },
+
+    createToolTask(payload: ToolTaskCreate, requestOptions?: RequestOptions) {
+      return request<ToolTask>(fetcher, baseUrl, "/api/tools/tasks", {
+        ...requestOptions,
+        body: payload,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+        method: "POST"
+      });
+    },
+
+    uploadToolAsset(
+      kind: ReferenceAssetKind,
+      file: Blob,
+      options: { filename?: string; mimeType?: string } & RequestOptions = {}
+    ) {
+      const searchParams = new URLSearchParams({ kind });
+      if (options.filename) searchParams.set("filename", options.filename);
+      if (options.mimeType) searchParams.set("mime_type", options.mimeType);
+      return request<Asset>(
+        fetcher,
+        baseUrl,
+        `/api/tools/assets/upload?${searchParams.toString()}`,
+        {
+          ...options,
+          body: file,
+          headers: mergeHeaders(
+            defaultHeaders,
+            { "Content-Type": options.mimeType || file.type || "application/octet-stream" },
+            options.headers
+          ),
+          json: false,
+          method: "POST"
+        }
+      );
+    },
+
+    submitFaceBlurVideo(
+      payload: FaceBlurVideoRequest,
+      requestOptions?: RequestOptions
+    ) {
+      return request<ToolTask>(fetcher, baseUrl, "/api/tools/face-blur-video", {
+        ...requestOptions,
+        body: payload,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+        method: "POST"
+      });
+    },
+
+    generateToolVideo(
+      payload: ToolVideoGenerationRequest,
+      requestOptions?: RequestOptions
+    ) {
+      return request<ToolTask>(fetcher, baseUrl, "/api/tools/videos", {
+        ...requestOptions,
+        body: payload,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+        method: "POST"
+      });
+    },
+
+    optimizeToolVideoPrompt(
+      payload: ToolVideoPromptOptimizeRequest,
+      requestOptions?: RequestOptions
+    ) {
+      return request<ToolVideoPromptOptimizeResponse>(
+        fetcher,
+        baseUrl,
+        "/api/tools/videos/optimize-prompt",
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "POST"
+        }
+      );
+    },
+
+    retryToolTask(taskId: string, requestOptions?: RequestOptions) {
+      return request<ToolTask>(
+        fetcher,
+        baseUrl,
+        `/api/tools/tasks/${encodeURIComponent(taskId)}/retry`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "POST"
+        }
+      );
+    },
+
     getAsset(assetId: string, requestOptions?: RequestOptions) {
       return request<Asset>(
         fetcher,
@@ -658,6 +884,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
         fetcher,
         baseUrl,
         `/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "DELETE"
+        }
+      );
+    },
+
+    deleteToolAsset(assetId: string, requestOptions?: RequestOptions) {
+      return request<void>(
+        fetcher,
+        baseUrl,
+        `/api/tools/assets/${encodeURIComponent(assetId)}`,
         {
           ...requestOptions,
           headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
@@ -1157,6 +1396,342 @@ export function createApiClient(options: ApiClientOptions = {}) {
       );
     },
 
+    listAigcTemplates(
+      filters: AigcListFilters = {},
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPage<AigcPipelineTemplate>>(
+        fetcher,
+        baseUrl,
+        withAigcListQuery("/api/aigc/templates", filters),
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    getAigcTemplate(
+      templateId: string,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipelineTemplate>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/templates/${encodeURIComponent(templateId)}`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    deleteAigcTemplate(
+      templateId: string,
+      requestOptions?: RequestOptions
+    ) {
+      return request<void>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/templates/${encodeURIComponent(templateId)}`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "DELETE"
+        }
+      );
+    },
+
+    updateAigcTemplate(
+      templateId: string,
+      payload: AigcPipelineTemplateUpdate,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipelineTemplate>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/templates/${encodeURIComponent(templateId)}`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "PUT"
+        }
+      );
+    },
+
+    instantiateAigcTemplate(
+      templateId: string,
+      payload: AigcTemplateInstantiateRequest = {},
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipeline>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/templates/${encodeURIComponent(templateId)}/instantiate`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "POST"
+        }
+      );
+    },
+
+    listAigcPipelines(
+      filters: AigcListFilters = {},
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPage<AigcPipeline>>(
+        fetcher,
+        baseUrl,
+        withAigcListQuery("/api/aigc/pipelines", filters),
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    getAigcPipeline(
+      pipelineId: string,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipeline>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    deleteAigcPipeline(
+      pipelineId: string,
+      requestOptions?: RequestOptions
+    ) {
+      return request<void>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "DELETE"
+        }
+      );
+    },
+
+    updateAigcPipeline(
+      pipelineId: string,
+      payload: AigcPipelineUpdate,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipeline>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "PUT"
+        }
+      );
+    },
+
+    saveAigcPipelineAsTemplate(
+      pipelineId: string,
+      payload: AigcSaveAsTemplateRequest,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipelineTemplate>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/templates`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "POST"
+        }
+      );
+    },
+
+    optimizeAigcImagePrompt(
+      payload: AigcPromptOptimizeRequest,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPromptOptimizeResponse>(
+        fetcher,
+        baseUrl,
+        "/api/aigc/prompts/optimize",
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "POST"
+        }
+      );
+    },
+
+    createAigcRun(
+      pipelineId: string,
+      payload: AigcPipelineRunCreate,
+      idempotencyKey: string,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipelineRunDetail>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/runs`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(
+            defaultHeaders,
+            { "Idempotency-Key": idempotencyKey },
+            requestOptions?.headers
+          ),
+          method: "POST"
+        }
+      );
+    },
+
+    listAigcRuns(
+      pipelineId: string,
+      filters: Pick<AigcListFilters, "page" | "pageSize"> = {},
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPage<AigcPipelineRun>>(
+        fetcher,
+        baseUrl,
+        withAigcListQuery(
+          `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/runs`,
+          filters
+        ),
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    getAigcRun(runId: string, requestOptions?: RequestOptions) {
+      return request<AigcPipelineRunDetail>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/runs/${encodeURIComponent(runId)}`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    getAigcInternalRunAsset(
+      pipelineId: string,
+      runId: string,
+      assetId: string,
+      requestOptions?: RequestOptions
+    ) {
+      return request<Asset>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/assets/${encodeURIComponent(assetId)}`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    retryAigcRunNode(
+      runId: string,
+      nodeId: string,
+      idempotencyKey: string,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipelineRunDetail>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/runs/${encodeURIComponent(runId)}/nodes/${encodeURIComponent(nodeId)}/retry`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(
+            defaultHeaders,
+            { "Idempotency-Key": idempotencyKey },
+            requestOptions?.headers
+          ),
+          method: "POST"
+        }
+      );
+    },
+
+    cancelAigcRun(runId: string, requestOptions?: RequestOptions) {
+      return request<AigcPipelineRunDetail>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/runs/${encodeURIComponent(runId)}/cancel`,
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "POST"
+        }
+      );
+    },
+
+    createAigcPipeline(
+      payload: AigcPipelineCreate,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipeline>(fetcher, baseUrl, "/api/aigc/pipelines", {
+        ...requestOptions,
+        body: payload,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+        method: "POST"
+      });
+    },
+
+    uploadAigcMedia(
+      kind: ReferenceAssetKind,
+      file: Blob,
+      options: { filename?: string; mimeType?: string } & RequestOptions = {}
+    ) {
+      const searchParams = new URLSearchParams();
+      if (options.filename) searchParams.set("filename", options.filename);
+      if (options.mimeType) searchParams.set("mime_type", options.mimeType);
+      const query = searchParams.toString();
+      return request<Asset>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/assets/${kind}s${query ? `?${query}` : ""}`,
+        {
+          ...options,
+          body: file,
+          headers: mergeHeaders(
+            defaultHeaders,
+            {
+              "Content-Type":
+                options.mimeType || file.type || "application/octet-stream"
+            },
+            options.headers
+          ),
+          json: false,
+          method: "POST"
+        }
+      );
+    },
+
+    uploadAigcImage(
+      file: Blob,
+      options: { filename?: string; mimeType?: string } & RequestOptions = {}
+    ) {
+      return this.uploadAigcMedia("image", file, options);
+    },
+
     getTask(taskId: string, requestOptions?: RequestOptions) {
       return request<GenerationTask>(
         fetcher,
@@ -1204,6 +1779,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
+
+function withAigcListQuery(path: string, filters: AigcListFilters): string {
+  const searchParams = new URLSearchParams();
+  const query = filters.query?.trim();
+  if (query) searchParams.set("q", query);
+  if (filters.page !== undefined) searchParams.set("page", String(filters.page));
+  if (filters.pageSize !== undefined) {
+    searchParams.set("page_size", String(filters.pageSize));
+  }
+  const queryString = searchParams.toString();
+  return queryString ? `${path}?${queryString}` : path;
+}
 
 export const apiClient = createApiClient();
 

@@ -61,6 +61,8 @@ def test_settings_reads_modelark_alias_and_download_limits(
     monkeypatch.setenv("ASSET_DOWNLOAD_MAX_BYTES", "1048576")
     monkeypatch.setenv("ARK_VIDEO_TIMEOUT_SECONDS", "900")
     monkeypatch.setenv("ARK_VIDEO_POLL_INTERVAL_SECONDS", "5")
+    monkeypatch.setenv("AIGC_VIDEO_CONCURRENCY", "2")
+    monkeypatch.setenv("AIGC_VIDEO_TIMEOUT_SECONDS", "1200")
 
     settings = Settings.from_env()
 
@@ -73,6 +75,8 @@ def test_settings_reads_modelark_alias_and_download_limits(
     assert settings.ark_image_timeout_seconds == 600
     assert settings.ark_video_timeout_seconds == 900
     assert settings.ark_video_poll_interval_seconds == 5
+    assert settings.aigc_video_concurrency == 2
+    assert settings.aigc_video_timeout_seconds == 1200
     assert settings.asset_download_timeout_seconds == 45
     assert settings.asset_download_max_bytes == 1048576
 

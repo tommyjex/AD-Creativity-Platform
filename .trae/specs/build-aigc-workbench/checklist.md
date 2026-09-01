@@ -1,0 +1,49 @@
+- [x] 顶部导航包含“项目 / 资产库 / 工具 / AIGC工作台”，AIGC 列表及画布子路由均正确高亮
+- [x] `/workspace/aigc` 默认展示“画布模板”，并可切换“我的画布”
+- [x] 模板与我的画布均支持名称包含筛选、清空、分页、加载、错误和空状态
+- [x] 宽屏模板列表每行固定 5 张，窄屏按 3 / 2 / 1 列响应且无溢出
+- [x] 模板卡片显示拓扑缩略图、名称、节点数量和更新时间
+- [x] 点击模板默认创建独立 Pipeline，模板后续修改不影响已创建实例
+- [x] 模板仅通过“编辑模板”入口修改，模板编辑器不能直接执行
+- [x] dirty 模板实例化时先保存，保存冲突或失败不会创建 Pipeline
+- [x] Pipeline 画布使用独立路由页面，不通过弹窗或列表内展开
+- [x] 独立画布保留顶部全局导航，主体铺满 `100dvh - 4rem`
+- [x] 画布具备顶部工具栏、左侧节点面板、中央 React Flow 和右侧配置/结果/运行面板
+- [x] 低于 1024px 时左右面板改为互斥抽屉，高于等于 1024px 时固定为 `w-60/w-72`
+- [x] 文本输入、图片输入、LLM、文生图、图生图、文本输出、图片输出 7 类节点均可添加和配置
+- [x] 输入/输出节点不产生任务；所有节点有 RunNode，只有实际 attempt 的模型节点具有 currentTaskId
+- [x] 端口类型不兼容、自环、重复单值输入和环路均被前后端拒绝
+- [x] Zustand 仅管理画布会话；RunNode/Task 由 React Query 持有并派生渲染投影，无三份状态源
+- [x] 保存使用 revision 乐观锁，冲突不静默覆盖；未保存离开具有确认保护
+- [x] dirty 状态执行时先保存再创建 Run，保存失败或冲突不会执行浏览器内草稿
+- [x] 另存为模板不复制 taskId、进度、错误和运行结果
+- [x] 所有模板创建、更新、实例化入口均清除具体图片 assetId，模板模式不提供资产选择
+- [x] MySQL 使用原生 `JSON` 而非 `JSONB`，definition 和执行快照不包含临时签名 URL 或密钥
+- [x] memory/mysql 双仓储对模板、Pipeline、Run、RunNode、Task、attempt 和资产关联行为一致
+- [x] `nodeId` 跨运行稳定；taskId 对每次运行/重试唯一；`(runId, nodeId, attempt)` 不重复
+- [x] attempt 从 1 开始且并发重试幂等；task API 通过 run 派生 pipelineId
+- [x] 每个 Pipeline 同时最多一个活动 Run，历史 Run 切换不会混用状态与结果
+- [x] 创建 Run 锁定 Pipeline 行，并发提交不会产生两个活动 Run
+- [x] 执行前完成 DAG、配置、端口、资产和无环校验，错误可定位到 nodeId/edgeId
+- [x] 无模型节点的图不可执行；输出节点可选
+- [x] 拓扑调度仅运行依赖满足的模型节点，失败只阻塞后代，独立分支继续
+- [x] queued task 先落库后入有界队列，Worker 使用原子 claim 并遵守模型族并发限制
+- [x] 节点超时与晚到结果保护有效，瞬时错误最多自动重试 2 次且每次使用新 taskId
+- [x] scheduler lease 使用单调 fencing_token，旧 owner 恢复后无法 claim、重试、释放下游或提交结果
+- [x] 服务恢复时重新入队 queued task，并将失效 lease 遗留的 running task 标记为可重试失败
+- [x] 全量执行强制全部模型节点；增量执行会复用匹配祖先并自动补算缺失/失效祖先
+- [x] inputHash 使用 canonical JSON 和规定摘要计算，复用范围不越过当前 Pipeline
+- [x] 自动重试在同 Run 内最多 3 个 attempts；手动重试创建新的 retry_node Run
+- [x] best-effort 取消通过 Run/Task CAS 与成功提交线性化，晚到结果不入库且临时对象可清理
+- [x] 图片输入支持本地上传和资产库选择，执行时后端重新校验资产
+- [x] 图片输出自动进入现有资产库，并可追溯 pipeline、run、task 和 input/output 角色
+- [x] Pipeline 图片引用由 `pipeline_assets` 维护；当前/活动引用删除返回 `409`，历史终态引用删除后结果 unavailable 且缓存失效
+- [x] 文本输出保存在任务结果快照，可在输出节点查看和复制，不伪装为媒体资产
+- [x] TaskAttempt/RunNode 结果 DTO 能唯一表达文本、多资产、受控下载 URL 和 unavailable
+- [x] 运行轮询仅在存在 queued/running task 时进行，全部终态后停止并刷新资产
+- [x] 状态徽标覆盖 idle、queued、running、succeeded、failed、canceled、blocked、reused、timed_out
+- [x] 模型请求仅允许白名单节点/模型/参数，错误响应和日志不泄露密钥、签名参数、原始响应或堆栈
+- [x] 桌面浏览器完成模板创建实例、编辑保存、节点连线、执行、重试、增量执行和结果预览验收
+- [x] 图片输入与输出预览严格保持原始宽高比，不拉伸或裁切
+- [x] 后端在仓库根目录通过 `.venv/bin/pytest`
+- [x] 前端通过 lint、typecheck、完整 Vitest 和 production build

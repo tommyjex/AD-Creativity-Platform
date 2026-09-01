@@ -43,7 +43,7 @@ import {
   getUserFacingErrorMessage
 } from "@/lib/api-client";
 import { WorkspaceCreativeWorkflow } from "@/components/workspace/workspace-creative-workflow";
-import { ImageProjectWorkspace } from "@/components/workspace/image-project-workspace";
+import { ImageProjectReadOnlyDetail } from "@/components/workspace/image-project-read-only-detail";
 import {
   ProjectDetailTabs,
   type DetailTab
@@ -103,6 +103,26 @@ const targetLanguageOptions: Array<{
 const selectClassName =
   "flex h-10 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-all focus-visible:border-primary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50";
 
+const projectListFilters = [
+  {
+    icon: FolderKanban,
+    label: "全部项目",
+    value: "all"
+  },
+  {
+    icon: MonitorPlay,
+    label: "视频项目",
+    value: "video_ad"
+  },
+  {
+    icon: ImageIcon,
+    label: "图片",
+    value: "image_asset"
+  }
+] as const;
+
+type ProjectListFilter = (typeof projectListFilters)[number]["value"];
+
 interface ProjectWorkspaceProps {
   initialError?: string;
   initialProjects: ProjectListItem[];
@@ -121,6 +141,8 @@ export function ProjectWorkspace({
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [projectListFilter, setProjectListFilter] =
+    useState<ProjectListFilter>("all");
   const [pendingDelete, setPendingDelete] =
     useState<ProjectListItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -129,6 +151,19 @@ export function ProjectWorkspace({
   const requestSequence = useRef(0);
   const listRequestSequence = useRef(0);
   const hasMountedSearch = useRef(false);
+  const filteredProjects = projects.filter(
+    (project) =>
+      projectListFilter === "all" ||
+      project.project_type === projectListFilter
+  );
+  const projectCounts = {
+    all: projects.length,
+    image_asset: projects.filter(
+      (project) => project.project_type === "image_asset"
+    ).length,
+    video_ad: projects.filter((project) => project.project_type === "video_ad")
+      .length
+  } satisfies Record<ProjectListFilter, number>;
 
   useEffect(() => {
     if (!hasMountedSearch.current) {
@@ -220,6 +255,7 @@ export function ProjectWorkspace({
     setSelectedProjectId(project.id);
     setSelectedProject(project);
     setIsCreating(false);
+    setProjectListFilter(project.project_type);
   }
 
   function handleUpdated(project: Project) {
@@ -334,14 +370,53 @@ export function ProjectWorkspace({
         >
           <div className="flex items-center justify-between gap-3 px-2 pb-4">
             <div>
-              <h2 className="font-semibold text-foreground">全部项目</h2>
+              <h2 className="font-semibold text-foreground">
+                {
+                  projectListFilters.find(
+                    (filter) => filter.value === projectListFilter
+                  )?.label
+                }
+              </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                {projects.length} 个项目
+                {filteredProjects.length} 个项目
               </p>
             </div>
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/[0.08] text-primary">
               <FolderKanban aria-hidden="true" className="h-5 w-5" />
             </div>
+          </div>
+
+          <div
+            aria-label="项目分类"
+            className="mb-3 grid grid-cols-3 gap-1 rounded-xl bg-secondary/65 p-1"
+            role="tablist"
+          >
+            {projectListFilters.map((filter) => {
+              const Icon = filter.icon;
+              const isActive = projectListFilter === filter.value;
+              return (
+                <button
+                  aria-label={`${filter.label}（${projectCounts[filter.value]} 个项目）`}
+                  aria-selected={isActive}
+                  className={cn(
+                    "flex min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
+                    isActive
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-card/60 hover:text-foreground"
+                  )}
+                  key={filter.value}
+                  onClick={() => setProjectListFilter(filter.value)}
+                  role="tab"
+                  type="button"
+                >
+                  <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{filter.label.replace("项目", "")}</span>
+                  <span className="text-[10px] tabular-nums">
+                    {projectCounts[filter.value]}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="relative mb-3">
@@ -414,9 +489,9 @@ export function ProjectWorkspace({
             </p>
           ) : null}
 
-          {projects.length > 0 ? (
+          {filteredProjects.length > 0 ? (
             <div className="grid max-h-[calc(100vh-15rem)] gap-2 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-1">
-              {projects.map((project) => (
+              {filteredProjects.map((project) => (
                 <ProjectListButton
                   isSelected={selectedProjectId === project.id && !isCreating}
                   key={project.id}
@@ -429,12 +504,18 @@ export function ProjectWorkspace({
           ) : (
             <div className="rounded-2xl border border-dashed border-border bg-secondary/40 px-4 py-8 text-center">
               <p className="text-sm font-medium text-foreground">
-                {searchQuery.trim() ? "未找到匹配项目" : "暂无项目"}
+                {searchQuery.trim()
+                  ? "未找到匹配项目"
+                  : projectListFilter === "all"
+                    ? "暂无项目"
+                    : `暂无${projectListFilter === "video_ad" ? "视频项目" : "图片"}`}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 {searchQuery.trim()
-                  ? "请尝试其他关键词，或清空搜索查看全部项目。"
-                  : "新建首个项目后会显示在这里。"}
+                  ? "请尝试其他关键词，或切换项目分类查看。"
+                  : projectListFilter === "all"
+                    ? "新建首个项目后会显示在这里。"
+                    : "可切换分类，或新建对应类型的项目。"}
               </p>
             </div>
           )}
@@ -478,7 +559,7 @@ export function ProjectWorkspace({
             />
           ) : (
             <ProjectEmptyState
-              description="从左侧选择一个项目，系统会加载完整详情、关键摘要和可编辑 Brief。"
+              description="从左侧选择一个项目，系统会加载完整详情与关键摘要。"
               title="选择项目查看详情"
             />
           )}
@@ -708,95 +789,7 @@ function ImageProjectDetail({
   onUpdated: (project: Project) => void;
   project: Project;
 }) {
-  const [isBriefDialogOpen, setIsBriefDialogOpen] = useState(false);
-
-  return (
-    <div className="space-y-6">
-      <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-glass">
-        <div className="grid gap-5 p-6 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="info">
-                <ImageIcon aria-hidden="true" className="h-3.5 w-3.5" />
-                {getProjectTypeLabel(project)}
-              </Badge>
-              <Badge variant={statusVariant(project.image_prompt_status)}>
-                提示词 {project.image_prompt_status}
-              </Badge>
-            </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-3xl">
-              {project.name}
-            </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
-              {project.brief.summary ?? project.brief.prompt}
-            </p>
-          </div>
-          <div className="flex flex-col items-stretch gap-3 sm:items-end">
-            <Button
-              onClick={() => setIsBriefDialogOpen(true)}
-              type="button"
-              variant="outline"
-            >
-              <PencilLine aria-hidden="true" className="h-4 w-4" />
-              编辑 Brief
-            </Button>
-            <div className="rounded-2xl border border-primary/15 bg-primary/[0.045] px-4 py-3 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2 font-medium text-foreground">
-                <Clock3 aria-hidden="true" className="h-4 w-4 text-primary" />
-                最近更新
-              </div>
-              <time className="mt-1 block" dateTime={project.updated_at}>
-                {formatDate(project.updated_at)}
-              </time>
-            </div>
-          </div>
-        </div>
-        <div className="grid border-t border-border sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryItem label="项目类型" value={getProjectTypeLabel(project)} />
-          <SummaryItem label="投放平台" value={project.brief.target_platform} />
-          <SummaryItem
-            label="目标语言"
-            value={getTargetLanguageLabel(project.brief.target_language)}
-          />
-          <SummaryItem label="画面规格" value={project.brief.aspect_ratio} />
-          <SummaryItem
-            label="商品名称"
-            value={project.brief.product_name ?? "未填写"}
-          />
-        </div>
-      </div>
-
-      <ImageProjectWorkspace
-        onProjectUpdated={onUpdated}
-        project={project}
-      />
-
-      <Dialog
-        onOpenChange={setIsBriefDialogOpen}
-        open={isBriefDialogOpen}
-      >
-        <DialogContent className="max-w-4xl grid-rows-[auto_minmax(0,1fr)]">
-          <DialogHeader className="border-b border-border px-5 py-4 pr-16 sm:px-7 sm:py-5">
-            <DialogTitle>编辑 Brief</DialogTitle>
-            <DialogDescription>
-              更新图片项目的投放需求、商品信息和画面规格。
-            </DialogDescription>
-          </DialogHeader>
-          <ProjectEditor
-            key={`${project.id}:brief-dialog`}
-            mode="edit"
-            onCancel={() => setIsBriefDialogOpen(false)}
-            onUpdated={(updatedProject) => {
-              onUpdated(updatedProject);
-              setIsBriefDialogOpen(false);
-            }}
-            presentation="dialog"
-            project={project}
-          />
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
+  return <ImageProjectReadOnlyDetail onProjectUpdated={onUpdated} project={project} />;
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
@@ -1498,21 +1491,26 @@ function validateEditor(values: EditorValues): EditorErrors {
     errors.name = "项目名称不能超过 120 个字符。";
   }
 
-  if (values.prompt.trim().length === 0) {
+  if (values.projectType === "video_ad" && values.prompt.trim().length === 0) {
     errors.prompt = "请输入广告需求。";
   }
 
-  if (values.targetPlatform.trim().length === 0) {
+  if (
+    values.projectType === "video_ad" &&
+    values.targetPlatform.trim().length === 0
+  ) {
     errors.targetPlatform = "请选择投放平台。";
   }
 
   if (
+    values.projectType === "video_ad" &&
     !aspectRatioOptions.some((option) => option.value === values.aspectRatio)
   ) {
     errors.aspectRatio = "请选择有效的画面比例。";
   }
 
   if (
+    values.projectType === "video_ad" &&
     !targetLanguageOptions.some(
       (option) => option.value === values.targetLanguage
     )
@@ -1527,18 +1525,6 @@ function validateEditor(values: EditorValues): EditorErrors {
       durationSeconds > 300)
   ) {
     errors.durationSeconds = "视频时长需为 1 至 300 秒的整数。";
-  }
-
-  if (values.projectType === "image_asset") {
-    if (!values.productName.trim()) {
-      errors.productName = "图片项目必须填写商品名称。";
-    }
-    if (!values.audience.trim()) {
-      errors.audience = "图片项目必须填写目标受众。";
-    }
-    if (parseSellingPoints(values.sellingPoints).length === 0) {
-      errors.sellingPoints = "图片项目至少填写一项核心卖点。";
-    }
   }
 
   return errors;

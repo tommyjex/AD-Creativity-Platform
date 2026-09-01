@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import backend.app.services.modelark as modelark_module
 from backend.app.core.config import Settings
 from backend.app.schemas import (
     Brief,
@@ -16,8 +17,13 @@ from backend.app.schemas import (
     StoryboardShotCreate,
     TargetLanguage,
 )
+from backend.app.schemas.tool_task import (
+    ToolVideoGenerationRequest as ToolTaskVideoGenerationRequest,
+)
 from backend.app.services.generation import ModelArkGenerationService
 from backend.app.services.modelark import (
+    AigcImagePromptOptimizationRequest,
+    AigcImagePromptOptimizationResult,
     BytePlusModelArkAdapter,
     CharacterGenerationRequest,
     CharacterImageEditRequest,
@@ -28,7 +34,9 @@ from backend.app.services.modelark import (
     MockModelArkAdapter,
     ModelArkProviderError,
     ModelArkTextParseError,
+    SeedanceVideoGenerationRequest,
     TextGenerationRequest,
+    ToolVideoGenerationRequest,
     VideoEditRequest,
     VideoGenerationRequest,
     VideoPromptOptimizationRequest,
@@ -643,6 +651,637 @@ def test_byteplus_video_adapter_generates_seedance_video_with_references() -> No
     ]
 
 
+@pytest.mark.parametrize(
+    ("model", "duration_seconds"),
+    [
+        ("doubao-seedance-2-5-260628", 4),
+        ("doubao-seedance-2-5-260628", 30),
+        ("doubao-seedance-2-0-260128", 4),
+        ("doubao-seedance-2-0-260128", 15),
+        ("doubao-seedance-2-0-fast-260128", 15),
+        ("doubao-seedance-2-0-mini-260615", 15),
+    ],
+)
+def test_tool_video_generation_request_accepts_model_duration_boundaries(
+    model: str, duration_seconds: int
+) -> None:
+    request = ToolVideoGenerationRequest(
+        model=model,
+        prompt="生成产品视频",
+        duration_seconds=duration_seconds,
+        resolution="720p",
+        aspect_ratio="16:9",
+    )
+
+    assert request.model == model
+    assert request.duration_seconds == duration_seconds
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "doubao-seedance-2-5-260628",
+        "doubao-seedance-2-0-260128",
+        "doubao-seedance-2-0-fast-260128",
+        "doubao-seedance-2-0-mini-260615",
+    ],
+)
+def test_tool_video_generation_requests_accept_automatic_duration(model: str) -> None:
+    for request_class in (
+        ToolTaskVideoGenerationRequest,
+        ToolVideoGenerationRequest,
+    ):
+        request = request_class(
+            model=model,
+            prompt="生成产品视频",
+            duration_seconds=-1,
+            resolution="720p",
+            aspect_ratio="16:9",
+        )
+
+        assert request.duration_seconds == -1
+
+
+def test_tool_video_generation_request_rejects_invalid_specifications() -> None:
+    invalid_cases = [
+        {
+            "model": "doubao-seedance-1-0",
+            "duration_seconds": 4,
+            "resolution": "720p",
+            "aspect_ratio": "16:9",
+        },
+        {
+            "model": "doubao-seedance-2-5-260628",
+            "duration_seconds": 31,
+            "resolution": "720p",
+            "aspect_ratio": "16:9",
+        },
+        {
+            "model": "doubao-seedance-2-0-fast-260128",
+            "duration_seconds": 16,
+            "resolution": "720p",
+            "aspect_ratio": "16:9",
+        },
+        {
+            "model": "doubao-seedance-2-5-260628",
+            "duration_seconds": -2,
+            "resolution": "720p",
+            "aspect_ratio": "16:9",
+        },
+        {
+            "model": "doubao-seedance-2-5-260628",
+            "duration_seconds": 0,
+            "resolution": "720p",
+            "aspect_ratio": "16:9",
+        },
+        {
+            "model": "doubao-seedance-2-5-260628",
+            "duration_seconds": 4.5,
+            "resolution": "720p",
+            "aspect_ratio": "16:9",
+        },
+        {
+            "model": "doubao-seedance-2-5-260628",
+            "duration_seconds": 4,
+            "resolution": "720p",
+            "aspect_ratio": "2:1",
+        },
+    ]
+
+    for invalid in invalid_cases:
+        with pytest.raises(ValueError):
+            ToolVideoGenerationRequest(prompt="生成产品视频", **invalid)
+
+
+@pytest.mark.parametrize(
+    ("model", "resolution"),
+    [
+        ("doubao-seedance-2-5-260628", "480p"),
+        ("doubao-seedance-2-5-260628", "720p"),
+        ("doubao-seedance-2-5-260628", "1080p"),
+        ("doubao-seedance-2-0-260128", "480p"),
+        ("doubao-seedance-2-0-260128", "720p"),
+        ("doubao-seedance-2-0-260128", "1080p"),
+        ("doubao-seedance-2-0-260128", "4k"),
+        ("doubao-seedance-2-0-fast-260128", "480p"),
+        ("doubao-seedance-2-0-fast-260128", "720p"),
+        ("doubao-seedance-2-0-mini-260615", "480p"),
+        ("doubao-seedance-2-0-mini-260615", "720p"),
+    ],
+)
+def test_tool_video_generation_request_accepts_model_resolutions(
+    model: str, resolution: str
+) -> None:
+    request = ToolVideoGenerationRequest(
+        model=model,
+        prompt="生成产品视频",
+        duration_seconds=4,
+        resolution=resolution,
+        aspect_ratio="16:9",
+    )
+
+    assert request.resolution == resolution
+
+
+@pytest.mark.parametrize(
+    ("model", "resolution"),
+    [
+        ("doubao-seedance-2-5-260628", "4k"),
+        ("doubao-seedance-2-0-fast-260128", "1080p"),
+        ("doubao-seedance-2-0-fast-260128", "4k"),
+        ("doubao-seedance-2-0-mini-260615", "1080p"),
+        ("doubao-seedance-2-0-mini-260615", "4k"),
+    ],
+)
+def test_tool_video_generation_request_rejects_disallowed_resolutions(
+    model: str, resolution: str
+) -> None:
+    with pytest.raises(ValueError):
+        ToolVideoGenerationRequest(
+            model=model,
+            prompt="生成产品视频",
+            duration_seconds=4,
+            resolution=resolution,
+            aspect_ratio="16:9",
+        )
+
+
+@pytest.mark.parametrize(
+    "aspect_ratio",
+    ["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"],
+)
+def test_tool_video_generation_request_accepts_supported_aspect_ratios(
+    aspect_ratio: str,
+) -> None:
+    request = ToolVideoGenerationRequest(
+        model="doubao-seedance-2-5-260628",
+        prompt="生成产品视频",
+        duration_seconds=4,
+        resolution="720p",
+        aspect_ratio=aspect_ratio,
+    )
+
+    assert request.aspect_ratio == aspect_ratio
+
+
+@pytest.mark.parametrize("aspect_ratio", ["2:1", "foo", "1:2"])
+def test_tool_video_generation_request_rejects_unsupported_aspect_ratios(
+    aspect_ratio: str,
+) -> None:
+    with pytest.raises(ValueError):
+        ToolVideoGenerationRequest(
+            model="doubao-seedance-2-5-260628",
+            prompt="生成产品视频",
+            duration_seconds=4,
+            resolution="720p",
+            aspect_ratio=aspect_ratio,
+        )
+
+
+def test_byteplus_adapter_generates_independent_tool_video() -> None:
+    client = FakeArkClient(
+        video_create_responses=[SimpleNamespace(id="tool-video-task-1")],
+        video_get_responses=[
+            SimpleNamespace(
+                status="succeeded",
+                content=SimpleNamespace(
+                    video_url="https://model.example/tool-generated.mp4",
+                    last_frame_url="https://model.example/ignored.png",
+                ),
+            )
+        ],
+    )
+    adapter = BytePlusModelArkAdapter(_settings(), client=client)
+    request = ToolVideoGenerationRequest(
+        model="doubao-seedance-2-0-fast-260128",
+        prompt="在城市夜景中展示运动耳机",
+        duration_seconds=-1,
+        resolution="720p",
+        aspect_ratio="16:9",
+        reference_image_urls=["https://assets.example.com/reference.png"],
+        reference_video_urls=["https://assets.example.com/reference.mp4"],
+        reference_audio_urls=["https://assets.example.com/reference.mp3"],
+    )
+
+    result = asyncio.run(adapter.generate_tool_video(request))
+
+    assert result.url == "https://model.example/tool-generated.mp4"
+    assert result.last_frame_url is None
+    assert result.metadata == {
+        "model": "doubao-seedance-2-0-fast-260128",
+        "generation_mode": "multimodal_reference",
+        "provider": "volcengine-modelark",
+        "provider_task_id": "tool-video-task-1",
+        "provider_request_id": None,
+        "prompt": "在城市夜景中展示运动耳机",
+        "duration_seconds": -1,
+        "aspect_ratio": "16:9",
+        "resolution": "720p",
+        "generate_audio": True,
+        "uses_first_frame": False,
+        "uses_last_frame": False,
+        "reference_image_count": 1,
+        "reference_video_count": 1,
+        "reference_audio_count": 1,
+        "status": "succeeded",
+    }
+    tasks = client.content_generation.tasks
+    assert tasks.get_calls == [{"task_id": "tool-video-task-1"}]
+    assert tasks.create_calls == [
+        {
+            "model": "doubao-seedance-2-0-fast-260128",
+            "content": [
+                {"type": "text", "text": "在城市夜景中展示运动耳机"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://assets.example.com/reference.png"},
+                    "role": "reference_image",
+                },
+                {
+                    "type": "video_url",
+                    "video_url": {"url": "https://assets.example.com/reference.mp4"},
+                    "role": "reference_video",
+                },
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://assets.example.com/reference.mp3"},
+                    "role": "reference_audio",
+                },
+            ],
+            "resolution": "720p",
+            "ratio": "16:9",
+            "duration": -1,
+            "generate_audio": True,
+            "watermark": False,
+        }
+    ]
+
+
+def test_byteplus_adapter_passes_resolution_and_ratio_to_provider() -> None:
+    client = FakeArkClient(
+        video_create_responses=[SimpleNamespace(id="tool-video-task-2")],
+        video_get_responses=[
+            SimpleNamespace(
+                status="succeeded",
+                content=SimpleNamespace(
+                    video_url="https://model.example/tool-4k.mp4",
+                    last_frame_url=None,
+                ),
+            )
+        ],
+    )
+    adapter = BytePlusModelArkAdapter(_settings(), client=client)
+    request = ToolVideoGenerationRequest(
+        model="doubao-seedance-2-0-260128",
+        prompt="展示高分辨率产品视频",
+        duration_seconds=10,
+        resolution="4k",
+        aspect_ratio="adaptive",
+    )
+
+    result = asyncio.run(adapter.generate_tool_video(request))
+
+    assert result.metadata["resolution"] == "4k"
+    assert result.metadata["aspect_ratio"] == "adaptive"
+    create_call = client.content_generation.tasks.create_calls[0]
+    assert create_call["resolution"] == "4k"
+    assert create_call["ratio"] == "adaptive"
+    assert create_call["duration"] == 10
+
+
+@pytest.mark.parametrize(
+    ("seedance_request", "expected_content"),
+    [
+        (
+            SeedanceVideoGenerationRequest(
+                model="doubao-seedance-2-5-260628",
+                generation_mode="text_to_video",
+                prompt="纯文本生成",
+                duration_seconds=4,
+                resolution="1080p",
+                aspect_ratio="16:9",
+                generate_audio=True,
+            ),
+            [{"type": "text", "text": "纯文本生成"}],
+        ),
+        (
+            SeedanceVideoGenerationRequest(
+                model="doubao-seedance-2-0-260128",
+                generation_mode="first_frame",
+                first_frame_url="https://assets.example.com/first.png",
+                duration_seconds=5,
+                resolution="4k",
+                aspect_ratio="adaptive",
+                generate_audio=False,
+            ),
+            [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://assets.example.com/first.png"},
+                    "role": "first_frame",
+                }
+            ],
+        ),
+        (
+            SeedanceVideoGenerationRequest(
+                model="doubao-seedance-2-0-fast-260128",
+                generation_mode="first_last_frame",
+                prompt="首尾帧过渡",
+                first_frame_url="https://assets.example.com/first.png",
+                last_frame_url="https://assets.example.com/last.png",
+                duration_seconds=6,
+                resolution="720p",
+                aspect_ratio="9:16",
+                generate_audio=True,
+            ),
+            [
+                {"type": "text", "text": "首尾帧过渡"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://assets.example.com/first.png"},
+                    "role": "first_frame",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://assets.example.com/last.png"},
+                    "role": "last_frame",
+                },
+            ],
+        ),
+        (
+            SeedanceVideoGenerationRequest(
+                model="doubao-seedance-2-0-mini-260615",
+                generation_mode="multimodal_reference",
+                prompt="按素材顺序生成",
+                reference_image_urls=[
+                    "https://assets.example.com/image-1.png",
+                    "https://assets.example.com/image-2.png",
+                ],
+                reference_video_urls=[
+                    "https://assets.example.com/video-1.mp4",
+                    "https://assets.example.com/video-2.mp4",
+                ],
+                reference_audio_urls=[
+                    "https://assets.example.com/audio-1.mp3",
+                    "https://assets.example.com/audio-2.mp3",
+                ],
+                duration_seconds=-1,
+                resolution="480p",
+                aspect_ratio="21:9",
+                generate_audio=False,
+            ),
+            [
+                {"type": "text", "text": "按素材顺序生成"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://assets.example.com/image-1.png"},
+                    "role": "reference_image",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://assets.example.com/image-2.png"},
+                    "role": "reference_image",
+                },
+                {
+                    "type": "video_url",
+                    "video_url": {"url": "https://assets.example.com/video-1.mp4"},
+                    "role": "reference_video",
+                },
+                {
+                    "type": "video_url",
+                    "video_url": {"url": "https://assets.example.com/video-2.mp4"},
+                    "role": "reference_video",
+                },
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://assets.example.com/audio-1.mp3"},
+                    "role": "reference_audio",
+                },
+                {
+                    "type": "audio_url",
+                    "audio_url": {"url": "https://assets.example.com/audio-2.mp3"},
+                    "role": "reference_audio",
+                },
+            ],
+        ),
+    ],
+)
+def test_seedance_adapter_supports_all_modes_models_and_stable_media_order(
+    seedance_request: SeedanceVideoGenerationRequest,
+    expected_content: list[dict[str, object]],
+) -> None:
+    client = FakeArkClient(
+        video_create_responses=[
+            SimpleNamespace(
+                id=f"task-{seedance_request.generation_mode}",
+                request_id=f"request-{seedance_request.generation_mode}",
+            )
+        ],
+        video_get_responses=[
+            SimpleNamespace(
+                status="succeeded",
+                content=SimpleNamespace(
+                    video_url="https://model.example/generated.mp4"
+                ),
+            )
+        ],
+    )
+    adapter = BytePlusModelArkAdapter(_settings(), client=client)
+
+    result = asyncio.run(adapter.generate_seedance_video(seedance_request))
+
+    call = client.content_generation.tasks.create_calls[0]
+    assert call["content"] == expected_content
+    assert call["model"] == seedance_request.model
+    assert call["resolution"] == seedance_request.resolution
+    assert call["ratio"] == seedance_request.aspect_ratio
+    assert call["duration"] == seedance_request.duration_seconds
+    assert call["generate_audio"] is seedance_request.generate_audio
+    assert result.metadata["generation_mode"] == seedance_request.generation_mode
+    assert (
+        result.metadata["provider_task_id"]
+        == f"task-{seedance_request.generation_mode}"
+    )
+    assert (
+        result.metadata["provider_request_id"]
+        == f"request-{seedance_request.generation_mode}"
+    )
+    assert result.metadata["uses_first_frame"] is bool(
+        seedance_request.first_frame_url
+    )
+    assert result.metadata["uses_last_frame"] is bool(
+        seedance_request.last_frame_url
+    )
+
+
+def test_seedance_request_allows_optional_text_and_25_audio_only() -> None:
+    request = SeedanceVideoGenerationRequest(
+        model="doubao-seedance-2-5-260628",
+        generation_mode="multimodal_reference",
+        prompt="   ",
+        reference_audio_urls=["https://assets.example.com/audio.mp3"],
+        duration_seconds=30,
+        resolution="720p",
+        aspect_ratio="adaptive",
+        generate_audio=False,
+    )
+
+    assert request.prompt is None
+    assert request.generate_audio is False
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "model": "doubao-seedance-2-5-260628",
+            "generation_mode": "text_to_video",
+            "prompt": None,
+        },
+        {
+            "model": "doubao-seedance-2-5-260628",
+            "generation_mode": "first_frame",
+            "first_frame_url": "https://assets.example.com/first.png",
+            "reference_image_urls": ["https://assets.example.com/reference.png"],
+        },
+        {
+            "model": "doubao-seedance-2-5-260628",
+            "generation_mode": "first_last_frame",
+            "first_frame_url": "https://assets.example.com/first.png",
+        },
+        {
+            "model": "doubao-seedance-2-0-260128",
+            "generation_mode": "multimodal_reference",
+            "reference_audio_urls": ["https://assets.example.com/audio.mp3"],
+        },
+        {
+            "model": "doubao-seedance-2-5-260628",
+            "generation_mode": "multimodal_reference",
+            "prompt": "生成",
+            "generate_audio": 1,
+        },
+    ],
+)
+def test_seedance_request_rejects_invalid_mode_combinations_and_weak_types(
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        SeedanceVideoGenerationRequest(
+            duration_seconds=4,
+            resolution="720p",
+            aspect_ratio="16:9",
+            **payload,
+        )
+
+
+def test_seedance_mock_and_real_adapters_return_consistent_metadata() -> None:
+    request = SeedanceVideoGenerationRequest(
+        model="doubao-seedance-2-5-260628",
+        generation_mode="first_last_frame",
+        first_frame_url="https://assets.example.com/first.png",
+        last_frame_url="https://assets.example.com/last.png",
+        duration_seconds=8,
+        resolution="1080p",
+        aspect_ratio="adaptive",
+        generate_audio=False,
+    )
+    client = FakeArkClient(
+        video_create_responses=[
+            SimpleNamespace(id="task-consistency", request_id="request-consistency")
+        ],
+        video_get_responses=[
+            SimpleNamespace(
+                status="succeeded",
+                content=SimpleNamespace(
+                    video_url="https://model.example/generated.mp4"
+                ),
+            )
+        ],
+    )
+
+    real = asyncio.run(
+        BytePlusModelArkAdapter(_settings(), client=client)
+        .generate_seedance_video(request)
+    )
+    mock = asyncio.run(MockModelArkAdapter(_settings()).generate_seedance_video(request))
+
+    assert set(real.metadata) == set(mock.metadata)
+    for key in (
+        "model",
+        "generation_mode",
+        "prompt",
+        "duration_seconds",
+        "aspect_ratio",
+        "resolution",
+        "generate_audio",
+        "uses_first_frame",
+        "uses_last_frame",
+        "reference_image_count",
+        "reference_video_count",
+        "reference_audio_count",
+        "status",
+    ):
+        assert real.metadata[key] == mock.metadata[key]
+
+
+def test_seedance_adapter_sanitizes_poll_failure() -> None:
+    client = FakeArkClient(
+        video_create_responses=[SimpleNamespace(id="seedance-task-failed")],
+        video_get_responses=[
+            SimpleNamespace(
+                status="failed",
+                error=SimpleNamespace(
+                    code="ProviderFailure",
+                    message="secret provider detail; request id: safe-request-1",
+                ),
+            )
+        ],
+    )
+    adapter = BytePlusModelArkAdapter(_settings(), client=client)
+    request = SeedanceVideoGenerationRequest(
+        model="doubao-seedance-2-5-260628",
+        generation_mode="text_to_video",
+        prompt="产品视频",
+        duration_seconds=4,
+        resolution="720p",
+        aspect_ratio="16:9",
+    )
+
+    with pytest.raises(ModelArkProviderError) as exc_info:
+        asyncio.run(adapter.generate_seedance_video(request))
+
+    assert str(exc_info.value) == "video generation task failed"
+    assert exc_info.value.provider_code == "ProviderFailure"
+    assert exc_info.value.request_id == "safe-request-1"
+    assert exc_info.value.provider_task_id == "seedance-task-failed"
+    assert "secret provider detail" not in exc_info.value.safe_detail()
+
+
+def test_seedance_adapter_times_out_with_safe_metadata(monkeypatch) -> None:
+    client = FakeArkClient(
+        video_create_responses=[SimpleNamespace(id="seedance-task-timeout")],
+        video_get_responses=[SimpleNamespace(status="processing")],
+    )
+    adapter = BytePlusModelArkAdapter(_settings(), client=client)
+    clock = iter((0.0, 31.0))
+    monkeypatch.setattr(modelark_module, "monotonic", lambda: next(clock))
+    request = SeedanceVideoGenerationRequest(
+        model="doubao-seedance-2-5-260628",
+        generation_mode="text_to_video",
+        prompt="产品视频",
+        duration_seconds=4,
+        resolution="720p",
+        aspect_ratio="16:9",
+    )
+
+    with pytest.raises(ModelArkProviderError) as exc_info:
+        asyncio.run(adapter.generate_seedance_video(request))
+
+    assert exc_info.value.provider_code == "TaskTimeout"
+    assert exc_info.value.provider_task_id == "seedance-task-timeout"
+    assert exc_info.value.phase == "poll"
+
+
 def test_byteplus_video_adapter_edits_video_as_reference_candidate() -> None:
     client = FakeArkClient(
         video_create_responses=[SimpleNamespace(id="video-edit-task-1")],
@@ -890,6 +1529,29 @@ def test_hybrid_adapter_routes_video_to_real_adapter() -> None:
     assert result is expected
     real_adapter.generate_video.assert_awaited_once_with(request)
     mock_adapter.generate_video.assert_not_awaited()
+
+
+def test_hybrid_adapter_routes_tool_video_to_real_adapter() -> None:
+    expected = SimpleNamespace(url="https://model.example/tool-generated.mp4")
+    real_adapter = SimpleNamespace(generate_tool_video=AsyncMock(return_value=expected))
+    mock_adapter = SimpleNamespace(generate_tool_video=AsyncMock())
+    adapter = HybridModelArkAdapter(
+        character_adapter=real_adapter,
+        fallback_adapter=mock_adapter,
+    )
+    request = ToolVideoGenerationRequest(
+        model="doubao-seedance-2-5-260628",
+        prompt="产品展示",
+        duration_seconds=4,
+        resolution="720p",
+        aspect_ratio="1:1",
+    )
+
+    result = asyncio.run(adapter.generate_tool_video(request))
+
+    assert result is expected
+    real_adapter.generate_tool_video.assert_awaited_once_with(request)
+    mock_adapter.generate_tool_video.assert_not_awaited()
 
 
 def test_byteplus_character_adapter_rejects_empty_character_output() -> None:
@@ -1207,6 +1869,66 @@ def test_mock_video_prompt_optimizer_is_deterministic_and_structured() -> None:
     assert "优化增强" in first.optimized_prompt
     assert "[0s-4s]" in first.optimized_prompt
     assert first.optimized_prompt.count("【连续时间轴】") == 1
+
+
+def test_aigc_image_prompt_optimizer_uses_structured_seedream_contract() -> None:
+    request = AigcImagePromptOptimizationRequest(
+        text="把包装改成红色",
+        reference_instructions=["保留商标位置"],
+        generation_modes=["image_to_image"],
+        reference_image_count=2,
+    )
+    system_prompt, user_prompt = (
+        MockModelArkAdapter.build_aigc_image_prompt_optimization_messages(request)
+    )
+    client = FakeArkClient(
+        chat_responses=[
+            _chat_response(
+                json.dumps(
+                    {
+                        "optimized_text": "将产品包装改为红色，其余内容保持不变",
+                        "optimized_reference_instructions": ["保持商标位置与大小不变"],
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ]
+    )
+
+    result = asyncio.run(
+        BytePlusModelArkAdapter(_settings(), client=client)
+        .optimize_aigc_image_prompt(request)
+    )
+
+    assert result.optimized_text.startswith("将产品包装")
+    assert result.optimized_reference_instructions == ["保持商标位置与大小不变"]
+    assert "不得生成 <bbox>" in system_prompt
+    assert "reference_image_count" in user_prompt
+    call = client.chat.completions.calls[0]
+    assert call["response_format"] == {"type": "json_object"}
+    assert call["temperature"] == 0.1
+
+
+def test_aigc_image_prompt_service_rejects_changed_reference_count() -> None:
+    adapter = SimpleNamespace(
+        optimize_aigc_image_prompt=AsyncMock(
+            return_value=AigcImagePromptOptimizationResult(
+                optimized_text="优化结果",
+                optimized_reference_instructions=[],
+            )
+        )
+    )
+    service = ModelArkGenerationService(adapter=adapter)
+
+    with pytest.raises(ModelArkTextParseError, match="changed reference count"):
+        asyncio.run(
+            service.optimize_aigc_image_prompt(
+                text="修改包装",
+                reference_instructions=["保留商标"],
+                generation_modes=["image_to_image"],
+                reference_image_count=1,
+            )
+        )
 
 
 def test_english_video_prompt_optimizer_messages_and_mock_follow_brief_language() -> None:

@@ -31,7 +31,14 @@ from .modelark import (
     MockModelArkAdapter,
     ModelArkAdapter,
     TextGenerationRequest,
+    ToolVideoGenerationRequest,
     VideoGenerationRequest,
+)
+from .video_normalizer import (
+    NormalizedVideo,
+    VideoNormalizationError,
+    VideoNormalizer,
+    get_video_normalizer,
 )
 
 __all__ = [
@@ -56,13 +63,18 @@ __all__ = [
     "StoredAssetInput",
     "TextGenerationRequest",
     "TosObjectStorageClient",
+    "ToolVideoGenerationRequest",
     "VideoComposer",
+    "NormalizedVideo",
+    "VideoNormalizationError",
+    "VideoNormalizer",
     "VideoCompositionError",
     "VideoGenerationRequest",
     "WorkflowError",
     "WorkflowService",
     "get_asset_storage_service",
     "get_generation_service",
+    "get_video_normalizer",
     "get_video_composer",
 ]
 
