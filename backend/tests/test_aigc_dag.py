@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import pytest
 
-from backend.app.schemas import AigcNodeType, AigcPipelineDefinition
+from backend.app.schemas import (
+    AigcNodeType,
+    AigcPipelineDefinition,
+    AigcPipelineDefinitionV2,
+    AigcPipelineRunMode,
+)
 from backend.app.services.aigc_dag import (
     AigcCacheCandidate,
     AigcDagValidationError,
     AigcPlanAction,
     AigcUpstreamDigest,
+    aigc_connected_node_ids,
+    aigc_run_scope_node_ids,
     build_aigc_execution_plan,
     canonical_aigc_input_hash,
     validate_aigc_dag,
@@ -41,6 +48,19 @@ def edge(
     }
 
 
+def v2_definition(
+    nodes: list[dict[str, object]],
+    edges: list[dict[str, object]] | None = None,
+) -> AigcPipelineDefinitionV2:
+    return AigcPipelineDefinitionV2.model_validate(
+        {
+            "schemaVersion": 2,
+            "nodes": nodes,
+            "edges": edges or [],
+        }
+    )
+
+
 def chain_definition() -> AigcPipelineDefinition:
     return AigcPipelineDefinition.model_validate(
         {
@@ -66,6 +86,149 @@ def chain_definition() -> AigcPipelineDefinition:
             ],
         }
     )
+
+
+def disconnected_definition() -> AigcPipelineDefinitionV2:
+    return v2_definition(
+        [
+            node("flow-a-input", "text", 0),
+            node("flow-a-model", "llm", 300),
+            node("flow-a-output", "text", 600),
+            node("flow-a-branch", "text", 600),
+            node("flow-b-input", "text", 0),
+            node("flow-b-model", "llm", 300),
+            node("isolated", "text", 900),
+        ],
+        [
+            edge(
+                "flow-a-input-model",
+                "flow-a-input",
+                "text",
+                "flow-a-model",
+                "prompt",
+            ),
+            edge(
+                "flow-a-model-output",
+                "flow-a-model",
+                "text",
+                "flow-a-output",
+                "text",
+            ),
+            edge(
+                "flow-a-model-branch",
+                "flow-a-model",
+                "text",
+                "flow-a-branch",
+                "text",
+            ),
+            edge(
+                "flow-b-input-model",
+                "flow-b-input",
+                "text",
+                "flow-b-model",
+                "prompt",
+            ),
+        ],
+    )
+
+
+def test_aigc_connected_node_ids_handles_chains_branches_and_isolated_nodes() -> None:
+    definition = disconnected_definition()
+
+    assert aigc_connected_node_ids(
+        definition,
+        "flow-a-output",
+    ) == frozenset(
+        {
+            "flow-a-input",
+            "flow-a-model",
+            "flow-a-output",
+            "flow-a-branch",
+        }
+    )
+    assert aigc_connected_node_ids(
+        definition,
+        "flow-b-model",
+    ) == frozenset({"flow-b-input", "flow-b-model"})
+    assert aigc_connected_node_ids(
+        definition,
+        "isolated",
+    ) == frozenset({"isolated"})
+
+
+def test_aigc_connected_node_ids_canonicalizes_legacy_definition() -> None:
+    assert aigc_connected_node_ids(
+        chain_definition(),
+        "output",
+    ) == frozenset({"input", "llm", "image", "output"})
+
+
+@pytest.mark.parametrize(
+    ("mode", "start_node_id", "expected"),
+    [
+        (
+            AigcPipelineRunMode.FROM_NODE,
+            "flow-a-output",
+            frozenset(
+                {
+                    "flow-a-input",
+                    "flow-a-model",
+                    "flow-a-output",
+                    "flow-a-branch",
+                }
+            ),
+        ),
+        (
+            AigcPipelineRunMode.RETRY_NODE,
+            "flow-b-model",
+            frozenset({"flow-b-input", "flow-b-model"}),
+        ),
+    ],
+)
+def test_aigc_partial_run_scope_uses_undirected_connected_component(
+    mode: AigcPipelineRunMode,
+    start_node_id: str,
+    expected: frozenset[str],
+) -> None:
+    assert aigc_run_scope_node_ids(
+        disconnected_definition(),
+        mode=mode,
+        start_node_id=start_node_id,
+    ) == expected
+
+
+def test_aigc_full_run_scope_contains_every_node() -> None:
+    definition = disconnected_definition()
+
+    assert aigc_run_scope_node_ids(
+        definition,
+        mode=AigcPipelineRunMode.FULL,
+        start_node_id=None,
+    ) == frozenset(node.id for node in definition.nodes)
+
+
+@pytest.mark.parametrize(
+    ("mode", "start_node_id"),
+    [
+        (AigcPipelineRunMode.FROM_NODE, None),
+        (AigcPipelineRunMode.FROM_NODE, "missing"),
+        (AigcPipelineRunMode.RETRY_NODE, None),
+        (AigcPipelineRunMode.RETRY_NODE, "missing"),
+    ],
+)
+def test_aigc_run_scope_rejects_missing_start_node(
+    mode: AigcPipelineRunMode,
+    start_node_id: str | None,
+) -> None:
+    with pytest.raises(AigcDagValidationError) as error:
+        aigc_run_scope_node_ids(
+            disconnected_definition(),
+            mode=mode,
+            start_node_id=start_node_id,
+        )
+
+    assert error.value.code == "start_node_missing"
+    assert error.value.node_id == start_node_id
 
 
 def image_to_image_definition(image_count: int) -> AigcPipelineDefinition:
@@ -261,6 +424,169 @@ def test_validate_aigc_dag_rejects_invalid_ports_and_duplicate_inputs() -> None:
     with pytest.raises(AigcDagValidationError) as duplicate_error:
         validate_aigc_dag(duplicate)
     assert duplicate_error.value.code == "input_already_connected"
+
+
+def test_v2_modality_nodes_participate_in_topology_but_not_execution() -> None:
+    definition = v2_definition(
+        [
+            node("source", "text", 0, config={"text": "商品"}),
+            node("relay", "text", 200, config={"text": "备用"}),
+            node("model", "llm", 400),
+            node("terminal", "text", 600),
+        ],
+        [
+            edge("source-relay", "source", "text", "relay", "text"),
+            edge("relay-model", "relay", "text", "model", "prompt"),
+            edge("model-terminal", "model", "text", "terminal", "text"),
+        ],
+    )
+
+    plan = build_aigc_execution_plan(definition, mode="full")
+
+    assert plan.topological_order == ("source", "relay", "model", "terminal")
+    assert plan.actions == {
+        "source": AigcPlanAction.RESOLVE,
+        "relay": AigcPlanAction.PROJECT,
+        "model": AigcPlanAction.EXECUTE,
+        "terminal": AigcPlanAction.PROJECT,
+    }
+    assert plan.executable_node_ids == ("model",)
+
+
+def test_v2_modality_validation_rejects_second_input_and_wrong_type() -> None:
+    duplicate = v2_definition(
+        [
+            node("first", "text", 0, config={"text": "一"}),
+            node("second", "text", 0, config={"text": "二"}),
+            node("relay", "text", 300),
+            node("model", "llm", 600),
+        ],
+        [
+            edge("first-relay", "first", "text", "relay", "text"),
+            edge("second-relay", "second", "text", "relay", "text"),
+            edge("relay-model", "relay", "text", "model", "prompt"),
+        ],
+    )
+    with pytest.raises(AigcDagValidationError) as duplicate_error:
+        validate_aigc_dag(duplicate)
+    assert duplicate_error.value.code == "input_already_connected"
+    assert duplicate_error.value.node_id == "relay"
+    assert duplicate_error.value.edge_id == "second-relay"
+
+    mismatch = v2_definition(
+        [
+            node("image", "image", 0),
+            node("text", "text", 300),
+            node("model", "llm", 600),
+        ],
+        [
+            edge("wrong-type", "image", "image", "text", "text"),
+            edge("text-model", "text", "text", "model", "prompt"),
+        ],
+    )
+    with pytest.raises(AigcDagValidationError) as mismatch_error:
+        validate_aigc_dag(mismatch)
+    assert mismatch_error.value.code == "port_type_mismatch"
+    assert mismatch_error.value.edge_id == "wrong-type"
+
+
+def test_v2_modality_validation_rejects_self_loop_and_indirect_cycle() -> None:
+    self_loop = v2_definition(
+        [
+            node("same", "text", 0),
+            node("model", "llm", 300),
+        ],
+        [
+            edge("self", "same", "text", "same", "text"),
+            edge("same-model", "same", "text", "model", "prompt"),
+        ],
+    )
+    with pytest.raises(AigcDagValidationError) as self_loop_error:
+        validate_aigc_dag(self_loop)
+    assert self_loop_error.value.code == "self_loop"
+    assert self_loop_error.value.edge_id == "self"
+
+    cycle = v2_definition(
+        [
+            node("first", "text", 0),
+            node("second", "text", 200),
+            node("model", "llm", 400),
+        ],
+        [
+            edge("first-second", "first", "text", "second", "text"),
+            edge("second-first", "second", "text", "first", "text"),
+            edge("second-model", "second", "text", "model", "prompt"),
+        ],
+    )
+    with pytest.raises(AigcDagValidationError) as cycle_error:
+        validate_aigc_dag(cycle)
+    assert cycle_error.value.code == "cycle_detected"
+
+
+def test_v2_empty_terminal_is_idle_and_pure_modality_pipeline_is_rejected() -> None:
+    definition = v2_definition(
+        [
+            node("prompt", "text", 0, config={"text": "商品"}),
+            node("model", "llm", 300),
+            node("empty-terminal", "image", 600),
+        ],
+        [edge("prompt-model", "prompt", "text", "model", "prompt")],
+    )
+
+    plan = build_aigc_execution_plan(definition, mode="full")
+
+    assert plan.actions["empty-terminal"] == AigcPlanAction.IDLE
+
+    pure_modality = v2_definition(
+        [
+            node("source", "text", 0, config={"text": "商品"}),
+            node("relay", "text", 300),
+        ],
+        [edge("source-relay", "source", "text", "relay", "text")],
+    )
+    with pytest.raises(AigcDagValidationError) as pure_error:
+        build_aigc_execution_plan(pure_modality, mode="full")
+    assert pure_error.value.code == "model_node_required"
+
+
+def test_from_modality_node_reuses_model_ancestor_and_projects_relay() -> None:
+    definition = v2_definition(
+        [
+            node("source", "text", 0, config={"text": "商品"}),
+            node("producer", "llm", 200),
+            node("relay", "text", 400, config={"text": "不得回退"}),
+            node("consumer", "llm", 600),
+        ],
+        [
+            edge("source-producer", "source", "text", "producer", "prompt"),
+            edge("producer-relay", "producer", "text", "relay", "text"),
+            edge("relay-consumer", "relay", "text", "consumer", "prompt"),
+        ],
+    )
+
+    plan = build_aigc_execution_plan(
+        definition,
+        mode="from_node",
+        start_node_id="relay",
+        input_hashes={"producer": "producer-hash"},
+        cache_candidates={
+            "producer": AigcCacheCandidate(
+                node_id="producer",
+                input_hash="producer-hash",
+                task_id="producer-task",
+                output_available=True,
+            )
+        },
+    )
+
+    assert plan.actions == {
+        "source": AigcPlanAction.RESOLVE,
+        "producer": AigcPlanAction.REUSE,
+        "relay": AigcPlanAction.PROJECT,
+        "consumer": AigcPlanAction.EXECUTE,
+    }
+    assert plan.executable_node_ids == ("consumer",)
+    assert plan.reused_from_task_ids == {"producer": "producer-task"}
 
 
 @pytest.mark.parametrize("image_count", [1, 10])
@@ -597,6 +923,66 @@ def test_validate_aigc_dag_accepts_strict_bbox_reference_relationship() -> None:
     )[-1] == "model"
 
 
+def test_validate_v2_dag_accepts_paused_bbox_reference_relationship() -> None:
+    definition = v2_definition(
+        [
+            node("image-producer", "text_to_image", 0),
+            node("text-producer", "llm", 0),
+            node(
+                "image",
+                "image",
+                300,
+                config={
+                    "asset_id": "local-image",
+                    "bbox_asset_id": "local-image",
+                    "bbox": {
+                        "type": "bbox",
+                        "x1": 100,
+                        "y1": 200,
+                        "x2": 700,
+                        "y2": 800,
+                    },
+                },
+            ),
+            node(
+                "prompt",
+                "text",
+                300,
+                config={
+                    "text": "编辑",
+                    "bbox_references": [
+                        {
+                            "source_node_id": "image",
+                            "instruction": "保留说明",
+                        }
+                    ],
+                },
+            ),
+            node("model", "image_to_image", 600),
+        ],
+        [
+            edge(
+                "image-upstream",
+                "image-producer",
+                "image",
+                "image",
+                "image",
+            ),
+            edge(
+                "text-upstream",
+                "text-producer",
+                "text",
+                "prompt",
+                "text",
+            ),
+            edge("image-edge", "image", "image", "model", "image"),
+            edge("prompt-edge", "prompt", "text", "model", "prompt"),
+        ],
+    )
+
+    assert validate_aigc_dag_structure(definition)[-1] == "model"
+
+
 @pytest.mark.parametrize(
     ("mutate", "error_code"),
     [
@@ -661,7 +1047,7 @@ def test_validate_aigc_dag_rejects_invalid_bbox_reference_relationships(
     assert error.value.node_id == "prompt"
 
 
-def test_validate_aigc_dag_rejects_missing_inputs_assets_and_model() -> None:
+def test_validate_aigc_dag_rejects_missing_inputs_and_model() -> None:
     missing_input = AigcPipelineDefinition.model_validate(
         {"nodes": [node("llm", "llm", 0)]}
     )
@@ -682,9 +1068,10 @@ def test_validate_aigc_dag_rejects_missing_inputs_assets_and_model() -> None:
             ],
         }
     )
-    with pytest.raises(AigcDagValidationError) as asset_error:
-        validate_aigc_dag(missing_asset, available_asset_ids=set())
-    assert asset_error.value.code == "asset_unavailable"
+    assert validate_aigc_dag(
+        missing_asset,
+        available_asset_ids=set(),
+    ) == ("image", "prompt", "model")
 
     no_model = AigcPipelineDefinition.model_validate(
         {"nodes": [node("input", "text_input", 0)]}
@@ -718,7 +1105,7 @@ def test_structure_validation_allows_empty_and_incomplete_drafts() -> None:
 
     with pytest.raises(AigcDagValidationError) as error:
         validate_aigc_dag(incomplete, available_asset_ids=set())
-    assert error.value.code == "asset_unavailable"
+    assert error.value.code == "required_input_missing"
 
 
 def test_structure_validation_still_rejects_invalid_connections() -> None:
@@ -1382,3 +1769,66 @@ def test_full_plan_executes_layer_control_nodes() -> None:
     assert plan.actions["canvas"] == AigcPlanAction.EXECUTE
     assert plan.actions["edit"] == AigcPlanAction.EXECUTE
     assert plan.actions["composite"] == AigcPlanAction.EXECUTE
+
+
+def test_full_plan_executes_multi_track_edit_with_four_multi_inputs() -> None:
+    definition = v2_definition(
+        [
+            node("video-a", "video", 0, config={"asset_id": "video-a"}),
+            node("video-b", "video", 0, config={"asset_id": "video-b"}),
+            node("image", "image", 0, config={"asset_id": "image"}),
+            node("audio", "audio", 0, config={"asset_id": "audio"}),
+            node("text", "text", 0, config={"text": "标题"}),
+            node(
+                "edit",
+                "multi_track_edit",
+                300,
+                config={
+                    "canvas": {
+                        "mode": "custom",
+                        "width": 1920,
+                        "height": 1080,
+                    },
+                    "tracks": [
+                        {
+                            "id": "video-track",
+                            "name": "视频",
+                            "type": "video",
+                            "elements": [
+                                {
+                                    "id": "video-element",
+                                    "type": "video",
+                                    "source": {
+                                        "source_node_id": "video-a",
+                                        "source_handle": "video",
+                                    },
+                                    "target_time": {
+                                        "start_ms": 0,
+                                        "end_ms": 2000,
+                                    },
+                                    "transform": {
+                                        "x": 0,
+                                        "y": 0,
+                                        "width": 1920,
+                                        "height": 1080,
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ),
+        ],
+        [
+            edge("video-a-edit", "video-a", "video", "edit", "videos"),
+            edge("video-b-edit", "video-b", "video", "edit", "videos"),
+            edge("image-edit", "image", "image", "edit", "images"),
+            edge("audio-edit", "audio", "audio", "edit", "audios"),
+            edge("text-edit", "text", "text", "edit", "texts"),
+        ],
+    )
+
+    plan = build_aigc_execution_plan(definition, mode="full")
+
+    assert plan.actions["edit"] == AigcPlanAction.EXECUTE
+    assert plan.executable_node_ids == ("edit",)

@@ -5,26 +5,29 @@ import json
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, TypeAlias
 
 from backend.app.schemas import (
     AIGC_DEFAULT_IMAGE_MODEL,
     AIGC_MAX_EDGES,
     AIGC_MAX_NODES,
-    AIGC_NODE_REGISTRY,
-    AigcNode,
+    AIGC_V2_NODE_REGISTRY,
     AigcNodeType,
     AigcPipelineDefinition,
+    AigcPipelineDefinitionV2,
     AigcPipelineRunMode,
     AigcVideoGenerationMode,
-    AudioInputNode,
-    ImageInputNode,
+    AudioNode,
+    ImageNode,
     ImageToImageNode,
     LayerCanvasNode,
-    TextInputNode,
+    MultiTrackEditNode,
+    TextNode,
+    VideoNode,
     VideoGenerationNode,
-    VideoInputNode,
 )
+from backend.app.schemas.aigc import AigcV2Node
+from backend.app.schemas.aigc_definition_migration import migrate_aigc_definition_v2
 from backend.app.schemas.seedance import SEEDANCE_CAPABILITIES, SEEDANCE_DEFAULT_MODEL
 
 
@@ -83,30 +86,33 @@ class AigcExecutionPlan:
         )
 
 
-NODE_REGISTRY_BY_TYPE = {item.type: item for item in AIGC_NODE_REGISTRY}
+AigcGraphDefinition: TypeAlias = (
+    AigcPipelineDefinition | AigcPipelineDefinitionV2
+)
+AigcGraphNode: TypeAlias = AigcV2Node
+
+NODE_REGISTRY_BY_TYPE = {
+    item.type: item for item in AIGC_V2_NODE_REGISTRY
+}
 MODEL_NODE_TYPES = {
     AigcNodeType.LLM,
     AigcNodeType.TEXT_TO_IMAGE,
     AigcNodeType.IMAGE_TO_IMAGE,
     AigcNodeType.VIDEO_GENERATION,
+    AigcNodeType.VIDEO_ENHANCEMENT,
+    AigcNodeType.VIDEO_FACE_BLUR,
+    AigcNodeType.MULTI_TRACK_EDIT,
 }
 EXECUTABLE_NODE_TYPES = MODEL_NODE_TYPES | {
     AigcNodeType.LAYER_CANVAS,
     AigcNodeType.LAYER_COMPOSITE,
 }
-INPUT_NODE_TYPES = {
-    AigcNodeType.TEXT_INPUT,
-    AigcNodeType.IMAGE_INPUT,
-    AigcNodeType.VIDEO_INPUT,
-    AigcNodeType.AUDIO_INPUT,
+MODALITY_NODE_TYPES = {
+    AigcNodeType.TEXT,
+    AigcNodeType.IMAGE,
+    AigcNodeType.VIDEO,
+    AigcNodeType.AUDIO,
 }
-OUTPUT_NODE_TYPES = {
-    AigcNodeType.TEXT_OUTPUT,
-    AigcNodeType.IMAGE_OUTPUT,
-    AigcNodeType.VIDEO_OUTPUT,
-}
-
-ASSET_INPUT_NODE_TYPES = (ImageInputNode, VideoInputNode, AudioInputNode)
 VIDEO_REFERENCE_LIMIT_ATTRIBUTES = {
     "reference_images": "max_reference_images",
     "reference_videos": "max_reference_videos",
@@ -115,11 +121,12 @@ VIDEO_REFERENCE_LIMIT_ATTRIBUTES = {
 
 
 def validate_aigc_dag(
-    definition: AigcPipelineDefinition,
+    definition: AigcGraphDefinition,
     *,
     available_asset_ids: set[str] | None = None,
     require_complete: bool = True,
 ) -> tuple[str, ...]:
+    definition = _canonical_graph(definition)
     if len(definition.nodes) > AIGC_MAX_NODES:
         raise AigcDagValidationError("too_many_nodes", "node limit exceeded")
     if len(definition.edges) > AIGC_MAX_EDGES:
@@ -139,25 +146,6 @@ def validate_aigc_dag(
     input_connection_counts: dict[tuple[str, str], int] = defaultdict(int)
     output_connection_counts: dict[tuple[str, str], int] = defaultdict(int)
     edge_connections: set[tuple[str, str, str, str]] = set()
-
-    for node in definition.nodes:
-        if require_complete and isinstance(node, ASSET_INPUT_NODE_TYPES):
-            asset_id = node.config.asset_id
-            if not asset_id:
-                raise AigcDagValidationError(
-                    "asset_required",
-                    f"{node.type.value} requires an asset",
-                    node_id=node.id,
-                )
-            if (
-                available_asset_ids is not None
-                and asset_id not in available_asset_ids
-            ):
-                raise AigcDagValidationError(
-                    "asset_unavailable",
-                    f"{node.type.value} asset is unavailable",
-                    node_id=node.id,
-                )
 
     for edge in definition.edges:
         connection = (
@@ -321,13 +309,58 @@ def validate_aigc_dag(
 
 
 def validate_aigc_dag_structure(
-    definition: AigcPipelineDefinition,
+    definition: AigcGraphDefinition,
 ) -> tuple[str, ...]:
     """Validate persistable graph structure without requiring runnable inputs."""
     return validate_aigc_dag(definition, require_complete=False)
 
 
-def _max_input_connections(node: AigcNode, port_id: str) -> int:
+def aigc_connected_node_ids(
+    definition: AigcGraphDefinition,
+    start_node_id: str,
+) -> frozenset[str]:
+    definition = _canonical_graph(definition)
+    node_ids = {node.id for node in definition.nodes}
+    if start_node_id not in node_ids:
+        raise AigcDagValidationError(
+            "start_node_missing",
+            "incremental execution requires a valid start node",
+            node_id=start_node_id,
+        )
+
+    adjacency = {node_id: set() for node_id in node_ids}
+    for edge in definition.edges:
+        adjacency[edge.source_node_id].add(edge.target_node_id)
+        adjacency[edge.target_node_id].add(edge.source_node_id)
+
+    visited = {start_node_id}
+    pending = deque([start_node_id])
+    while pending:
+        current = pending.popleft()
+        for neighbor in adjacency[current] - visited:
+            visited.add(neighbor)
+            pending.append(neighbor)
+    return frozenset(visited)
+
+
+def aigc_run_scope_node_ids(
+    definition: AigcGraphDefinition,
+    *,
+    mode: AigcPipelineRunMode,
+    start_node_id: str | None,
+) -> frozenset[str]:
+    definition = _canonical_graph(definition)
+    if mode == AigcPipelineRunMode.FULL:
+        return frozenset(node.id for node in definition.nodes)
+    if start_node_id is None:
+        raise AigcDagValidationError(
+            "start_node_missing",
+            "incremental execution requires a valid start node",
+        )
+    return aigc_connected_node_ids(definition, start_node_id)
+
+
+def _max_input_connections(node: AigcGraphNode, port_id: str) -> int:
     port = _port(node, port_id, output=False)
     if port is None:
         return 0
@@ -345,7 +378,7 @@ def _max_input_connections(node: AigcNode, port_id: str) -> int:
 
 
 def _image_port_enabled(
-    node: AigcNode,
+    node: AigcGraphNode,
     port_id: str,
     *,
     output: bool,
@@ -370,7 +403,7 @@ def _image_port_enabled(
 
 
 def _validate_image_node_connections(
-    definition: AigcPipelineDefinition,
+    definition: AigcGraphDefinition,
     input_counts: Mapping[tuple[str, str], int],
     output_counts: Mapping[tuple[str, str], int],
     *,
@@ -442,7 +475,7 @@ def _validate_image_node_connections(
 
 
 def _validate_layer_canvas_connections(
-    definition: AigcPipelineDefinition,
+    definition: AigcGraphDefinition,
     output_counts: Mapping[tuple[str, str], int],
 ) -> None:
     for node in definition.nodes:
@@ -459,7 +492,7 @@ def _validate_layer_canvas_connections(
 
 
 def _validate_video_generation_inputs(
-    definition: AigcPipelineDefinition,
+    definition: AigcGraphDefinition,
     connection_counts: Mapping[tuple[str, str], int],
 ) -> None:
     for node in definition.nodes:
@@ -545,15 +578,15 @@ def _validate_video_generation_inputs(
 
 
 def _validate_bbox_prompt_references(
-    definition: AigcPipelineDefinition,
-    node_by_id: Mapping[str, AigcNode],
+    definition: AigcGraphDefinition,
+    node_by_id: Mapping[str, AigcGraphNode],
 ) -> None:
     edges_by_source: dict[str, list] = defaultdict(list)
     for edge in definition.edges:
         edges_by_source[edge.source_node_id].append(edge)
 
     for node in definition.nodes:
-        if not isinstance(node, TextInputNode) or not node.config.bbox_references:
+        if not isinstance(node, TextNode) or not node.config.bbox_references:
             continue
         prompt_edges = edges_by_source[node.id]
         if not prompt_edges:
@@ -587,13 +620,23 @@ def _validate_bbox_prompt_references(
                     "bbox reference source node does not exist",
                     node_id=node.id,
                 )
-            if not isinstance(source, ImageInputNode):
+            if not isinstance(source, ImageNode):
                 raise AigcDagValidationError(
                     "bbox_reference_source_invalid",
-                    "bbox reference source must be an image input node",
+                    "bbox reference source must be a matching image node",
                     node_id=node.id,
                 )
-            if source.config.bbox is None:
+            source_has_upstream = any(
+                edge.target_node_id == source.id for edge in definition.edges
+            )
+            has_configured_bbox = (
+                source.config.upstream_bbox is not None
+                if source_has_upstream
+                else source.config.bbox is not None
+            )
+            if not has_configured_bbox and not (
+                source_has_upstream and source.config.bbox is not None
+            ):
                 raise AigcDagValidationError(
                     "bbox_reference_bbox_missing",
                     "bbox reference source has no selection",
@@ -621,7 +664,7 @@ def _validate_bbox_prompt_references(
 
 
 def build_aigc_execution_plan(
-    definition: AigcPipelineDefinition,
+    definition: AigcGraphDefinition,
     *,
     mode: AigcPipelineRunMode,
     start_node_id: str | None = None,
@@ -629,6 +672,7 @@ def build_aigc_execution_plan(
     cache_candidates: Mapping[str, AigcCacheCandidate] | None = None,
     available_asset_ids: set[str] | None = None,
 ) -> AigcExecutionPlan:
+    definition = _canonical_graph(definition)
     order = validate_aigc_dag(
         definition,
         available_asset_ids=available_asset_ids,
@@ -640,7 +684,12 @@ def build_aigc_execution_plan(
 
     if mode == AigcPipelineRunMode.FULL:
         actions = {
-            node_id: _default_action(node_by_id[node_id], execute_models=True)
+            node_id: _default_action(
+                node_by_id[node_id],
+                has_upstream=bool(parents[node_id]),
+                has_downstream=bool(children[node_id]),
+                execute_models=True,
+            )
             for node_id in order
         }
         return AigcExecutionPlan(order, actions, {})
@@ -672,11 +721,12 @@ def build_aigc_execution_plan(
         if node_id not in relevant:
             actions[node_id] = AigcPlanAction.IDLE
             continue
-        if node.type in INPUT_NODE_TYPES:
-            actions[node_id] = AigcPlanAction.RESOLVE
-            continue
-        if node.type in OUTPUT_NODE_TYPES:
-            actions[node_id] = AigcPlanAction.PROJECT
+        if node.type in MODALITY_NODE_TYPES:
+            actions[node_id] = _modality_action(
+                node,
+                has_upstream=bool(parents[node_id]),
+                has_downstream=bool(children[node_id]),
+            )
             continue
         if node_id in forced:
             actions[node_id] = AigcPlanAction.EXECUTE
@@ -685,9 +735,9 @@ def build_aigc_execution_plan(
             actions[node_id] = AigcPlanAction.EXECUTE
             continue
         upstream_model_recomputed = any(
-            actions.get(parent_id) == AigcPlanAction.EXECUTE
-            for parent_id in parents[node_id]
-            if node_by_id[parent_id].type in EXECUTABLE_NODE_TYPES
+            actions.get(ancestor_id) == AigcPlanAction.EXECUTE
+            for ancestor_id in _walk(node_id, parents)
+            if node_by_id[ancestor_id].type in EXECUTABLE_NODE_TYPES
         )
         candidate = candidates.get(node_id)
         expected_hash = hashes.get(node_id)
@@ -751,26 +801,65 @@ def canonical_aigc_input_hash(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _port(node: AigcNode, handle: str, *, output: bool):
+def _port(node: AigcGraphNode, handle: str, *, output: bool):
     registry = NODE_REGISTRY_BY_TYPE[node.type]
     ports = registry.outputs if output else registry.inputs
     return next((port for port in ports if port.id == handle), None)
 
 
 def _default_action(
-    node: AigcNode,
+    node: AigcGraphNode,
     *,
+    has_upstream: bool,
+    has_downstream: bool,
     execute_models: bool,
 ) -> AigcPlanAction:
-    if node.type in INPUT_NODE_TYPES:
-        return AigcPlanAction.RESOLVE
-    if node.type in OUTPUT_NODE_TYPES:
-        return AigcPlanAction.PROJECT
+    if node.type in MODALITY_NODE_TYPES:
+        return _modality_action(
+            node,
+            has_upstream=has_upstream,
+            has_downstream=has_downstream,
+        )
+    if isinstance(node, MultiTrackEditNode):
+        return AigcPlanAction.EXECUTE
     return AigcPlanAction.EXECUTE if execute_models else AigcPlanAction.IDLE
 
 
+def _canonical_graph(
+    definition: AigcGraphDefinition,
+) -> AigcPipelineDefinitionV2:
+    if isinstance(definition, AigcPipelineDefinitionV2):
+        return definition
+    return AigcPipelineDefinitionV2.model_validate(
+        migrate_aigc_definition_v2(
+            definition.model_dump(mode="json", by_alias=True)
+        )
+    )
+
+
+def _modality_action(
+    node: AigcGraphNode,
+    *,
+    has_upstream: bool,
+    has_downstream: bool,
+) -> AigcPlanAction:
+    if has_upstream:
+        return AigcPlanAction.PROJECT
+    if not has_downstream and not _has_local_modality_value(node):
+        return AigcPlanAction.IDLE
+    return AigcPlanAction.RESOLVE
+
+
+def _has_local_modality_value(node: AigcGraphNode) -> bool:
+    if isinstance(node, TextNode):
+        return bool(node.config.text.strip())
+    if isinstance(node, (ImageNode, VideoNode, AudioNode)):
+        return bool(node.config.asset_id)
+    return False
+
+
 def _adjacency(
-    definition: AigcPipelineDefinition,
+    definition: AigcGraphDefinition,
 ) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
     parents = {node.id: set() for node in definition.nodes}
     children = {node.id: set() for node in definition.nodes}
