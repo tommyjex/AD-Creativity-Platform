@@ -229,6 +229,7 @@ describe("AIGC Run projection selection", () => {
         activeFlowB.id,
         latestFlowA.id,
         latestFlowB.id,
+        successfulFlowB.id,
         isolatedCanceled.id
       ])
     );
@@ -245,6 +246,7 @@ describe("AIGC Run projection selection", () => {
         activeFlowB.id,
         latestFlowA.id,
         latestFlowB.id,
+        successfulFlowB.id,
         isolatedCanceled.id,
         olderFlowA.id
       ])
@@ -286,6 +288,40 @@ describe("AIGC Run projection selection", () => {
     expect(projection.isNodeActive("flow-a-output")).toBe(true);
     expect(projection.activeRunForNode("flow-a-output")).toBeNull();
     expect(projection.isNodeActive("isolated")).toBe(false);
+  });
+
+  it("does not fall through to a terminal Run while active detail is unavailable", () => {
+    const detailsWithoutActiveFlowA = new Map(details);
+    detailsWithoutActiveFlowA.delete(activeFlowA.id);
+    const projection = createAigcRunProjection(
+      definitionV2,
+      allRuns,
+      detailsWithoutActiveFlowA,
+      null
+    );
+
+    expect(projection.displayRunForNode("flow-a-output")).toBeNull();
+  });
+
+  it("locks a merged current flow when it intersects any active snapshot scope", () => {
+    const mergedDefinition = {
+      ...definitionV2,
+      edges: [
+        ...definitionV2.edges,
+        edge("merge-flows", "flow-a-output", "flow-b-input")
+      ]
+    };
+    const projection = createAigcRunProjection(
+      mergedDefinition,
+      [activeFlowA],
+      details,
+      null
+    );
+
+    expect(projection.isNodeActive("flow-b-output")).toBe(true);
+    expect(projection.activeRunForNode("flow-b-output")?.run.id).toBe(
+      activeFlowA.id
+    );
   });
 
   it("uses each flow's latest terminal and latest successful Run", () => {

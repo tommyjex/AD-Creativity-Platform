@@ -11,7 +11,7 @@ import {
   validateVideoGenerationAssets,
   validateVideoGenerationDefinition
 } from "@/lib/aigc/video-generation";
-import type { AigcPipelineDefinition } from "@/lib/aigc/types";
+import type { AigcPipelineDefinitionV2 } from "@/lib/aigc/types";
 import type { Asset } from "@/lib/api-types";
 
 function file(name: string, type: string, size: number) {
@@ -161,16 +161,16 @@ describe("AIGC media validation", () => {
   });
 
   it("requires video for edit and validates inspected aggregate duration", () => {
-    const definition: AigcPipelineDefinition = {
-      schemaVersion: 1,
+    const definition: AigcPipelineDefinitionV2 = {
+      schemaVersion: 2,
       viewport: { x: 0, y: 0, zoom: 1 },
       nodes: [
         {
           id: "video-input",
-          type: "video_input",
+          type: "video",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 180 },
-          config: { asset_id: "video-asset" }
+          config: { asset_id: "video-asset", title: null }
         },
         {
           id: "video-model",

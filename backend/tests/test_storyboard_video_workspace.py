@@ -1400,10 +1400,11 @@ def test_last_frame_content_endpoint_redirects_and_returns_not_found(
         bucket="local-assets",
         public_endpoint="https://assets.example.com",
     )
-    app = create_app()
-    app.dependency_overrides[get_repository] = lambda: repository
-    app.dependency_overrides[get_asset_storage_service] = lambda: storage
-    with TestClient(app) as client:
+    with _client_with_generation(
+        repository,
+        ModelArkGenerationService(),
+        storage,
+    ) as client:
         project_id = client.post("/api/projects", json=project_payload).json()["id"]
         with_last_frame = repository.create_asset(
             AssetCreate(

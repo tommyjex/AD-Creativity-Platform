@@ -13,7 +13,9 @@ import type {
   AigcEdge,
   AigcImageOperation,
   AigcNode,
-  AigcPipelineDefinition
+  AigcPipelineDefinition,
+  AigcPipelineDefinitionV2,
+  AigcV2Node
 } from "@/lib/aigc/types";
 import type { Asset } from "@/lib/api-types";
 
@@ -74,6 +76,56 @@ describe("Seedream image modes", () => {
     expect(isSeedreamImageOutputActive(node, "layers", [])).toBe(false);
   });
 
+  it.each([
+    ["text_to_image", undefined, "02048x01024", undefined],
+    ["image_to_image", "image_to_image", "01920x01080", undefined],
+    ["text_to_image", undefined, "512x512", "invalid_image_size"],
+    ["image_to_image", "image_to_image", "2048X1024", "invalid_image_size"],
+    ["image_to_image", "image_edit", "2048x1024", "size_not_allowed_for_mode"],
+    [
+      "image_to_image",
+      "layer_decomposition",
+      "2048x1024",
+      "size_not_allowed_for_mode"
+    ],
+    ["image_to_image", "image_edit", "auto", "size_not_allowed_for_mode"],
+    ["image_to_image", "image_to_image", "auto", "size_not_allowed_for_mode"]
+  ] as const)(
+    "validates %s operation %s size %s consistently",
+    (type, operation, size, expectedCode) => {
+      const node = {
+        id: `${type}-${operation ?? "default"}`,
+        type,
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 160 },
+        config: {
+          model: "doubao-seedream-5-0-pro-260628",
+          aspect_ratio: "1:1",
+          size,
+          format: "png",
+          ...(operation ? { operation } : {})
+        }
+      } as unknown as AigcNode;
+
+      const issues = validateSeedreamImageDefinition(definition(node, []));
+
+      if (expectedCode) {
+        expect(issues[0]).toMatchObject({
+          code: expectedCode,
+          nodeId: node.id
+        });
+      } else {
+        expect(
+          issues.filter((issue) =>
+            ["invalid_image_size", "size_not_allowed_for_mode"].includes(
+              issue.code
+            )
+          )
+        ).toEqual([]);
+      }
+    }
+  );
+
   it("selects the image-edit output from the unique edit target", () => {
     const node = seedream("image_edit");
     const imageEdges = [edge("edit-image", "edit_image")];
@@ -104,17 +156,24 @@ describe("Seedream image modes", () => {
 
   it("aggregates dedicated decomposition asset preflight errors", () => {
     const node = seedream("layer_decomposition");
-    const imageNode: AigcNode = {
+    const imageNode: AigcV2Node = {
       id: "image-source",
-      type: "image_input",
+      type: "image",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
-      config: { asset_id: "asset-webp" }
+      config: {
+        asset_id: "asset-webp",
+        bbox: null,
+        bbox_asset_id: null,
+        title: null
+      }
     };
-    const current = definition(node, [
-      edge("image", "image", imageNode.id)
-    ]);
-    current.nodes.unshift(imageNode);
+    const current: AigcPipelineDefinitionV2 = {
+      schemaVersion: 2,
+      nodes: [imageNode, node],
+      edges: [edge("image", "image", imageNode.id)],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
     const invalidAsset = {
       id: "asset-webp",
       project_id: null,

@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { AigcEditor } from "@/components/workspace/aigc/aigc-editor";
+import { AigcUpstreamPreciseEditAcceptance } from "@/components/workspace/aigc/aigc-upstream-precise-edit-acceptance";
+import { AigcVideoFaceBlurAcceptance } from "@/components/workspace/aigc/aigc-video-face-blur-acceptance";
 import { AigcVideoFullscreenAcceptance } from "@/components/workspace/aigc/aigc-video-fullscreen-acceptance";
+import { AigcVideoEnhancementAcceptance } from "@/components/workspace/aigc/aigc-video-enhancement-acceptance";
 import { AigcVideoPlayer } from "@/components/workspace/aigc/aigc-video-player";
 import { createApiClient, getUserFacingErrorMessage } from "@/lib/api-client";
 import { getAigcVideoDownload } from "@/lib/aigc/download";
@@ -32,6 +35,15 @@ export default async function AigcAcceptancePage({
   }
   if (scenario === "video-fullscreen") {
     return <AigcVideoFullscreenAcceptance />;
+  }
+  if (scenario === "video-enhancement") {
+    return <AigcVideoEnhancementAcceptance />;
+  }
+  if (scenario === "video-face-blur") {
+    return <AigcVideoFaceBlurAcceptance />;
+  }
+  if (scenario === "upstream-precise-edit") {
+    return <AigcUpstreamPreciseEditAcceptance />;
   }
   if (!pipelineId) {
     return (

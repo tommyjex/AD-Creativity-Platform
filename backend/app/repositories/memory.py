@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from threading import RLock
 from typing import Iterable, TypeVar
 
+from backend.app.aigc_run_scope import aigc_run_scope_node_ids
 from backend.app.schemas import (
     AigcAssetDirection,
     AigcPipeline,
@@ -31,6 +32,8 @@ from backend.app.schemas import (
     AssetCreate,
     AssetRole,
     AssetType,
+    AudioInputNode,
+    AudioNode,
     CanvasLayout,
     CanvasNode,
     CharacterCard,
@@ -45,6 +48,9 @@ from backend.app.schemas import (
     ImageLayerSetCreate,
     ImageLayerUpdate,
     ImageInputNode,
+    ImageNode,
+    MultiTrackEditNode,
+    MultiTrackSubtitleElement,
     Project,
     ProjectBase,
     ProjectCreate,
@@ -62,6 +68,10 @@ from backend.app.schemas import (
     ToolTask,
     ToolTaskCreate,
     ToolTaskInputAsset,
+    ToolAssetRole,
+    USER_DEFINED_ASSET_NAME_SCHEME,
+    VideoInputNode,
+    VideoNode,
 )
 from backend.app.schemas.brief import Brief
 from backend.app.schemas.common import utc_now
@@ -77,6 +87,12 @@ from .base import (
     NotFoundError,
     PipelineRunConflictError,
     RevisionConflictError,
+    multitrack_subtitle_asset_slot,
+)
+from .aigc_json_parser import (
+    JsonParserMaterializationError,
+    detach_removed_json_parser_edges,
+    materialize_json_parser_definition,
 )
 
 
@@ -102,6 +118,13 @@ ModelT = TypeVar(
     StoryboardShot,
     TextArtifact,
     ToolTask,
+)
+
+ACTIVE_AIGC_RUN_STATUSES = frozenset(
+    {
+        AigcPipelineRunStatus.QUEUED,
+        AigcPipelineRunStatus.RUNNING,
+    }
 )
 
 
@@ -261,10 +284,16 @@ class InMemoryRepository:
                 raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
             if current.revision != data.expected_revision:
                 raise RevisionConflictError("AIGC pipeline revision conflict")
+            definition = detach_removed_json_parser_edges(
+                data.definition,
+            )
             updated = AigcPipeline.model_validate(
                 {
                     **current.model_dump(),
-                    **data.model_dump(exclude={"expected_revision"}),
+                    **data.model_dump(
+                        exclude={"expected_revision", "definition"}
+                    ),
+                    "definition": definition,
                     "revision": current.revision + 1,
                     "updated_at": utc_now(),
                 }
@@ -349,16 +378,26 @@ class InMemoryRepository:
                 and run.mode != AigcPipelineRunMode.RETRY_NODE
             ):
                 raise RevisionConflictError("AIGC pipeline revision conflict")
-            if any(
-                item.pipeline_id == run.pipeline_id
-                and item.status
-                in {
-                    AigcPipelineRunStatus.QUEUED,
-                    AigcPipelineRunStatus.RUNNING,
-                }
-                for item in self._aigc_runs.values()
-            ):
-                raise ActiveRunConflictError("AIGC pipeline already has an active run")
+            candidate_scope = aigc_run_scope_node_ids(
+                run.definition_snapshot,
+                mode=run.mode,
+                start_node_id=run.start_node_id,
+            )
+            for active_run in self._aigc_runs.values():
+                if (
+                    active_run.pipeline_id != run.pipeline_id
+                    or active_run.status not in ACTIVE_AIGC_RUN_STATUSES
+                ):
+                    continue
+                active_scope = aigc_run_scope_node_ids(
+                    active_run.definition_snapshot,
+                    mode=active_run.mode,
+                    start_node_id=active_run.start_node_id,
+                )
+                if candidate_scope & active_scope:
+                    raise ActiveRunConflictError(
+                        "AIGC flow already has an active run"
+                    )
             run_number = (
                 max(
                     (
@@ -484,14 +523,23 @@ class InMemoryRepository:
                 }
             )
             self._aigc_runs[run_id] = updated
-            pipeline = self._aigc_pipelines[updated.pipeline_id]
-            self._aigc_pipelines[pipeline.id] = pipeline.model_copy(
-                update={
-                    "latest_run_status": updated.status,
-                    "updated_at": utc_now(),
-                },
-                deep=True,
+            latest = max(
+                (
+                    item
+                    for item in self._aigc_runs.values()
+                    if item.pipeline_id == updated.pipeline_id
+                ),
+                key=lambda item: item.run_number,
             )
+            if latest.id == updated.id:
+                pipeline = self._aigc_pipelines[updated.pipeline_id]
+                self._aigc_pipelines[pipeline.id] = pipeline.model_copy(
+                    update={
+                        "latest_run_status": updated.status,
+                        "updated_at": updated.updated_at,
+                    },
+                    deep=True,
+                )
             return self._copy(updated)
 
     def update_aigc_run_node(
@@ -704,10 +752,154 @@ class InMemoryRepository:
                 update={
                     "status": AigcRunNodeStatus(final_status.value),
                     "result": final_result,
+                    "error": error if accepted else None,
                 },
                 deep=True,
             )
             return self._copy(committed), accepted
+
+    def commit_aigc_json_parser_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+        result: AigcTaskResult,
+        metrics: AigcTaskMetrics,
+    ) -> tuple[AigcPipelineTaskAttempt, bool]:
+        with self._lock:
+            task = self._aigc_tasks.get(task_id)
+            if task is None:
+                raise NotFoundError(f"AIGC task not found: {task_id}")
+            lease = self._aigc_worker_lease
+            if (
+                lease is None
+                or lease.fencing_token != fencing_token
+                or self._aigc_task_fencing.get(task_id) != fencing_token
+                or task.status != AigcTaskStatus.RUNNING
+            ):
+                return self._copy(task), False
+            run = self._aigc_runs[task.run_id]
+            if run.cancellation_requested:
+                committed = AigcPipelineTaskAttempt.model_validate(
+                    {
+                        **task.model_dump(),
+                        "status": AigcTaskStatus.CANCELED,
+                        "result": AigcTaskResult(),
+                        "error": None,
+                        "metrics": metrics,
+                        "finished_at": utc_now(),
+                    }
+                )
+                self._commit_aigc_parser_task_state(committed)
+                return self._copy(committed), False
+
+            pipeline = self._aigc_pipelines.get(task.pipeline_id)
+            if (
+                pipeline is None
+                or self._aigc_pipeline_deleted_at.get(task.pipeline_id)
+                is not None
+            ):
+                materialization_error = JsonParserMaterializationError(
+                    "json_parser_source_changed",
+                    "JSON parser source changed before materialization",
+                )
+                definition = None
+            else:
+                try:
+                    definition = materialize_json_parser_definition(
+                        pipeline.definition,
+                        parser_node_id=task.node_id,
+                        run_id=task.run_id,
+                        result=result,
+                    )
+                    materialization_error = None
+                except JsonParserMaterializationError as exc:
+                    definition = None
+                    materialization_error = exc
+
+            now = utc_now()
+            if materialization_error is not None:
+                committed = AigcPipelineTaskAttempt.model_validate(
+                    {
+                        **task.model_dump(),
+                        "status": AigcTaskStatus.FAILED,
+                        "result": AigcTaskResult(),
+                        "error": AigcTaskError(
+                            code=materialization_error.code,
+                            message=materialization_error.message,
+                            stage="materialization",
+                        ),
+                        "metrics": metrics,
+                        "finished_at": now,
+                    }
+                )
+                self._commit_aigc_parser_task_state(committed)
+                return self._copy(committed), True
+
+            assert pipeline is not None
+            assert definition is not None
+            updated_pipeline = pipeline.model_copy(
+                update={
+                    "definition": definition,
+                    "revision": pipeline.revision + 1,
+                    "updated_at": now,
+                },
+                deep=True,
+            )
+            references = self._aigc_asset_references_for_pipeline(
+                updated_pipeline
+            )
+            committed = AigcPipelineTaskAttempt.model_validate(
+                {
+                    **task.model_dump(),
+                    "status": AigcTaskStatus.SUCCEEDED,
+                    "progress": 100,
+                    "result": result,
+                    "error": None,
+                    "metrics": metrics,
+                    "finished_at": now,
+                }
+            )
+            previous_asset_references = {
+                key: value
+                for key, value in self._aigc_pipeline_assets.items()
+                if key[0] == pipeline.id
+            }
+            run_node_key = (committed.run_id, committed.node_id)
+            previous_run_node = self._aigc_run_nodes[run_node_key]
+            try:
+                self._aigc_pipelines[pipeline.id] = updated_pipeline
+                self._replace_aigc_pipeline_assets(pipeline.id, references)
+                self._commit_aigc_parser_task_state(committed)
+            except Exception:
+                self._aigc_pipelines[pipeline.id] = pipeline
+                for key in [
+                    key
+                    for key in self._aigc_pipeline_assets
+                    if key[0] == pipeline.id
+                ]:
+                    del self._aigc_pipeline_assets[key]
+                self._aigc_pipeline_assets.update(previous_asset_references)
+                self._aigc_tasks[task_id] = task
+                self._aigc_run_nodes[run_node_key] = previous_run_node
+                raise
+            return self._copy(committed), True
+
+    def _commit_aigc_parser_task_state(
+        self,
+        committed: AigcPipelineTaskAttempt,
+    ) -> None:
+        self._aigc_tasks[committed.task_id] = committed
+        run_node_key = (committed.run_id, committed.node_id)
+        run_node = self._aigc_run_nodes[run_node_key]
+        self._aigc_run_nodes[run_node_key] = run_node.model_copy(
+            update={
+                "status": AigcRunNodeStatus(committed.status.value),
+                "result": committed.result,
+                "error": committed.error,
+            },
+            deep=True,
+        )
 
     def add_aigc_task_assets(
         self,
@@ -1297,6 +1489,63 @@ class InMemoryRepository:
                 self._touch_project(project_id)
             return [self._copy(asset) for asset in assets]
 
+    def create_aigc_output_asset(
+        self,
+        data: AssetCreate,
+        *,
+        references: Iterable[AigcPipelineTaskAssetReference],
+    ) -> Asset:
+        asset = Asset(**data.model_dump())
+        items = [self._copy(reference) for reference in references]
+        with self._lock:
+            if asset.id in self._assets:
+                raise ValueError(f"asset already exists: {asset.id}")
+            if asset.tool_asset_role != ToolAssetRole.OUTPUT:
+                raise ValueError("AIGC output asset must use the output role")
+            if not any(
+                item.direction == AigcAssetDirection.OUTPUT
+                and item.asset_id == asset.id
+                for item in items
+            ):
+                raise ValueError("AIGC output reference is required")
+
+            reference_keys: set[tuple[str, str, str, int]] = set()
+            new_references: list[
+                tuple[tuple[str, str, str, int], AigcPipelineTaskAssetReference]
+            ] = []
+            for reference in items:
+                if reference.task_id not in self._aigc_tasks:
+                    raise NotFoundError(
+                        f"AIGC task not found: {reference.task_id}"
+                    )
+                if (
+                    reference.asset_id != asset.id
+                    and reference.asset_id not in self._assets
+                ):
+                    raise NotFoundError(f"asset not found: {reference.asset_id}")
+                key = (
+                    reference.task_id,
+                    reference.direction.value,
+                    reference.slot,
+                    reference.ordinal,
+                )
+                if key in reference_keys:
+                    raise ValueError("AIGC task asset reference already exists")
+                reference_keys.add(key)
+                existing = self._aigc_task_assets.get(key)
+                if existing is not None:
+                    if existing != reference:
+                        raise ValueError(
+                            "AIGC task asset reference already exists"
+                        )
+                    continue
+                new_references.append((key, reference))
+
+            self._assets[asset.id] = asset
+            for key, reference in new_references:
+                self._aigc_task_assets[key] = reference
+            return self._copy(asset)
+
     def create_asset_and_set_current_image(
         self,
         data: AssetCreate,
@@ -1566,6 +1815,34 @@ class InMemoryRepository:
             updated = asset.model_copy(
                 update={
                     **changes,
+                    "updated_at": utc_now(),
+                },
+                deep=True,
+            )
+            self._assets[asset_id] = updated
+            if asset.project_id is not None:
+                self._replace_project_item(asset.project_id, "assets", updated)
+                self._touch_project(asset.project_id)
+            return self._copy(updated)
+
+    def rename_asset(self, asset_id: str, *, name: str) -> Asset:
+        with self._lock:
+            asset = self._assets.get(asset_id)
+            if (
+                asset is None
+                or asset.asset_role != AssetRole.PUBLIC
+                or (asset.project_id is None and asset.tool_asset_role is None)
+            ):
+                raise NotFoundError(f"asset not found: {asset_id}")
+            if asset.project_id is not None:
+                self._require_project(asset.project_id)
+            updated = asset.model_copy(
+                update={
+                    "metadata": {
+                        **asset.metadata,
+                        "name": name,
+                        "name_scheme": USER_DEFINED_ASSET_NAME_SCHEME,
+                    },
                     "updated_at": utc_now(),
                 },
                 deep=True,
@@ -2280,16 +2557,38 @@ class InMemoryRepository:
         self,
         pipeline: AigcPipeline,
     ) -> list[AigcPipelineAssetReference]:
+        media_slots = {
+            ImageInputNode: "image",
+            VideoInputNode: "video",
+            AudioInputNode: "audio",
+            ImageNode: "image",
+            VideoNode: "video",
+            AudioNode: "audio",
+        }
         references = [
             AigcPipelineAssetReference(
                 pipeline_id=pipeline.id,
                 node_id=node.id,
-                slot="image",
+                slot=media_slots[type(node)],
                 asset_id=node.config.asset_id,
             )
             for node in pipeline.definition.nodes
-            if isinstance(node, ImageInputNode) and node.config.asset_id is not None
+            if type(node) in media_slots and node.config.asset_id is not None
         ]
+        references.extend(
+            AigcPipelineAssetReference(
+                pipeline_id=pipeline.id,
+                node_id=node.id,
+                slot=multitrack_subtitle_asset_slot(track.id, element.id),
+                asset_id=element.asset_id,
+            )
+            for node in pipeline.definition.nodes
+            if isinstance(node, MultiTrackEditNode)
+            for track in node.config.tracks
+            for element in track.elements
+            if isinstance(element, MultiTrackSubtitleElement)
+            and element.asset_id is not None
+        )
         for reference in references:
             if reference.asset_id not in self._assets:
                 raise NotFoundError(f"asset not found: {reference.asset_id}")

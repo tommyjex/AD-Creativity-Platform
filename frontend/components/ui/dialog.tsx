@@ -30,13 +30,24 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 interface DialogContentProps
   extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
+  closeButtonClassName?: string;
   hideCloseButton?: boolean;
 }
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ children, className, hideCloseButton = false, ...props }, ref) => (
+>(
+  (
+    {
+      children,
+      className,
+      closeButtonClassName,
+      hideCloseButton = false,
+      ...props
+    },
+    ref
+  ) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -54,7 +65,10 @@ const DialogContent = React.forwardRef<
       {children}
       {hideCloseButton ? null : (
         <DialogPrimitive.Close
-          className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full border border-border bg-card/90 text-muted-foreground shadow-sm backdrop-blur transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:pointer-events-none"
+          className={cn(
+            "absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full border border-border bg-card/90 text-muted-foreground shadow-sm backdrop-blur transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:pointer-events-none",
+            closeButtonClassName
+          )}
           aria-label="关闭"
         >
           <X aria-hidden="true" className="h-4 w-4" />
@@ -62,7 +76,8 @@ const DialogContent = React.forwardRef<
       )}
     </DialogPrimitive.Content>
   </DialogPortal>
-));
+  )
+);
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 function DialogHeader({

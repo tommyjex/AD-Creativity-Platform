@@ -1,5 +1,9 @@
 import type { DateTimeString } from "@/lib/api-types";
 import type {
+  SeedreamImagePresetSize,
+  SeedreamImageSize
+} from "@/lib/aigc/image-dimensions";
+import type {
   SeedanceAspectRatio,
   SeedanceModel,
   SeedanceResolution,
@@ -23,6 +27,8 @@ export const AIGC_NODE_TYPES = [
   "text_to_image",
   "image_to_image",
   "video_generation",
+  "video_enhancement",
+  "video_face_blur",
   "layer_canvas",
   "layer_composite",
   "text_output",
@@ -30,8 +36,27 @@ export const AIGC_NODE_TYPES = [
   "video_output"
 ] as const;
 
+export const AIGC_V2_NODE_TYPES = [
+  "text",
+  "image",
+  "video",
+  "audio",
+  "llm",
+  "text_to_image",
+  "image_to_image",
+  "video_generation",
+  "video_enhancement",
+  "video_face_blur",
+  "multi_track_edit",
+  "json_parser",
+  "layer_canvas",
+  "layer_composite"
+] as const;
+
 export type AigcNodeType = (typeof AIGC_NODE_TYPES)[number];
+export type AigcV2NodeType = (typeof AIGC_V2_NODE_TYPES)[number];
 export type AigcNodeCategory = "input" | "model" | "control" | "output";
+export type AigcV2NodeCategory = "modality" | "model" | "control";
 export type AigcPortType =
   | "text"
   | "image_asset"
@@ -48,7 +73,11 @@ export type AigcTaskType =
   | "layer_decomposition"
   | "layer_canvas"
   | "layer_composite"
-  | "video_generation";
+  | "video_generation"
+  | "video_enhancement"
+  | "video_face_blur"
+  | "multi_track_edit"
+  | "json_parser";
 export type AigcPipelineRunMode = "full" | "from_node" | "retry_node";
 export type AigcPipelineRunStatus =
   | "queued"
@@ -77,6 +106,7 @@ export type AigcTaskStatus =
 export type AigcResultKind =
   | "none"
   | "text"
+  | "text_items"
   | "assets"
   | "layer_set"
   | "image_layer"
@@ -86,7 +116,8 @@ export type AigcResultKind =
   | "unavailable";
 export type AigcAssetDirection = "input" | "output";
 export type AigcImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
-export type AigcImageSize = "1K" | "1.5K" | "2K";
+export type AigcImagePresetSize = SeedreamImagePresetSize;
+export type AigcImageSize = SeedreamImageSize;
 export type AigcImageToImageSize = "auto" | AigcImageSize;
 export type AigcImageFormat = "png" | "jpeg";
 export type AigcImageOperation =
@@ -94,13 +125,41 @@ export type AigcImageOperation =
   | "image_edit"
   | "layer_decomposition";
 export type AigcPromptOptimizationMode =
+  | "llm"
   | "text_to_image"
-  | "image_to_image";
+  | "image_to_image"
+  | "video_generation";
 export type AigcVideoGenerationMode =
   | "text_to_video"
   | "first_frame"
   | "first_last_frame"
   | "multimodal_reference";
+export type AigcVideoEnhancementToolVersion =
+  | "standard"
+  | "professional";
+export type AigcVideoEnhancementScene =
+  | "common"
+  | "ugc"
+  | "short_series"
+  | "aigc"
+  | "old_film";
+export type AigcVideoEnhancementStyle = "hd" | "natural";
+export type AigcVideoEnhancementResolutionMode = "preset" | "short_edge";
+export type AigcVideoEnhancementResolution =
+  | "240p"
+  | "360p"
+  | "480p"
+  | "540p"
+  | "720p"
+  | "1080p"
+  | "2k"
+  | "4k"
+  | "8k";
+export type AigcVideoEnhancementBitrateMode = "level" | "custom";
+export type AigcVideoEnhancementBitrateLevel = "low" | "medium" | "high";
+export type AigcVideoEnhancementBitDepth = 8 | 10 | 12 | 16;
+export type AigcVideoFaceBlurMaskMode = "mosaic" | "blur";
+export type AigcVideoFaceBlurMaskStrength = "low" | "medium" | "high";
 
 export interface AigcPoint {
   x: number;
@@ -136,12 +195,80 @@ export interface TextInputConfig {
   bbox_references?: AigcBboxPromptReference[];
 }
 
-export interface AigcPromptOptimizeRequest {
-  text: string;
-  reference_instructions: string[];
-  generation_modes: AigcPromptOptimizationMode[];
-  reference_image_count: number;
+export interface AigcPromptVideoReferenceSummary {
+  source_node_id: string;
+  source_handle: "image" | "video" | "audio";
+  target_handle:
+    | "first_frame"
+    | "last_frame"
+    | "reference_images"
+    | "reference_videos"
+    | "reference_audios";
+  media_type: "image" | "video" | "audio";
+  role:
+    | "first_frame"
+    | "last_frame"
+    | "reference_image"
+    | "reference_video"
+    | "reference_audio";
+  ordinal: number;
 }
+
+export type AigcPromptOptimizeRequest =
+  | {
+      target_node_id: string;
+      target_type: "llm";
+      target_config: {
+        model: string;
+        system_prompt: string;
+      };
+      optimization_direction: string;
+      text: string;
+      reference_instructions: [];
+    }
+  | {
+      target_node_id: string;
+      target_type: "text_to_image";
+      target_config: {
+        model: string;
+        aspect_ratio: AigcImageAspectRatio;
+        size: AigcImageSize;
+        reference_image_count: 0;
+      };
+      optimization_direction: string;
+      text: string;
+      reference_instructions: string[];
+    }
+  | {
+      target_node_id: string;
+      target_type: "image_to_image";
+      target_config: {
+        model: string;
+        operation: AigcImageOperation;
+        aspect_ratio: AigcImageAspectRatio;
+        size: AigcImageToImageSize;
+        reference_image_count: number;
+      };
+      optimization_direction: string;
+      text: string;
+      reference_instructions: string[];
+    }
+  | {
+      target_node_id: string;
+      target_type: "video_generation";
+      target_config: {
+        model: SeedanceModel;
+        generation_mode: AigcVideoGenerationMode;
+        task_type: SeedanceTaskType;
+        duration_seconds: number;
+        aspect_ratio: SeedanceAspectRatio;
+        generate_audio: boolean;
+        references: AigcPromptVideoReferenceSummary[];
+      };
+      optimization_direction: string;
+      text: string;
+      reference_instructions: [];
+    };
 
 export interface AigcPromptOptimizeResponse {
   optimized_text: string;
@@ -162,10 +289,38 @@ export interface AudioInputConfig {
   asset_id: string | null;
 }
 
+export interface TextConfig extends TextInputConfig {
+  title: string | null;
+  upstream_text_override?: string | null;
+  generated_by_parser_node_id?: string | null;
+  generated_item_index?: number | null;
+  generated_from_run_id?: string | null;
+}
+
+export interface ImageConfig extends ImageInputConfig {
+  bbox: AigcBbox | null;
+  bbox_asset_id: string | null;
+  title: string | null;
+  upstream_bbox?: AigcBbox | null;
+  upstream_bbox_asset_id?: string | null;
+}
+
+export interface VideoConfig extends VideoInputConfig {
+  title: string | null;
+}
+
+export interface AudioConfig extends AudioInputConfig {
+  title: string | null;
+}
+
 export interface LlmConfig {
   model: string;
   system_prompt: string;
   temperature: number;
+}
+
+export interface JsonParserConfig {
+  json_path: string;
 }
 
 export interface ImageModelConfig {
@@ -258,6 +413,183 @@ export interface VideoGenerationConfig {
   generate_audio: boolean;
 }
 
+type VideoEnhancementResolutionConfig =
+  | {
+      resolution_mode: "preset";
+      resolution: AigcVideoEnhancementResolution;
+      resolution_limit: null;
+    }
+  | {
+      resolution_mode: "short_edge";
+      resolution: null;
+      resolution_limit: number;
+    };
+
+type VideoEnhancementBitrateConfig =
+  | {
+      bitrate_mode: "level";
+      bitrate_level: AigcVideoEnhancementBitrateLevel;
+      bitrate: null;
+    }
+  | {
+      bitrate_mode: "custom";
+      bitrate_level: null;
+      bitrate: number;
+    };
+
+type VideoEnhancementVersionConfig =
+  | ({
+      tool_version: "standard";
+      scene: AigcVideoEnhancementScene;
+      bit_depth: 8;
+    } & VideoEnhancementBitrateConfig)
+  | ({
+      tool_version: "professional";
+      scene: null;
+      bit_depth: 8 | 10 | 12;
+    } & VideoEnhancementBitrateConfig)
+  | {
+      tool_version: "professional";
+      scene: null;
+      bit_depth: 16;
+      bitrate_mode: null;
+      bitrate_level: null;
+      bitrate: null;
+    };
+
+export type VideoEnhancementConfig = {
+  enhance_style: AigcVideoEnhancementStyle;
+  fps: number | null;
+} & VideoEnhancementResolutionConfig &
+  VideoEnhancementVersionConfig;
+
+export interface VideoFaceBlurConfig {
+  mask_mode: AigcVideoFaceBlurMaskMode;
+  mask_strength: AigcVideoFaceBlurMaskStrength;
+}
+
+export type MultiTrackKind =
+  | "video"
+  | "audio"
+  | "image"
+  | "text"
+  | "subtitle";
+export type MultiTrackFrameRate = 24 | 25 | 30 | 50 | 60;
+
+export interface MultiTrackCanvas {
+  mode: "auto" | "custom";
+  width: number | null;
+  height: number | null;
+  background_color: string;
+}
+
+export interface MultiTrackOutput {
+  format: "mp4";
+  fps: MultiTrackFrameRate;
+}
+
+export interface MultiTrackSource {
+  source_node_id: string;
+  source_handle: string;
+}
+
+export interface MultiTrackTimeRange {
+  start_ms: number;
+  end_ms: number;
+}
+
+export interface MultiTrackTransform {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+}
+
+export interface MultiTrackTextStyle {
+  font_size: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  background_color: string;
+}
+
+export interface MultiTrackTransition {
+  type: "fade";
+  duration_ms: number;
+}
+
+interface MultiTrackElementBase<TType extends MultiTrackKind> {
+  id: string;
+  type: TType;
+  target_time: MultiTrackTimeRange;
+  loop: boolean;
+}
+
+interface MultiTrackMediaElementBase<TType extends "video" | "audio">
+  extends MultiTrackElementBase<TType> {
+  source: MultiTrackSource;
+  source_trim: MultiTrackTimeRange | null;
+  speed: number;
+  volume: number;
+  fade_in_ms: number;
+  fade_out_ms: number;
+}
+
+export interface MultiTrackVideoElement
+  extends MultiTrackMediaElementBase<"video"> {
+  transform: MultiTrackTransform;
+  transition: MultiTrackTransition | null;
+}
+
+export type MultiTrackAudioElement =
+  MultiTrackMediaElementBase<"audio">;
+
+export interface MultiTrackImageElement
+  extends MultiTrackElementBase<"image"> {
+  source: MultiTrackSource;
+  transform: MultiTrackTransform;
+}
+
+export interface MultiTrackTextElement
+  extends MultiTrackElementBase<"text"> {
+  source: MultiTrackSource | null;
+  inline_text: string | null;
+  transform: MultiTrackTransform;
+  style: MultiTrackTextStyle;
+}
+
+export interface MultiTrackSubtitleElement
+  extends MultiTrackElementBase<"subtitle"> {
+  asset_id: string | null;
+  transform: MultiTrackTransform;
+  style: MultiTrackTextStyle;
+}
+
+export type MultiTrackElement =
+  | MultiTrackVideoElement
+  | MultiTrackAudioElement
+  | MultiTrackImageElement
+  | MultiTrackTextElement
+  | MultiTrackSubtitleElement;
+
+export interface MultiTrackTrack {
+  id: string;
+  name: string;
+  type: MultiTrackKind;
+  order: number;
+  hidden: boolean;
+  muted: boolean;
+  elements: MultiTrackElement[];
+}
+
+export interface MultiTrackEditConfig {
+  canvas: MultiTrackCanvas;
+  output: MultiTrackOutput;
+  tracks: MultiTrackTrack[];
+}
+
 export interface TextOutputConfig {
   title: string;
 }
@@ -270,7 +602,7 @@ export interface VideoOutputConfig {
   title: string;
 }
 
-interface AigcNodeBase<TType extends AigcNodeType, TConfig> {
+interface AigcNodeBase<TType extends string, TConfig> {
   id: string;
   type: TType;
   position: AigcPoint;
@@ -287,11 +619,36 @@ export type AigcNode =
   | AigcNodeBase<"text_to_image", ImageModelConfig>
   | AigcNodeBase<"image_to_image", ImageToImageConfig>
   | AigcNodeBase<"video_generation", VideoGenerationConfig>
+  | AigcNodeBase<"video_enhancement", VideoEnhancementConfig>
+  | AigcNodeBase<"video_face_blur", VideoFaceBlurConfig>
   | AigcNodeBase<"layer_canvas", LayerCanvasConfig>
   | AigcNodeBase<"layer_composite", LayerCompositeConfig>
   | AigcNodeBase<"text_output", TextOutputConfig>
   | AigcNodeBase<"image_output", ImageOutputConfig>
   | AigcNodeBase<"video_output", VideoOutputConfig>;
+
+type AigcModelOrControlNode = Exclude<
+  AigcNode,
+  {
+    type:
+      | "text_input"
+      | "image_input"
+      | "video_input"
+      | "audio_input"
+      | "text_output"
+      | "image_output"
+      | "video_output";
+  }
+>;
+
+export type AigcV2Node =
+  | AigcNodeBase<"text", TextConfig>
+  | AigcNodeBase<"image", ImageConfig>
+  | AigcNodeBase<"video", VideoConfig>
+  | AigcNodeBase<"audio", AudioConfig>
+  | AigcNodeBase<"multi_track_edit", MultiTrackEditConfig>
+  | AigcNodeBase<"json_parser", JsonParserConfig>
+  | AigcModelOrControlNode;
 
 export interface AigcEdge {
   id: string;
@@ -308,6 +665,13 @@ export interface AigcPipelineDefinition {
   viewport: AigcViewport;
 }
 
+export interface AigcPipelineDefinitionV2 {
+  schemaVersion: 2;
+  nodes: AigcV2Node[];
+  edges: AigcEdge[];
+  viewport: AigcViewport;
+}
+
 export interface AigcPortDefinition {
   id: string;
   label: string;
@@ -315,6 +679,7 @@ export interface AigcPortDefinition {
   required: boolean;
   multiple: boolean;
   max_connections: number;
+  system_only: boolean;
   modes: AigcVideoGenerationMode[];
 }
 
@@ -328,9 +693,15 @@ export interface AigcNodeRegistryItem {
   models: readonly string[];
 }
 
+export interface AigcV2NodeRegistryItem
+  extends Omit<AigcNodeRegistryItem, "type" | "category"> {
+  type: AigcV2NodeType;
+  category: AigcV2NodeCategory;
+}
+
 export interface AigcNodeRegistryResponse {
-  schema_version: 1;
-  nodes: AigcNodeRegistryItem[];
+  schema_version: 2;
+  nodes: AigcV2NodeRegistryItem[];
 }
 
 export interface AigcNamedEntity {
@@ -339,7 +710,7 @@ export interface AigcNamedEntity {
 }
 
 export interface AigcPipelineTemplateCreate extends AigcNamedEntity {
-  definition: AigcPipelineDefinition;
+  definition: AigcPipelineDefinition | AigcPipelineDefinitionV2;
 }
 
 export interface AigcPipelineTemplateUpdate
@@ -361,14 +732,14 @@ export interface AigcTemplateInstantiateRequest {
 export type AigcSaveAsTemplateRequest = AigcNamedEntity;
 
 export interface AigcPipelineCreate extends AigcNamedEntity {
-  definition: AigcPipelineDefinition;
+  definition: AigcPipelineDefinition | AigcPipelineDefinitionV2;
   source_template_id: string | null;
   source_template_revision: number | null;
 }
 
 export interface AigcPipelineUpdate extends AigcNamedEntity {
   expected_revision: number;
-  definition: AigcPipelineDefinition;
+  definition: AigcPipelineDefinition | AigcPipelineDefinitionV2;
 }
 
 export interface AigcPipeline extends AigcPipelineCreate {
@@ -403,12 +774,20 @@ export interface AigcResultAsset {
   mime_type: string | null;
   download_url: string | null;
   available: boolean;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface AigcJsonParserItem {
+  index: number;
+  text: string;
+  summary: string;
 }
 
 export interface AigcTaskResult {
   kind: AigcResultKind;
   text: string | null;
   text_digest: string | null;
+  items?: AigcJsonParserItem[];
   assets: AigcResultAsset[];
   layer_set?: AigcLayerSet | null;
   image_layer?: AigcImageLayer | null;
@@ -445,6 +824,7 @@ export interface AigcPipelineRunNode {
   reused_from_task_id: string | null;
   input_hash: string | null;
   result: AigcTaskResult;
+  error?: AigcTaskError | null;
   attempts: AigcPipelineTaskAttempt[];
 }
 
@@ -458,7 +838,7 @@ export interface AigcPipelineRun {
   source_run_id: string | null;
   source_node_id: string | null;
   status: AigcPipelineRunStatus;
-  definition_snapshot: AigcPipelineDefinition;
+  definition_snapshot: AigcPipelineDefinition | AigcPipelineDefinitionV2;
   input_snapshot: Record<string, JsonValue>;
   error: AigcTaskError | null;
   cancellation_requested: boolean;

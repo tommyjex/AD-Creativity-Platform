@@ -1,9 +1,12 @@
 from .assets import (
+    AigcVideoFaceBlurAssetInput,
+    AigcVideoEnhancementAssetInput,
     AssetStorageService,
     DownloadedAsset,
     HttpRemoteAssetDownloader,
     ObjectStorageClient,
     RemoteAssetDownloader,
+    StreamedAsset,
     StoredAssetInput,
     TosObjectStorageClient,
     get_asset_storage_service,
@@ -42,6 +45,8 @@ from .video_normalizer import (
 )
 
 __all__ = [
+    "AigcVideoFaceBlurAssetInput",
+    "AigcVideoEnhancementAssetInput",
     "AssetStorageService",
     "AssetBatchGenerationResult",
     "BytePlusModelArkAdapter",
@@ -61,6 +66,7 @@ __all__ = [
     "RemoteAssetDownloader",
     "StoryboardGenerationResult",
     "StoredAssetInput",
+    "StreamedAsset",
     "TextGenerationRequest",
     "TosObjectStorageClient",
     "ToolVideoGenerationRequest",

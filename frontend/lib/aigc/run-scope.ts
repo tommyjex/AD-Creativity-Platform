@@ -89,6 +89,12 @@ export function selectAigcProjectionRunIds(
         setsIntersect(flowScope, getAigcRunScopeNodeIds(run))
     );
     if (latestTerminal) selectedIds.add(latestTerminal.id);
+    const latestSuccessful = newestFirst.find(
+      (run) =>
+        run.status === "succeeded" &&
+        setsIntersect(flowScope, getAigcRunScopeNodeIds(run))
+    );
+    if (latestSuccessful) selectedIds.add(latestSuccessful.id);
   }
 
   return [...selectedIds];
@@ -105,9 +111,10 @@ export function createAigcRunProjection(
   const activeRuns = newestFirst.filter((run) =>
     ACTIVE_AIGC_RUN_STATUSES.has(run.status)
   );
-  const activeNodeIds = new Set(
-    activeRuns.flatMap((run) => [...getAigcRunScopeNodeIds(run)])
-  );
+  const activeScopes = activeRuns.map((run) => ({
+    run,
+    scope: getAigcRunScopeNodeIds(run)
+  }));
   const terminalRuns = newestFirst.filter(
     (run) => !ACTIVE_AIGC_RUN_STATUSES.has(run.status)
   );
@@ -127,6 +134,14 @@ export function createAigcRunProjection(
     return run ? details.get(run.id) ?? null : null;
   }
 
+  function activeRunForCurrentFlow(nodeId: string): AigcPipelineRun | null {
+    const currentScope = getConnectedAigcNodeIds(definition, nodeId);
+    return (
+      activeScopes.find(({ scope }) => setsIntersect(currentScope, scope))
+        ?.run ?? null
+    );
+  }
+
   function selectedRunForNode(
     nodeId: string
   ): AigcPipelineRunDetail | null {
@@ -141,17 +156,23 @@ export function createAigcRunProjection(
 
   return {
     isNodeActive(nodeId) {
-      return currentNodeIds.has(nodeId) && activeNodeIds.has(nodeId);
+      return (
+        currentNodeIds.has(nodeId) &&
+        activeRunForCurrentFlow(nodeId) !== null
+      );
     },
     activeRunForNode(nodeId) {
       if (!currentNodeIds.has(nodeId)) return null;
-      return detailForNode(activeRuns, nodeId);
+      const run = activeRunForCurrentFlow(nodeId);
+      return run ? details.get(run.id) ?? null : null;
     },
     displayRunForNode(nodeId) {
       if (!currentNodeIds.has(nodeId)) return null;
+      const selectedRun = selectedRunForNode(nodeId);
+      if (selectedRun) return selectedRun;
+      const activeRun = activeRunForCurrentFlow(nodeId);
+      if (activeRun) return details.get(activeRun.id) ?? null;
       return (
-        selectedRunForNode(nodeId) ??
-        detailForNode(activeRuns, nodeId) ??
         detailForNode(terminalRuns, nodeId)
       );
     },

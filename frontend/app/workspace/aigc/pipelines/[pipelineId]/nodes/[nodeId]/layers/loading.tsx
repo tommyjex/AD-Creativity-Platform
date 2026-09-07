@@ -3,15 +3,15 @@ export default function AigcLayerEditorLoading() {
     <main
       aria-busy="true"
       aria-label="AIGC 图层编辑器加载中"
-      className="grid h-[calc(100dvh-4rem)] grid-cols-[3.25rem_minmax(0,1fr)_20rem]"
+      className="flex h-[100dvh] flex-col overflow-hidden bg-[#0b0d10] lg:grid lg:grid-cols-[3.25rem_minmax(0,1fr)_20rem]"
     >
-      <div className="border-r bg-card" />
-      <div className="grid place-items-center bg-secondary/20">
-        <div className="aspect-square h-2/3 max-w-2xl animate-pulse rounded-lg bg-secondary" />
+      <div className="h-14 shrink-0 border-b border-[#2a3038] bg-[#14171b] lg:h-auto lg:border-b-0 lg:border-r" />
+      <div className="grid min-h-[24rem] flex-1 place-items-center bg-[#0d1014]">
+        <div className="aspect-square h-2/3 max-w-2xl animate-pulse rounded-md bg-[#1d2127]" />
       </div>
-      <div className="space-y-3 border-l bg-card p-3">
+      <div className="space-y-3 border-t border-[#2a3038] bg-[#171a1f] p-3 lg:border-l lg:border-t-0">
         {Array.from({ length: 5 }).map((_, index) => (
-          <div className="h-16 animate-pulse rounded-lg bg-secondary" key={index} />
+          <div className="h-16 animate-pulse rounded-md bg-[#1d2127]" key={index} />
         ))}
       </div>
     </main>

@@ -17,9 +17,27 @@ const navItems = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const isFullscreenAigcEditorRoute =
+    /^\/workspace\/aigc\/pipelines\/[^/]+\/nodes\/[^/]+\/(?:layers|timeline)\/?$/.test(
+      pathname
+    );
+
+  if (isFullscreenAigcEditorRoute) {
+    return (
+      <div
+        className="min-h-[100dvh] overflow-hidden bg-[#0b0d10] text-[#f2f4f7]"
+        data-testid="app-shell"
+      >
+        <div data-testid="app-shell-content">{children}</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
+    <div
+      className="relative min-h-screen overflow-hidden bg-background text-foreground"
+      data-testid="app-shell"
+    >
       <AtmosphereLayer />
       <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-card/90 backdrop-blur-xl">
         <div className="container flex h-16 items-center justify-between gap-6">
@@ -67,7 +85,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div className="relative z-10 pt-16">{children}</div>
+      <div className="relative z-10 pt-16" data-testid="app-shell-content">
+        {children}
+      </div>
     </div>
   );
 }

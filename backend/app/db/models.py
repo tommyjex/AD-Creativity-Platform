@@ -647,7 +647,7 @@ class AigcPipelineTemplateORM(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     definition_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
-    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -676,7 +676,7 @@ class AigcPipelineORM(Base):
         Integer, nullable=True
     )
     definition_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
-    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     latest_run_status: Mapped[Optional[AigcPipelineRunStatus]] = mapped_column(
         enum_column(AigcPipelineRunStatus),

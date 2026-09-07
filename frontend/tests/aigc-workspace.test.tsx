@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parseAigcView } from "@/app/workspace/aigc/page";
 import { AigcWorkspace } from "@/components/workspace/aigc/aigc-workspace";
 import { AigcQueryProvider } from "@/components/workspace/aigc/providers/aigc-query-provider";
 import type {
@@ -99,16 +100,19 @@ function page<T>(items: T[]): AigcPage<T> {
 
 function renderWorkspace({
   initialPipelines = page([pipeline]),
-  initialTemplates = page([template])
+  initialTemplates = page([template]),
+  initialView
 }: {
   initialPipelines?: AigcPage<AigcPipeline>;
   initialTemplates?: AigcPage<AigcPipelineTemplate>;
+  initialView?: "templates" | "pipelines";
 } = {}) {
   return render(
     <AigcQueryProvider>
       <AigcWorkspace
         initialPipelines={initialPipelines}
         initialTemplates={initialTemplates}
+        initialView={initialView}
       />
     </AigcQueryProvider>
   );
@@ -136,6 +140,25 @@ describe("AIGC workspace list", () => {
     expect(
       screen.getByRole("link", { name: "编辑模板：商品主图模板" })
     ).toHaveAttribute("href", "/workspace/aigc/templates/template-1");
+  });
+
+  it("starts on my pipelines when requested by the URL view", () => {
+    renderWorkspace({ initialView: "pipelines" });
+
+    expect(
+      screen.getByRole("tab", { name: "我的画布" })
+    ).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("秋季活动画布")).toBeInTheDocument();
+    expect(screen.queryByText("商品主图模板")).toBeNull();
+    expect(apiMocks.listAigcPipelines).not.toHaveBeenCalled();
+  });
+
+  it("falls back to templates for missing, invalid, or repeated views", () => {
+    expect(parseAigcView(undefined)).toBe("templates");
+    expect(parseAigcView("unknown")).toBe("templates");
+    expect(parseAigcView(["pipelines", "templates"])).toBe("templates");
+    expect(parseAigcView("templates")).toBe("templates");
+    expect(parseAigcView("pipelines")).toBe("pipelines");
   });
 
   it("switches to my pipelines without a second request for initial data", () => {
@@ -204,7 +227,7 @@ describe("AIGC workspace list", () => {
         name: "新品流程",
         description: "",
         definition: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           nodes: [],
           edges: [],
           viewport: { x: 0, y: 0, zoom: 1 }

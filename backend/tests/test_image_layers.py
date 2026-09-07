@@ -327,6 +327,19 @@ def test_modelark_layer_request_omits_optional_prompt_and_accepts_16_layers() ->
     assert client.images.calls[0]["prompt"] is None
 
 
+def test_modelark_accepts_absolute_bbox_for_provider_scaled_canvas() -> None:
+    layer = _valid_layer()
+    layer["bounding_box"] = {
+        "absolute": [128, 170, 1507, 656],
+        "normalized": [80, 259, 941, 1000],
+    }
+    adapter, _ = _adapter(_layer_response(layer))
+
+    result = asyncio.run(adapter.decompose_image_layers(_adapter_request()))
+
+    assert result.layers[0].bbox_absolute == (128, 170, 1507, 656)
+
+
 @pytest.mark.parametrize(
     "response",
     [
@@ -371,15 +384,6 @@ def test_modelark_layer_request_omits_optional_prompt_and_accepts_16_layers() ->
                 **_valid_layer(),
                 "bounding_box": {
                     "absolute": [512, 0, 1, 512],
-                    "normalized": [0, 0, 500, 500],
-                },
-            }
-        ),
-        _layer_response(
-            {
-                **_valid_layer(),
-                "bounding_box": {
-                    "absolute": [0, 0, 1025, 512],
                     "normalized": [0, 0, 500, 500],
                 },
             }

@@ -7,7 +7,6 @@ import {
   type AigcFlowNode
 } from "@/components/workspace/aigc/aigc-flow-node";
 import {
-  AigcLayerPreviewRunProvider,
   AigcRunActionsProvider,
   AigcRunProvider
 } from "@/components/workspace/aigc/aigc-run-context";
@@ -17,9 +16,10 @@ import {
   createAigcEditorStore,
   type AigcEditorStore
 } from "@/lib/aigc/editor-store";
+import type { AigcRunProjection } from "@/lib/aigc/run-scope";
 import type {
-  AigcNode,
-  AigcPipelineRunDetail
+  AigcPipelineRunDetail,
+  AigcV2Node
 } from "@/lib/aigc/types";
 import type { Asset } from "@/lib/api-types";
 
@@ -56,7 +56,19 @@ vi.mock("@xyflow/react", async (importOriginal) => {
         title={title}
       />
     ),
-    NodeResizer: () => null
+    NodeResizer: ({
+      minHeight,
+      minWidth
+    }: {
+      minHeight?: number;
+      minWidth?: number;
+    }) => (
+      <span
+        data-min-height={minHeight}
+        data-min-width={minWidth}
+        data-testid="node-resizer"
+      />
+    )
   };
 });
 
@@ -73,7 +85,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
 });
 
 function nodeProps(
-  node: AigcNode,
+  node: AigcV2Node,
   selected = false
 ): NodeProps<AigcFlowNode> {
   return {
@@ -92,26 +104,39 @@ function nodeProps(
 let store: AigcEditorStore;
 
 function renderNode(
-  node: AigcNode,
+  node: AigcV2Node,
   runDetail: AigcPipelineRunDetail | null = null,
   selected = false,
   runActions: {
     continueFromNode: (nodeId: string) => void;
+    openLayerEditor: (href: string) => void;
     pending: boolean;
   } | null = null,
   layerPreviewRun: AigcPipelineRunDetail | null = null
 ) {
+  const snapshot = runDetail?.run?.definition_snapshot;
+  if (snapshot) {
+    store.getState().initialize({
+      definition: snapshot,
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "测试画布",
+      revision: 1
+    });
+  }
   return render(
     nodeView(node, runDetail, selected, runActions, layerPreviewRun)
   );
 }
 
 function nodeView(
-  node: AigcNode,
+  node: AigcV2Node,
   runDetail: AigcPipelineRunDetail | null = null,
   selected = false,
   runActions: {
     continueFromNode: (nodeId: string) => void;
+    openLayerEditor: (href: string) => void;
     pending: boolean;
   } | null = null,
   layerPreviewRun: AigcPipelineRunDetail | null = null
@@ -119,16 +144,41 @@ function nodeView(
   return (
     <AigcQueryProvider>
       <AigcEditorStoreProvider store={store}>
-        <AigcRunActionsProvider value={runActions}>
-          <AigcRunProvider value={runDetail}>
-            <AigcLayerPreviewRunProvider value={layerPreviewRun}>
-              <AigcFlowNodeCard {...nodeProps(node, selected)} />
-            </AigcLayerPreviewRunProvider>
+        <AigcRunActionsProvider
+          value={
+            runActions
+              ? {
+                  continueFromNode: runActions.continueFromNode,
+                  openLayerEditor: runActions.openLayerEditor,
+                  pendingForNode: () => runActions.pending
+                }
+              : null
+          }
+        >
+          <AigcRunProvider
+            value={singleRunProjection(runDetail, layerPreviewRun)}
+          >
+            <AigcFlowNodeCard {...nodeProps(node, selected)} />
           </AigcRunProvider>
         </AigcRunActionsProvider>
       </AigcEditorStoreProvider>
     </AigcQueryProvider>
   );
+}
+
+function singleRunProjection(
+  detail: AigcPipelineRunDetail | null,
+  latestSuccessful = detail
+): AigcRunProjection {
+  const active =
+    detail?.run.status === "queued" || detail?.run.status === "running";
+  return {
+    activeRunForNode: () => (active ? detail : null),
+    displayRunForNode: () => detail,
+    hasAnyActiveRun: active,
+    isNodeActive: () => active,
+    latestSuccessfulRunForNode: () => latestSuccessful
+  };
 }
 
 describe("AIGC image nodes", () => {
@@ -156,7 +206,7 @@ describe("AIGC image nodes", () => {
     );
     store = createAigcEditorStore({
       definition: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         nodes: [],
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 }
@@ -169,53 +219,58 @@ describe("AIGC image nodes", () => {
     });
   });
 
-  it("applies each modality color to input card borders, headers, and icons", () => {
+  it("keeps modality color on input card borders without tinting the title row", () => {
     const cases: Array<{
       label: string;
-      node: AigcNode;
+      node: AigcV2Node;
       token: string;
     }> = [
       {
-        label: "文本输入",
+        label: "文本节点",
         node: {
           id: "input-text",
-          type: "text_input",
+          type: "text",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
-          config: { text: "产品描述", bbox_references: [] }
+          config: { text: "产品描述", bbox_references: [], title: null }
         },
         token: "text"
       },
       {
-        label: "图片输入",
+        label: "图片节点",
         node: {
           id: "input-image",
-          type: "image_input",
+          type: "image",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
-          config: { asset_id: null }
+          config: {
+            asset_id: null,
+            bbox: null,
+            bbox_asset_id: null,
+            title: null
+          }
         },
         token: "image"
       },
       {
-        label: "视频输入",
+        label: "视频节点",
         node: {
           id: "input-video",
-          type: "video_input",
+          type: "video",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
-          config: { asset_id: null }
+          config: { asset_id: null, title: null }
         },
         token: "video"
       },
       {
-        label: "音频输入",
+        label: "音频节点",
         node: {
           id: "input-audio",
-          type: "audio_input",
+          type: "audio",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
-          config: { asset_id: null }
+          config: { asset_id: null, title: null }
         },
         token: "audio"
       }
@@ -224,33 +279,30 @@ describe("AIGC image nodes", () => {
     for (const { label, node, token } of cases) {
       const { container, unmount } = renderNode(node);
       const card = container.firstElementChild as HTMLElement;
-      const title = screen.getByText(label);
-      const header = title.parentElement?.parentElement as HTMLElement;
-      const icon = title.previousElementSibling as HTMLElement;
+      const header = screen.getByTestId("aigc-node-title-row");
 
       expect(card).toHaveStyle({
         borderColor: `var(--aigc-modality-${token}-border)`
       });
-      expect(header).toHaveStyle({
-        backgroundColor: `var(--aigc-modality-${token}-light)`,
-        borderBottomColor: `var(--aigc-modality-${token}-border)`
-      });
-      expect(icon).toHaveStyle({
-        color: `var(--aigc-modality-${token})`
-      });
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(header.style.backgroundColor).toBe("");
+      expect(header.style.borderBottomColor).toBe("");
+      expect(screen.queryByTestId("aigc-node-type-icon")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: `删除节点：${label}` })
+      ).toBeNull();
 
       unmount();
     }
   });
 
-  it("keeps model and output cards on their existing neutral category styles", () => {
+  it("keeps model cards neutral and modality cards color coded", () => {
     const cases: Array<{
-      categoryClasses: string[];
       label: string;
-      node: AigcNode;
+      node: AigcV2Node;
+      token: "text" | null;
     }> = [
       {
-        categoryClasses: ["border-primary/25", "bg-primary/[0.07]"],
         label: "图生图",
         node: {
           id: "image-model",
@@ -263,50 +315,187 @@ describe("AIGC image nodes", () => {
             size: "2K",
             format: "png"
           }
-        }
+        },
+        token: null
       },
       {
-        categoryClasses: ["border-success/25", "bg-success/[0.08]"],
-        label: "文本输出",
+        label: "文本节点",
         node: {
           id: "text-output",
-          type: "text_output",
+          type: "text",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
-          config: { title: "文案结果" }
-        }
+          config: {
+            text: "",
+            bbox_references: [],
+            title: "文案结果"
+          }
+        },
+        token: "text"
       }
     ];
 
-    for (const { categoryClasses, label, node } of cases) {
+    for (const { label, node, token } of cases) {
       const { container, unmount } = renderNode(node);
       const card = container.firstElementChild as HTMLElement;
-      const title = screen.getByText(label);
-      const header = title.parentElement?.parentElement as HTMLElement;
-      const icon = title.previousElementSibling as HTMLElement;
+      const header = screen.getByTestId("aigc-node-title-row");
 
-      expect(card).toHaveClass("border-border");
-      expect(card.style.borderColor).toBe("");
-      expect(header).toHaveClass(...categoryClasses);
+      if (token) {
+        expect(card).toHaveStyle({
+          borderColor: `var(--aigc-modality-${token}-border)`
+        });
+      } else {
+        expect(card).toHaveClass("border-border");
+        expect(card.style.borderColor).toBe("");
+      }
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(header).toHaveClass("h-7", "px-2.5");
+      expect(header).not.toHaveClass("border-b");
       expect(header.style.backgroundColor).toBe("");
-      expect(icon.style.color).toBe("");
+      expect(screen.queryByTestId("aigc-node-type-icon")).toBeNull();
 
       unmount();
     }
   });
 
-  it("preserves the modality border, primary selection ring, and dimensions", () => {
-    const node: AigcNode = {
-      id: "selected-text",
-      type: "text_input",
+  it("derives duplicate canvas titles from definition order and operation", () => {
+    const firstImage: AigcV2Node = {
+      id: "image-first",
+      type: "image",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
-      config: { text: "选中节点", bbox_references: [] }
+      config: {
+        asset_id: null,
+        bbox: null,
+        bbox_asset_id: null,
+        title: null
+      }
+    };
+    const secondImage: AigcV2Node = {
+      ...firstImage,
+      id: "image-second",
+      position: { x: 0, y: 200 }
+    };
+    const firstModel: AigcV2Node = {
+      id: "model-first",
+      type: "image_to_image",
+      position: { x: 320, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        model: "doubao-seedream-5-0-pro-260628",
+        operation: "image_to_image",
+        aspect_ratio: "1:1",
+        size: "2K",
+        format: "png"
+      }
+    };
+    const secondModel: AigcV2Node = {
+      ...firstModel,
+      id: "model-second",
+      position: { x: 320, y: 200 }
+    };
+    const editModel: AigcV2Node = {
+      ...firstModel,
+      id: "edit-model",
+      position: { x: 320, y: 400 },
+      config: { ...firstModel.config, operation: "image_edit" }
+    };
+    store.getState().initialize({
+      definition: {
+        schemaVersion: 2,
+        nodes: [
+          firstImage,
+          secondImage,
+          firstModel,
+          secondModel,
+          editModel
+        ],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      },
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "节点命名",
+      revision: 1
+    });
+
+    const firstImageView = renderNode(firstImage);
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点1");
+    firstImageView.unmount();
+
+    const secondImageView = renderNode(secondImage);
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点2");
+    secondImageView.unmount();
+
+    const secondModelView = renderNode(secondModel);
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图生图2");
+    secondModelView.unmount();
+
+    renderNode(editModel);
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片编辑");
+  });
+
+  it("keeps a canvas title stable after dragging and renumbers it after deletion", () => {
+    const firstImage: AigcV2Node = {
+      id: "image-first",
+      type: "image",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        asset_id: null,
+        bbox: null,
+        bbox_asset_id: null,
+        title: null
+      }
+    };
+    const secondImage: AigcV2Node = {
+      ...firstImage,
+      id: "image-second",
+      position: { x: 0, y: 200 }
+    };
+    store.getState().initialize({
+      definition: {
+        schemaVersion: 2,
+        nodes: [firstImage, secondImage],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      },
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "节点重排",
+      revision: 1
+    });
+    renderNode(secondImage);
+
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点2");
+
+    act(() => store.getState().moveNode(secondImage.id, { x: -400, y: -300 }));
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点2");
+
+    act(() => store.getState().removeNode(firstImage.id));
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点");
+    expect(
+      store.getState().definition.nodes.find((node) => node.id === secondImage.id)
+    ).toMatchObject({
+      id: secondImage.id,
+      position: { x: -400, y: -300 }
+    });
+  });
+
+  it("preserves the modality border, primary selection ring, and dimensions", () => {
+    const node: AigcV2Node = {
+      id: "selected-text",
+      type: "text",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: { text: "选中节点", bbox_references: [], title: null }
     };
     const { container } = renderNode(node, null, true);
     const card = container.firstElementChild as HTMLElement;
-    const title = screen.getByText("文本输入");
-    const header = title.parentElement?.parentElement as HTMLElement;
+    const header = screen.getByTestId("aigc-node-title-row");
+    const title = screen.getByTestId("aigc-node-title");
 
     expect(card).toHaveClass(
       "h-full",
@@ -320,7 +509,33 @@ describe("AIGC image nodes", () => {
     expect(card).toHaveStyle({
       borderColor: "var(--aigc-modality-text-border)"
     });
-    expect(header).toHaveClass("h-9", "shrink-0", "px-2.5");
+    expect(header).toHaveClass("h-7", "shrink-0", "px-2.5");
+    expect(header).not.toHaveClass("border-b");
+    expect(title).toHaveClass("text-[11px]", "font-medium");
+    expect(title).not.toHaveClass("text-xs", "font-semibold");
+    expect(screen.queryByText("INPUT")).toBeNull();
+    expect(screen.queryByText("selected-text")).toBeNull();
+  });
+
+  it("keeps precise editing visible and disabled before an image is selected", () => {
+    renderNode({
+      id: "input-image",
+      type: "image",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        asset_id: null,
+        bbox: null,
+        bbox_asset_id: null,
+        title: null
+      }
+    });
+
+    const preciseEdit = screen.getByRole("button", {
+      name: "精准编辑：图片输入"
+    });
+    expect(preciseEdit).toBeDisabled();
+    expect(preciseEdit.parentElement).not.toHaveClass("opacity-0");
   });
 
   it("shows an input image without cropping and opens the original preview", async () => {
@@ -334,10 +549,15 @@ describe("AIGC image nodes", () => {
     } as unknown as Asset);
     renderNode({
       id: "input-image",
-      type: "image_input",
+      type: "image",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
-      config: { asset_id: "asset-1" }
+      config: {
+        asset_id: "asset-1",
+        bbox: null,
+        bbox_asset_id: null,
+        title: null
+      }
     });
 
     const image = await screen.findByAltText("产品横图.png");
@@ -361,28 +581,33 @@ describe("AIGC image nodes", () => {
   });
 
   it("opens precise editing and only enables strictly related text targets", async () => {
-    const imageNode: AigcNode = {
+    const imageNode: AigcV2Node = {
       id: "input-image",
-      type: "image_input",
+      type: "image",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
-      config: { asset_id: "asset-1", bbox: null, bbox_asset_id: null }
+      config: {
+        asset_id: "asset-1",
+        bbox: null,
+        bbox_asset_id: null,
+        title: null
+      }
     };
-    const promptNode: AigcNode = {
+    const promptNode: AigcV2Node = {
       id: "prompt",
-      type: "text_input",
+      type: "text",
       position: { x: 0, y: 200 },
       size: { width: 240, height: 160 },
-      config: { text: "替换包装", bbox_references: [] }
+      config: { text: "替换包装", bbox_references: [], title: null }
     };
-    const detachedPrompt: AigcNode = {
+    const detachedPrompt: AigcV2Node = {
       id: "detached-prompt",
-      type: "text_input",
+      type: "text",
       position: { x: 0, y: 400 },
       size: { width: 240, height: 160 },
-      config: { text: "背景描述", bbox_references: [] }
+      config: { text: "背景描述", bbox_references: [], title: null }
     };
-    const modelNode: AigcNode = {
+    const modelNode: AigcV2Node = {
       id: "model",
       type: "image_to_image",
       position: { x: 320, y: 0 },
@@ -396,7 +621,7 @@ describe("AIGC image nodes", () => {
     };
     store.getState().initialize({
       definition: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         nodes: [imageNode, promptNode, detachedPrompt, modelNode],
         edges: [
           {
@@ -444,20 +669,56 @@ describe("AIGC image nodes", () => {
       "w-full",
       "object-contain"
     );
-    expect(screen.getByRole("checkbox", { name: /替换包装/ })).toBeEnabled();
-    expect(screen.getByRole("checkbox", { name: /背景描述/ })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /文本节点1/ })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: /文本节点2/ })).toBeDisabled();
+    expect(screen.queryByText("prompt")).toBeNull();
+    expect(screen.queryByText("detached-prompt")).toBeNull();
     expect(screen.getByRole("button", { name: "清除框选" })).toBeDisabled();
   });
 
   it("shows the latest output image and its intrinsic resolution", () => {
-    const node: AigcNode = {
+    const source: AigcV2Node = {
+      id: "image-model",
+      type: "text_to_image",
+      position: { x: -320, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        model: "doubao-seedream-5-0-pro-260628",
+        aspect_ratio: "1:1",
+        size: "2K",
+        format: "png"
+      }
+    };
+    const node: AigcV2Node = {
       id: "output-image",
-      type: "image_output",
+      type: "image",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
-      config: { title: "生成结果" }
+      config: {
+        asset_id: null,
+        bbox: null,
+        bbox_asset_id: null,
+        title: "生成结果"
+      }
     };
     const runDetail = {
+      run: {
+        id: "run-image",
+        definition_snapshot: {
+          schemaVersion: 2,
+          nodes: [source, node],
+          edges: [
+            {
+              id: "image-output-edge",
+              sourceNodeId: source.id,
+              sourceHandle: "image",
+              targetNodeId: node.id,
+              targetHandle: "image"
+            }
+          ],
+          viewport: { x: 0, y: 0, zoom: 1 }
+        }
+      },
       nodes: [
         {
           node_id: node.id,
@@ -488,18 +749,91 @@ describe("AIGC image nodes", () => {
 
     expect(image).toHaveClass("object-contain");
     expect(screen.getByText("1024 × 1536")).toBeInTheDocument();
-    const download = screen.getByRole("link", {
-      name: "下载图片：生成结果"
+    expect(
+      screen.queryByRole("link", { name: "下载图片：生成结果" })
+    ).toBeNull();
+  });
+
+  it("renders modality mode and value from the selected historical run snapshot", () => {
+    const source: AigcV2Node = {
+      id: "historical-source",
+      type: "text",
+      position: { x: -320, y: 0 },
+      size: { width: 240, height: 160 },
+      config: { text: "历史源文本", bbox_references: [], title: null }
+    };
+    const node: AigcV2Node = {
+      id: "historical-relay",
+      type: "text",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        text: "当前断线后的本地备用文本",
+        bbox_references: [],
+        title: "当前标题"
+      }
+    };
+    store.getState().initialize({
+      definition: {
+        schemaVersion: 2,
+        nodes: [source, node],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      },
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "测试画布",
+      revision: 2
     });
-    expect(download).toHaveAttribute(
-      "href",
-      "http://localhost:8000/api/assets/result-1/content?download=1&filename=%E7%94%9F%E6%88%90%E7%BB%93%E6%9E%9C-1.png"
-    );
-    expect(download).toHaveAttribute("download", "生成结果-1.png");
+    const historicalNode = {
+      ...node,
+      config: {
+        ...node.config,
+        title: "历史标题"
+      }
+    } satisfies AigcV2Node;
+    const runDetail = {
+      run: {
+        id: "run-historical",
+        definition_snapshot: {
+          schemaVersion: 2,
+          nodes: [source, historicalNode],
+          edges: [
+            {
+              id: "historical-edge",
+              sourceNodeId: source.id,
+              sourceHandle: "text",
+              targetNodeId: node.id,
+              targetHandle: "text"
+            }
+          ],
+          viewport: { x: 0, y: 0, zoom: 1 }
+        }
+      },
+      nodes: [
+        {
+          node_id: node.id,
+          result: {
+            kind: "text",
+            text: "冻结的历史 Run 文本",
+            text_digest: "a".repeat(64),
+            assets: []
+          },
+          status: "succeeded"
+        }
+      ]
+    } as unknown as AigcPipelineRunDetail;
+
+    render(nodeView(node, runDetail));
+
+    expect(screen.queryByTestId("aigc-modality-mode")).toBeNull();
+    expect(screen.getByText("当前断线后的本地备用文本")).toBeInTheDocument();
+    expect(screen.queryByText("冻结的历史 Run 文本")).toBeNull();
   });
 
   it("plays a projected video output with specs and controlled download", () => {
-    const generationNode: AigcNode = {
+    const generationNode: AigcV2Node = {
       id: "video-model",
       type: "video_generation",
       position: { x: 0, y: 0 },
@@ -513,18 +847,18 @@ describe("AIGC image nodes", () => {
         generate_audio: false
       }
     };
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "video-output",
-      type: "video_output",
+      type: "video",
       position: { x: 320, y: 0 },
       size: { width: 240, height: 180 },
-      config: { title: "最终/成片" }
+      config: { asset_id: null, title: "最终/成片" }
     };
     const runDetail = {
       run: {
         id: "run-video",
         definition_snapshot: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           nodes: [generationNode, node],
           edges: [
             {
@@ -576,14 +910,9 @@ describe("AIGC image nodes", () => {
       screen.getByText(/1280 × 720 · 8.4s · 无音频 · video\/mp4 · 可用/)
     ).toBeInTheDocument();
 
-    const download = screen.getByRole("link", {
-      name: "下载视频：最终/成片"
-    });
-    expect(download).toHaveAttribute("download", "最终-成片-2.mp4");
-    expect(download).toHaveAttribute(
-      "href",
-      "http://localhost:8000/api/assets/video-result/content?download=1&filename=%E6%9C%80%E7%BB%88-%E6%88%90%E7%89%87-2.mp4"
-    );
+    expect(
+      screen.queryByRole("link", { name: "下载视频：最终/成片" })
+    ).toBeNull();
 
     fireEvent.click(
       screen.getByRole("button", { name: "放大预览：最终/成片" })
@@ -594,21 +923,267 @@ describe("AIGC image nodes", () => {
     expect(preview).toHaveClass("object-contain");
   });
 
-  it("disables video playback and download for an unavailable result", () => {
-    const node: AigcNode = {
+  it("renders video enhancement summaries, orange modality, and cost badges", () => {
+    const node: AigcV2Node = {
+      id: "video-enhancement",
+      type: "video_enhancement",
+      position: { x: 0, y: 0 },
+      size: { width: 260, height: 180 },
+      config: {
+        tool_version: "professional",
+        scene: null,
+        enhance_style: "natural",
+        resolution_mode: "preset",
+        resolution: "8k",
+        resolution_limit: null,
+        fps: null,
+        bitrate_mode: "level",
+        bitrate_level: "high",
+        bitrate: null,
+        bit_depth: 12
+      }
+    };
+    const { container } = renderNode(node);
+
+    expect(container.firstElementChild).toHaveStyle({
+      borderColor: "var(--aigc-modality-video-border)"
+    });
+    expect(
+      screen.getByText("专业版 · 8K · 原帧率 · 自然")
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("高成本配置")).toHaveTextContent(
+      "高成本 · 专业版"
+    );
+    expect(screen.getByLabelText("高成本配置")).toHaveTextContent(
+      "高成本 · 8K"
+    );
+    expect(screen.getByLabelText("高成本配置")).toHaveTextContent(
+      "高成本 · 12-bit"
+    );
+    expect(screen.getByLabelText("视频输入")).toHaveStyle({
+      backgroundColor: "var(--aigc-modality-video)"
+    });
+    expect(screen.getByLabelText("视频输出")).toHaveStyle({
+      backgroundColor: "var(--aigc-modality-video)"
+    });
+  });
+
+  it("renders the face blur summary with video modality colors", () => {
+    const node: AigcV2Node = {
+      id: "face-blur",
+      type: "video_face_blur",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: { mask_mode: "blur", mask_strength: "high" }
+    };
+    const { container } = renderNode(node);
+
+    expect(container.firstElementChild).toHaveStyle({
+      borderColor: "var(--aigc-modality-video-border)"
+    });
+    expect(screen.getByText("高斯模糊 · 高强度")).toBeInTheDocument();
+    expect(screen.getByLabelText("视频输入")).toHaveStyle({
+      backgroundColor: "var(--aigc-modality-video)"
+    });
+    expect(screen.getByLabelText("视频输出")).toHaveStyle({
+      backgroundColor: "var(--aigc-modality-video)"
+    });
+  });
+
+  it("plays and downloads a face blur result from a video output node", () => {
+    const faceBlur: AigcV2Node = {
+      id: "face-blur",
+      type: "video_face_blur",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: { mask_mode: "mosaic", mask_strength: "medium" }
+    };
+    const output: AigcV2Node = {
       id: "video-output",
-      type: "video_output",
+      type: "video",
+      position: { x: 320, y: 0 },
+      size: { width: 240, height: 180 },
+      config: { asset_id: null, title: "脱敏/成片" }
+    };
+    renderNode(output, {
+      run: {
+        id: "run-face-blur",
+        definition_snapshot: {
+          schemaVersion: 2,
+          nodes: [faceBlur, output],
+          edges: [
+            {
+              id: "face-blur-output",
+              sourceNodeId: faceBlur.id,
+              sourceHandle: "video",
+              targetNodeId: output.id,
+              targetHandle: "video"
+            }
+          ],
+          viewport: { x: 0, y: 0, zoom: 1 }
+        }
+      },
+      nodes: [
+        {
+          node_id: output.id,
+          result: {
+            kind: "assets",
+            text: null,
+            text_digest: null,
+            assets: [
+              {
+                asset_id: "face-blur-result",
+                ordinal: 0,
+                mime_type: "video/mp4",
+                download_url: "/api/assets/face-blur-result/content",
+                available: true,
+                metadata: {
+                  duration_seconds: 9.5,
+                  mask_mode: "mosaic",
+                  mask_strength: "medium"
+                }
+              }
+            ]
+          },
+          status: "succeeded"
+        }
+      ]
+    } as unknown as AigcPipelineRunDetail);
+
+    expect(screen.getByLabelText("播放视频：脱敏/成片")).toHaveClass(
+      "object-contain"
+    );
+    expect(
+      screen.getByRole("button", { name: "全屏播放：脱敏/成片" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "放大预览：脱敏/成片" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "下载视频：脱敏/成片" })
+    ).toBeNull();
+  });
+
+  it("projects enhanced video metadata and a stable download in video output", () => {
+    const enhancement: AigcV2Node = {
+      id: "enhance",
+      type: "video_enhancement",
+      position: { x: 0, y: 0 },
+      size: { width: 260, height: 180 },
+      config: {
+        tool_version: "professional",
+        scene: null,
+        enhance_style: "hd",
+        resolution_mode: "preset",
+        resolution: "4k",
+        resolution_limit: null,
+        fps: 60,
+        bitrate_mode: "level",
+        bitrate_level: "high",
+        bitrate: null,
+        bit_depth: 10
+      }
+    };
+    const output: AigcV2Node = {
+      id: "video-output",
+      type: "video",
+      position: { x: 320, y: 0 },
+      size: { width: 240, height: 180 },
+      config: { asset_id: null, title: "增强/成片" }
+    };
+    renderNode(output, {
+      run: {
+        id: "run-enhanced",
+        definition_snapshot: {
+          schemaVersion: 2,
+          nodes: [enhancement, output],
+          edges: [
+            {
+              id: "enhanced-output",
+              sourceNodeId: enhancement.id,
+              sourceHandle: "video",
+              targetNodeId: output.id,
+              targetHandle: "video"
+            }
+          ],
+          viewport: { x: 0, y: 0, zoom: 1 }
+        }
+      },
+      nodes: [
+        {
+          node_id: output.id,
+          result: {
+            kind: "assets",
+            text: null,
+            text_digest: null,
+            assets: [
+              {
+                asset_id: "enhanced-result",
+                ordinal: 0,
+                mime_type: "video/quicktime",
+                download_url: "/api/assets/enhanced-result/content",
+                available: true,
+                metadata: {
+                  resolution: "3840x2160",
+                  fps: 59.94,
+                  duration_seconds: 12.5,
+                  tool_version: "professional",
+                  bit_depth: 10
+                }
+              }
+            ]
+          },
+          status: "reused"
+        }
+      ]
+    } as unknown as AigcPipelineRunDetail);
+
+    expect(screen.getByLabelText("播放视频：增强/成片")).toHaveClass(
+      "object-contain"
+    );
+    expect(
+      screen.getByText(
+        /3840x2160 · 12.5s · 59.94 fps · 专业版 · 10-bit · video\/quicktime · 可用/
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "全屏播放：增强/成片" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "下载视频：增强/成片" })
+    ).toBeNull();
+  });
+
+  it("disables video playback and download for an unavailable result", () => {
+    const source: AigcV2Node = {
+      id: "video-model",
+      type: "video_face_blur",
+      position: { x: -320, y: 0 },
+      size: { width: 240, height: 160 },
+      config: { mask_mode: "blur", mask_strength: "medium" }
+    };
+    const node: AigcV2Node = {
+      id: "video-output",
+      type: "video",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 180 },
-      config: { title: "历史成片" }
+      config: { asset_id: null, title: "历史成片" }
     };
     renderNode(node, {
       run: {
         id: "run-unavailable",
         definition_snapshot: {
-          schemaVersion: 1,
-          nodes: [node],
-          edges: [],
+          schemaVersion: 2,
+          nodes: [source, node],
+          edges: [
+            {
+              id: "video-output-edge",
+              sourceNodeId: source.id,
+              sourceHandle: "video",
+              targetNodeId: node.id,
+              targetHandle: "video"
+            }
+          ],
           viewport: { x: 0, y: 0, zoom: 1 }
         }
       },
@@ -635,7 +1210,7 @@ describe("AIGC image nodes", () => {
     } as unknown as AigcPipelineRunDetail);
 
     expect(
-      screen.getByText("历史视频结果已不可用，资产可能已删除或无权访问")
+      screen.getByText("上游视频结果不可用")
     ).toBeInTheDocument();
     expect(screen.getByText("播放和下载已禁用")).toBeInTheDocument();
     expect(screen.queryByLabelText(/播放视频/)).toBeNull();
@@ -643,7 +1218,7 @@ describe("AIGC image nodes", () => {
   });
 
   it("shows the image reference count and marks a full input accessibly", () => {
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "image-model",
       type: "image_to_image",
       position: { x: 320, y: 0 },
@@ -657,10 +1232,15 @@ describe("AIGC image nodes", () => {
     };
     const sourceNodes = Array.from({ length: 10 }, (_, index) => ({
       id: `image-${index + 1}`,
-      type: "image_input" as const,
+      type: "image" as const,
       position: { x: 0, y: index * 40 },
       size: { width: 240, height: 160 },
-      config: { asset_id: `asset-${index + 1}` }
+      config: {
+        asset_id: `asset-${index + 1}`,
+        bbox: null,
+        bbox_asset_id: null,
+        title: null
+      }
     }));
     const edges = sourceNodes.map((source, index) => ({
       id: `edge-${index + 1}`,
@@ -671,7 +1251,7 @@ describe("AIGC image nodes", () => {
     }));
     store.getState().initialize({
       definition: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         nodes: [...sourceNodes, node],
         edges: edges.slice(0, 3),
         viewport: { x: 0, y: 0, zoom: 1 }
@@ -696,7 +1276,7 @@ describe("AIGC image nodes", () => {
     act(() => {
       store.getState().initialize({
         definition: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           nodes: [...sourceNodes, node],
           edges,
           viewport: { x: 0, y: 0, zoom: 1 }
@@ -727,10 +1307,10 @@ describe("AIGC image nodes", () => {
     } as unknown as Asset);
     renderNode({
       id: "input-video",
-      type: "video_input",
+      type: "video",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 180 },
-      config: { asset_id: "video-1" }
+      config: { asset_id: "video-1", title: null }
     });
 
     const video = await screen.findByLabelText("播放视频：产品演示.mp4");
@@ -766,10 +1346,10 @@ describe("AIGC image nodes", () => {
     } as unknown as Asset);
     renderNode({
       id: "input-audio",
-      type: "audio_input",
+      type: "audio",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
-      config: { asset_id: "audio-1" }
+      config: { asset_id: "audio-1", title: null }
     });
 
     const audio = await screen.findByLabelText("播放音频：旁白.mp3");
@@ -792,10 +1372,10 @@ describe("AIGC image nodes", () => {
     } as unknown as Asset);
     renderNode({
       id: "input-video",
-      type: "video_input",
+      type: "video",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
-      config: { asset_id: "wrong-type" }
+      config: { asset_id: "wrong-type", title: null }
     });
 
     expect(await screen.findByText("资产不可用，请替换")).toBeInTheDocument();
@@ -803,7 +1383,7 @@ describe("AIGC image nodes", () => {
   });
 
   it("renders mode-specific video handles and model-specific reference counts", () => {
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "video-model",
       type: "video_generation",
       position: { x: 320, y: 0 },
@@ -819,7 +1399,7 @@ describe("AIGC image nodes", () => {
     };
     store.getState().initialize({
       definition: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         nodes: [node],
         edges: [
           {
@@ -907,7 +1487,7 @@ describe("AIGC image nodes", () => {
 
   it("uses port types for image generation, LLM, and output handles", () => {
     const nodes: Array<{
-      node: AigcNode;
+      node: AigcV2Node;
       handles: Array<[string, string, string]>;
     }> = [
       {
@@ -967,10 +1547,10 @@ describe("AIGC image nodes", () => {
       {
         node: {
           id: "text-output",
-          type: "text_output",
+          type: "text",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
-          config: { title: "结果" }
+          config: { text: "", bbox_references: [], title: "结果" }
         },
         handles: [
           ["文本输入", "target", "var(--aigc-modality-text)"]
@@ -979,10 +1559,15 @@ describe("AIGC image nodes", () => {
       {
         node: {
           id: "image-output",
-          type: "image_output",
+          type: "image",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
-          config: { title: "结果" }
+          config: {
+            asset_id: null,
+            bbox: null,
+            bbox_asset_id: null,
+            title: "结果"
+          }
         },
         handles: [
           ["图片输入", "target", "var(--aigc-modality-image)"]
@@ -991,10 +1576,10 @@ describe("AIGC image nodes", () => {
       {
         node: {
           id: "video-output",
-          type: "video_output",
+          type: "video",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
-          config: { title: "结果" }
+          config: { asset_id: null, title: "结果" }
         },
         handles: [
           ["视频输入", "target", "var(--aigc-modality-video)"]
@@ -1015,7 +1600,7 @@ describe("AIGC image nodes", () => {
   });
 
   it("keeps an incompatible connected handle visible and disables it", () => {
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "video-model",
       type: "video_generation",
       position: { x: 320, y: 0 },
@@ -1031,7 +1616,7 @@ describe("AIGC image nodes", () => {
     };
     store.getState().initialize({
       definition: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         nodes: [node],
         edges: [
           {
@@ -1071,7 +1656,7 @@ describe("AIGC image nodes", () => {
   });
 
   it("renders Seedream ports from the operation and edit target", () => {
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "seedream-edit",
       type: "image_to_image",
       position: { x: 320, y: 0 },
@@ -1086,7 +1671,7 @@ describe("AIGC image nodes", () => {
     };
     store.getState().initialize({
       definition: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         nodes: [node],
         edges: [
           {
@@ -1131,9 +1716,9 @@ describe("AIGC image nodes", () => {
     ).toHaveAttribute("data-connectable", "false");
   });
 
-  it("renders a layer canvas composite preview and blocks its entry while dirty", async () => {
+  it("renders a layer canvas preview and delegates entry to the flush gate", async () => {
     const digest = "a".repeat(64);
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "layer-canvas",
       type: "layer_canvas",
       position: { x: 320, y: 0 },
@@ -1144,7 +1729,7 @@ describe("AIGC image nodes", () => {
         transform_patches: [{ layer_id: "layer-1", x: 140 }]
       }
     };
-    const source: AigcNode = {
+    const source: AigcV2Node = {
       id: "source",
       type: "image_to_image",
       position: { x: 0, y: 0 },
@@ -1190,7 +1775,7 @@ describe("AIGC image nodes", () => {
       ]
     };
     const definition = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       nodes: [source, node],
       edges: [edge],
       viewport: { x: 0, y: 0, zoom: 1 }
@@ -1244,8 +1829,10 @@ describe("AIGC image nodes", () => {
     };
 
     const continueFromNode = vi.fn();
+    const openLayerEditor = vi.fn();
     const view = renderNode(node, runDetail, false, {
       continueFromNode,
+      openLayerEditor,
       pending: false
     });
 
@@ -1278,6 +1865,18 @@ describe("AIGC image nodes", () => {
     const continueButton = screen.getByRole("button", {
       name: "从此节点继续"
     });
+    expect(screen.getByTestId("node-resizer")).toHaveAttribute(
+      "data-min-width",
+      "380"
+    );
+    expect(screen.getByTestId("node-resizer")).toHaveAttribute(
+      "data-min-height",
+      "420"
+    );
+    expect(screen.getByTestId("layer-canvas-actions")).toHaveClass(
+      "shrink-0",
+      "grid-cols-2"
+    );
     expect(continueButton).toHaveAttribute(
       "title",
       "复用可用的上游结果，从图层画布节点重新执行当前节点及下游"
@@ -1288,16 +1887,16 @@ describe("AIGC image nodes", () => {
     view.rerender(
       nodeView(node, runDetail, false, {
         continueFromNode,
+        openLayerEditor,
         pending: true
       })
     );
     expect(screen.getByRole("button", { name: "从此节点继续" })).toBeDisabled();
 
-    act(() => store.setState({ dirty: true }));
     fireEvent.click(screen.getByRole("link", { name: "打开图层编辑器" }));
-    expect(
-      screen.getByText("主画布有未保存修改，请先保存 Pipeline。")
-    ).toBeInTheDocument();
+    expect(openLayerEditor).toHaveBeenCalledWith(
+      "/workspace/aigc/pipelines/pipeline-1/nodes/layer-canvas/layers"
+    );
   });
 
   it("loads a real 17-layer preview through the selected run and preserves successful layers", async () => {
@@ -1315,7 +1914,7 @@ describe("AIGC image nodes", () => {
       y: index * 5,
       scale: 1
     }));
-    const source: AigcNode = {
+    const source: AigcV2Node = {
       id: "source-17",
       type: "image_to_image",
       position: { x: 0, y: 0 },
@@ -1328,7 +1927,7 @@ describe("AIGC image nodes", () => {
         format: "png"
       }
     };
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "canvas-17",
       type: "layer_canvas",
       position: { x: 320, y: 0 },
@@ -1340,7 +1939,7 @@ describe("AIGC image nodes", () => {
       }
     };
     const definition = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       nodes: [source, node],
       edges: [{
         id: "edge-17",
@@ -1505,7 +2104,7 @@ describe("AIGC image nodes", () => {
   });
 
   it("shows an empty state without requesting assets when the current run has no successful layer set", () => {
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "empty-layer-canvas",
       type: "layer_canvas",
       position: { x: 0, y: 0 },
@@ -1518,7 +2117,7 @@ describe("AIGC image nodes", () => {
     };
     store.getState().initialize({
       definition: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         nodes: [node],
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 }
@@ -1539,7 +2138,7 @@ describe("AIGC image nodes", () => {
 
   it("shows layer composite inputs, replacement target, run state, and both outputs", () => {
     const digest = "a".repeat(64);
-    const canvas: AigcNode = {
+    const canvas: AigcV2Node = {
       id: "canvas",
       type: "layer_canvas",
       position: { x: 0, y: 0 },
@@ -1550,7 +2149,7 @@ describe("AIGC image nodes", () => {
         transform_patches: []
       }
     };
-    const edit: AigcNode = {
+    const edit: AigcV2Node = {
       id: "edit",
       type: "image_to_image",
       position: { x: 300, y: 0 },
@@ -1563,7 +2162,7 @@ describe("AIGC image nodes", () => {
         format: "png"
       }
     };
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "composite",
       type: "layer_composite",
       position: { x: 600, y: 0 },
@@ -1612,7 +2211,7 @@ describe("AIGC image nodes", () => {
       ]
     };
     const definition = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       nodes: [canvas, edit, node],
       edges,
       viewport: { x: 0, y: 0, zoom: 1 }
@@ -1625,6 +2224,7 @@ describe("AIGC image nodes", () => {
       name: "连续图层编辑",
       revision: 1
     });
+    const continueFromNode = vi.fn();
     renderNode(node, {
       run: {
         id: "run-composite",
@@ -1674,14 +2274,18 @@ describe("AIGC image nodes", () => {
           }
         }
       ]
-    } as unknown as AigcPipelineRunDetail);
+    } as unknown as AigcPipelineRunDetail, false, {
+      continueFromNode,
+      openLayerEditor: vi.fn(),
+      pending: false
+    });
 
     expect(screen.getByLabelText("图层集输入已连接")).toBeInTheDocument();
     expect(screen.getByLabelText("替换图层输入已连接")).toBeInTheDocument();
     expect(screen.getByText("商品")).toBeInTheDocument();
     expect(screen.getByText("扁平图片已生成")).toBeInTheDocument();
     expect(screen.getByText(/v2 · 2 层/)).toBeInTheDocument();
-    expect(screen.getByText("SUCCEEDED")).toBeInTheDocument();
+    expect(screen.queryByText("SUCCEEDED")).toBeNull();
     expect(screen.getByLabelText("图片输出")).toHaveAttribute(
       "data-connectable",
       "true"
@@ -1690,10 +2294,23 @@ describe("AIGC image nodes", () => {
       "data-connectable",
       "true"
     );
+    expect(screen.getByTestId("node-resizer")).toHaveAttribute(
+      "data-min-width",
+      "360"
+    );
+    expect(screen.getByTestId("node-resizer")).toHaveAttribute(
+      "data-min-height",
+      "340"
+    );
+    expect(screen.getByTestId("layer-composite-actions")).toHaveClass(
+      "shrink-0"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "从此节点继续" }));
+    expect(continueFromNode).toHaveBeenCalledWith("composite");
   });
 
   it("shows an active layer composite as running", () => {
-    const node: AigcNode = {
+    const node: AigcV2Node = {
       id: "composite",
       type: "layer_composite",
       position: { x: 0, y: 0 },
@@ -1704,7 +2321,7 @@ describe("AIGC image nodes", () => {
       run: {
         id: "run-composite",
         definition_snapshot: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           nodes: [node],
           edges: [],
           viewport: { x: 0, y: 0, zoom: 1 }
@@ -1725,6 +2342,6 @@ describe("AIGC image nodes", () => {
     } as unknown as AigcPipelineRunDetail);
 
     expect(screen.getByText("正在合成")).toBeInTheDocument();
-    expect(screen.getByText("RUNNING")).toBeInTheDocument();
+    expect(screen.queryByText("RUNNING")).toBeNull();
   });
 });

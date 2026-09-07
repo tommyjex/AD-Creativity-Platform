@@ -2,17 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import mimetypes
+import os
 import re
+import tempfile
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Protocol
+from io import BytesIO
+from typing import BinaryIO, Protocol
 from urllib.parse import quote, urlsplit
 
 import httpx
+from PIL import Image, UnidentifiedImageError
 
 from backend.app.core.config import ConfigurationError, Settings, get_settings
 from backend.app.repositories import Repository
 from backend.app.schemas import (
+    AigcAssetDirection,
+    AigcPipelineTaskAssetReference,
     Asset,
     AssetCategory,
     AssetCreate,
@@ -22,6 +29,10 @@ from backend.app.schemas import (
     Stage,
     Status,
     ToolAssetRole,
+)
+from backend.app.services.aigc_asset_naming import (
+    AigcAssetNamingContext,
+    aigc_output_name_metadata,
 )
 
 
@@ -51,6 +62,81 @@ class DownloadedAsset:
     mime_type: str
 
 
+class GeneratedImageValidationError(ValueError):
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        super().__init__(message)
+
+
+@dataclass(frozen=True)
+class StreamedAsset:
+    mime_type: str
+    size_bytes: int
+
+
+@dataclass(frozen=True)
+class AigcVideoEnhancementAssetInput:
+    source_url: str
+    pipeline_id: str
+    run_id: str
+    node_id: str
+    task_id: str
+    input_asset_id: str
+    provider_task_id: str
+    tool_version: str
+    enhance_style: str
+    resolution_mode: str
+    executor_version: str
+    provider_request_id: str | None = None
+    scene: str | None = None
+    resolution: str | None = None
+    resolution_limit: int | None = None
+    fps: float | None = None
+    bitrate_mode: str | None = None
+    bitrate_level: str | None = None
+    bitrate: int | None = None
+    bit_depth: int | None = None
+    duration_seconds: float | None = None
+    naming_context: AigcAssetNamingContext | None = None
+
+
+@dataclass(frozen=True)
+class AigcVideoFaceBlurAssetInput:
+    source_url: str
+    pipeline_id: str
+    run_id: str
+    node_id: str
+    task_id: str
+    input_asset_id: str
+    provider_task_id: str
+    mask_mode: str
+    mask_strength: str
+    executor_version: str
+    provider_request_id: str | None = None
+    duration_seconds: float | None = None
+    naming_context: AigcAssetNamingContext | None = None
+
+
+@dataclass(frozen=True)
+class AigcMultiTrackAssetInput:
+    source_url: str
+    pipeline_id: str
+    run_id: str
+    node_id: str
+    task_id: str
+    input_asset_ids: Mapping[str, Sequence[str]]
+    provider_task_id: str
+    executor_version: str
+    canvas: Mapping[str, object]
+    tracks: Sequence[Mapping[str, object]]
+    duration_ms: int
+    width: int
+    height: int
+    fps: int | float
+    provider_request_id: str | None = None
+    naming_context: AigcAssetNamingContext | None = None
+
+
 class RemoteAssetDownloader(Protocol):
     async def fetch(
         self,
@@ -65,7 +151,7 @@ class HttpRemoteAssetDownloader:
     def __init__(
         self,
         *,
-        timeout_seconds: int,
+        timeout_seconds: float,
         max_bytes: int,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -73,66 +159,78 @@ class HttpRemoteAssetDownloader:
         self.max_bytes = max_bytes
         self.transport = transport
 
+    async def stream_to_file(
+        self,
+        url: str,
+        destination: BinaryIO,
+        *,
+        expected_mime_type: str | None = None,
+    ) -> StreamedAsset:
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("generated asset URL must use HTTP or HTTPS")
+
+        timeout = httpx.Timeout(float(self.timeout_seconds))
+        async with asyncio.timeout(float(self.timeout_seconds)):
+            async with httpx.AsyncClient(
+                follow_redirects=True,
+                timeout=timeout,
+                transport=self.transport,
+            ) as client:
+                async with client.stream("GET", url) as response:
+                    response.raise_for_status()
+                    mime_type = _validated_response_mime_type(
+                        response.headers.get("content-type"),
+                        expected_mime_type=expected_mime_type,
+                    )
+                    content_length = response.headers.get("content-length")
+                    if content_length is not None:
+                        try:
+                            declared_size = int(content_length)
+                        except ValueError as exc:
+                            raise ValueError(
+                                "generated asset response has invalid content length"
+                            ) from exc
+                        if declared_size < 0:
+                            raise ValueError(
+                                "generated asset response has invalid content length"
+                            )
+                        if declared_size > self.max_bytes:
+                            raise ValueError(
+                                "generated asset exceeds maximum size"
+                            )
+
+                    size = 0
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > self.max_bytes:
+                            raise ValueError(
+                                "generated asset exceeds maximum size"
+                            )
+                        destination.write(chunk)
+
+        if size == 0:
+            raise ValueError("generated asset response is empty")
+        destination.flush()
+        return StreamedAsset(mime_type=mime_type, size_bytes=size)
+
     async def fetch(
         self,
         url: str,
         *,
         expected_mime_type: str | None = None,
     ) -> DownloadedAsset:
-        parsed = urlsplit(url)
-        if parsed.scheme not in {"http", "https"}:
-            raise ValueError("generated asset URL must use HTTP or HTTPS")
-
-        timeout = httpx.Timeout(float(self.timeout_seconds))
-        async with httpx.AsyncClient(
-            follow_redirects=True,
-            timeout=timeout,
-            transport=self.transport,
-        ) as client:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                mime_type = (
-                    response.headers.get("content-type", "")
-                    .split(";", 1)[0]
-                    .strip()
-                    .lower()
-                )
-                actual_family = mime_type.split("/", 1)[0]
-                expected_family = (
-                    expected_mime_type.split("/", 1)[0]
-                    if expected_mime_type
-                    else None
-                )
-                if expected_family in {"image", "video", "audio"}:
-                    article = "an" if expected_family in {"image", "audio"} else "a"
-                    if actual_family != expected_family:
-                        raise ValueError(
-                            f"generated asset response is not {article} "
-                            f"{expected_family}"
-                        )
-                elif actual_family not in {"image", "video", "audio"}:
-                    raise ValueError(
-                        "generated asset response is not a supported media type"
-                    )
-                expects_exact_mime = (
-                    expected_mime_type is not None
-                    and not expected_mime_type.endswith("/*")
-                )
-                if expects_exact_mime and mime_type != expected_mime_type:
-                    raise ValueError("generated asset MIME type does not match")
-
-                chunks: list[bytes] = []
-                size = 0
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > self.max_bytes:
-                        raise ValueError("generated asset exceeds maximum size")
-                    chunks.append(chunk)
-
-        content = b"".join(chunks)
-        if not content:
-            raise ValueError("generated asset response is empty")
-        return DownloadedAsset(content=content, mime_type=mime_type)
+        with tempfile.TemporaryFile() as destination:
+            streamed = await self.stream_to_file(
+                url,
+                destination,
+                expected_mime_type=expected_mime_type,
+            )
+            destination.seek(0)
+            return DownloadedAsset(
+                content=destination.read(),
+                mime_type=streamed.mime_type,
+            )
 
 
 class TosObjectStorageClient:
@@ -169,6 +267,23 @@ class TosObjectStorageClient:
             content=content,
             content_type=content_type,
         )
+
+    def put_object_from_file(
+        self,
+        *,
+        key: str,
+        file_path: str,
+        content_type: str | None = None,
+        size_bytes: int | None = None,
+    ) -> None:
+        with open(file_path, "rb") as content:
+            self._client.put_object(
+                bucket=self._bucket,
+                key=key,
+                content=content,
+                content_length=size_bytes,
+                content_type=content_type,
+            )
 
     def delete_object(self, *, key: str) -> None:
         self._client.delete_object(bucket=self._bucket, key=key)
@@ -217,6 +332,8 @@ class StoredAssetInput:
     metadata: dict[str, str | int | float | bool | None] | None = None
     filename: str | None = None
     validate_image_content: bool = False
+    expected_image_dimensions: tuple[int, int] | None = None
+    naming_context: AigcAssetNamingContext | None = None
 
 
 class AssetStorageService:
@@ -229,16 +346,93 @@ class AssetStorageService:
         public_endpoint: str | None = None,
         client: ObjectStorageClient | None = None,
         downloader: RemoteAssetDownloader | None = None,
+        video_enhancement_downloader: RemoteAssetDownloader | None = None,
+        face_blur_downloader: RemoteAssetDownloader | None = None,
+        multitrack_downloader: RemoteAssetDownloader | None = None,
         key_prefix: str = "projects",
-        download_timeout_seconds: int = 30,
+        download_timeout_seconds: float = 30,
         download_max_bytes: int = 30 * 1024 * 1024,
+        video_enhancement_transfer_timeout_seconds: float | None = None,
+        video_enhancement_transfer_max_bytes: int | None = None,
+        face_blur_transfer_timeout_seconds: float | None = None,
+        face_blur_transfer_max_bytes: int | None = None,
+        multitrack_transfer_timeout_seconds: float | None = None,
+        multitrack_transfer_max_bytes: int | None = None,
     ) -> None:
         self.bucket = bucket
         self.public_endpoint = public_endpoint
         self.client = client
+        self.download_timeout_seconds = download_timeout_seconds
+        self.download_max_bytes = download_max_bytes
+        self.video_enhancement_transfer_timeout_seconds = (
+            video_enhancement_transfer_timeout_seconds
+            if video_enhancement_transfer_timeout_seconds is not None
+            else download_timeout_seconds
+        )
+        self.video_enhancement_transfer_max_bytes = (
+            video_enhancement_transfer_max_bytes
+            if video_enhancement_transfer_max_bytes is not None
+            else download_max_bytes
+        )
+        self.face_blur_transfer_timeout_seconds = (
+            face_blur_transfer_timeout_seconds
+            if face_blur_transfer_timeout_seconds is not None
+            else download_timeout_seconds
+        )
+        self.face_blur_transfer_max_bytes = (
+            face_blur_transfer_max_bytes
+            if face_blur_transfer_max_bytes is not None
+            else download_max_bytes
+        )
+        self.multitrack_transfer_timeout_seconds = (
+            multitrack_transfer_timeout_seconds
+            if multitrack_transfer_timeout_seconds is not None
+            else download_timeout_seconds
+        )
+        self.multitrack_transfer_max_bytes = (
+            multitrack_transfer_max_bytes
+            if multitrack_transfer_max_bytes is not None
+            else download_max_bytes
+        )
         self.downloader = downloader or HttpRemoteAssetDownloader(
             timeout_seconds=download_timeout_seconds,
             max_bytes=download_max_bytes,
+        )
+        self.video_enhancement_downloader = (
+            video_enhancement_downloader
+            or (
+                HttpRemoteAssetDownloader(
+                    timeout_seconds=self.video_enhancement_transfer_timeout_seconds,
+                    max_bytes=self.video_enhancement_transfer_max_bytes,
+                )
+                if video_enhancement_transfer_timeout_seconds is not None
+                or video_enhancement_transfer_max_bytes is not None
+                else self.downloader
+            )
+        )
+        self.face_blur_downloader = (
+            face_blur_downloader
+            or (
+                HttpRemoteAssetDownloader(
+                    timeout_seconds=self.face_blur_transfer_timeout_seconds,
+                    max_bytes=self.face_blur_transfer_max_bytes,
+                )
+                if face_blur_transfer_timeout_seconds is not None
+                or face_blur_transfer_max_bytes is not None
+                else self.downloader
+            )
+        )
+        self.multitrack_downloader = (
+            multitrack_downloader
+            or (
+                HttpRemoteAssetDownloader(
+                    timeout_seconds=self.multitrack_transfer_timeout_seconds,
+                    max_bytes=self.multitrack_transfer_max_bytes,
+                )
+                if multitrack_transfer_timeout_seconds is not None
+                or multitrack_transfer_max_bytes is not None
+                else self.downloader
+            )
         )
         self.key_prefix = key_prefix.strip("/")
 
@@ -262,6 +456,24 @@ class AssetStorageService:
             client=client,
             download_timeout_seconds=settings.asset_download_timeout_seconds,
             download_max_bytes=settings.asset_download_max_bytes,
+            video_enhancement_transfer_timeout_seconds=(
+                settings.mediakit_video_enhancement_transfer_timeout_seconds
+            ),
+            video_enhancement_transfer_max_bytes=(
+                settings.mediakit_video_enhancement_transfer_max_bytes
+            ),
+            face_blur_transfer_timeout_seconds=(
+                settings.mediakit_face_blur_transfer_timeout_seconds
+            ),
+            face_blur_transfer_max_bytes=(
+                settings.mediakit_face_blur_transfer_max_bytes
+            ),
+            multitrack_transfer_timeout_seconds=(
+                settings.mediakit_multitrack_transfer_timeout_seconds
+            ),
+            multitrack_transfer_max_bytes=(
+                settings.mediakit_multitrack_transfer_max_bytes
+            ),
         )
 
     def generate_object_key(
@@ -478,7 +690,9 @@ class AssetStorageService:
         if not items:
             return []
 
-        downloaded: list[tuple[StoredAssetInput, DownloadedAsset]] = []
+        downloaded: list[
+            tuple[StoredAssetInput, DownloadedAsset, tuple[int, int] | None]
+        ] = []
         for item in items:
             if not item.source_url:
                 raise ValueError("generated asset source URL is required")
@@ -486,12 +700,18 @@ class AssetStorageService:
                 item.source_url,
                 expected_mime_type=item.mime_type,
             )
-            if item.validate_image_content:
+            actual_dimensions = None
+            if item.expected_image_dimensions is not None:
+                actual_dimensions = _validate_image_dimensions(
+                    content,
+                    expected=item.expected_image_dimensions,
+                )
+            elif item.validate_image_content:
                 _validate_image_content(content)
-            downloaded.append((item, content))
+            downloaded.append((item, content, actual_dimensions))
 
         prepared: list[tuple[AssetCreate, bytes]] = []
-        for item, download in downloaded:
+        for item, download, actual_dimensions in downloaded:
             source_host = urlsplit(item.source_url or "").hostname
             asset = AssetCreate(
                 project_id=item.project_id,
@@ -507,8 +727,24 @@ class AssetStorageService:
                 source_task_id=item.source_task_id,
                 metadata={
                     **(item.metadata or {}),
+                    **(
+                        aigc_output_name_metadata(
+                            item.naming_context,
+                            mime_type=download.mime_type,
+                        )
+                        if item.naming_context is not None
+                        else {}
+                    ),
                     "storage_provider": "tos",
                     **({"source_host": source_host} if source_host else {}),
+                    **(
+                        {
+                            "width": actual_dimensions[0],
+                            "height": actual_dimensions[1],
+                        }
+                        if actual_dimensions is not None
+                        else {}
+                    ),
                 },
             )
             object_key = self.generate_object_key(
@@ -544,10 +780,283 @@ class AssetStorageService:
                     content_type=asset.mime_type,
                 )
                 uploaded_keys.append(asset.object_key)
-            return repository.create_assets([asset for asset, _ in prepared])
+            try:
+                return repository.create_assets([asset for asset, _ in prepared])
+            except Exception:
+                for asset, _ in prepared:
+                    try:
+                        repository.delete_tool_asset(asset.id)
+                    except Exception:
+                        pass
+                raise
         except Exception:
             await self._delete_uploaded_objects(uploaded_keys)
             raise
+
+    async def store_aigc_video_enhancement(
+        self,
+        repository: Repository,
+        data: AigcVideoEnhancementAssetInput,
+    ) -> Asset:
+        """Stream, validate, persist, and link one MediaKit enhancement output."""
+        return await self._store_aigc_video_output(
+            repository,
+            source_url=data.source_url,
+            task_id=data.task_id,
+            filename_stem="enhanced-video",
+            temporary_prefix="aigc-video-enhancement-",
+            operation_label="video enhancement",
+            metadata=_video_enhancement_metadata(data),
+            naming_context=data.naming_context,
+            timeout_seconds=self.video_enhancement_transfer_timeout_seconds,
+            max_bytes=self.video_enhancement_transfer_max_bytes,
+            downloader=self.video_enhancement_downloader,
+        )
+
+    async def store_aigc_video_face_blur(
+        self,
+        repository: Repository,
+        data: AigcVideoFaceBlurAssetInput,
+    ) -> Asset:
+        """Stream, validate, persist, and link one MediaKit face-blur output."""
+        return await self._store_aigc_video_output(
+            repository,
+            source_url=data.source_url,
+            task_id=data.task_id,
+            filename_stem="face-blurred-video",
+            temporary_prefix="aigc-video-face-blur-",
+            operation_label="video face blur",
+            metadata=_video_face_blur_metadata(data),
+            naming_context=data.naming_context,
+            timeout_seconds=self.face_blur_transfer_timeout_seconds,
+            max_bytes=self.face_blur_transfer_max_bytes,
+            downloader=self.face_blur_downloader,
+        )
+
+    async def store_aigc_multitrack_video(
+        self,
+        repository: Repository,
+        data: AigcMultiTrackAssetInput,
+    ) -> Asset:
+        """Stream and atomically register one MediaKit multi-track output."""
+        references = _multitrack_asset_references(data)
+        return await self._store_aigc_video_output(
+            repository,
+            source_url=data.source_url,
+            task_id=data.task_id,
+            filename_stem="multi-track-video",
+            temporary_prefix="aigc-multitrack-",
+            operation_label="multi-track output",
+            metadata=_multitrack_metadata(data),
+            naming_context=data.naming_context,
+            timeout_seconds=self.multitrack_transfer_timeout_seconds,
+            max_bytes=self.multitrack_transfer_max_bytes,
+            downloader=self.multitrack_downloader,
+            references=references,
+        )
+
+    async def _store_aigc_video_output(
+        self,
+        repository: Repository,
+        *,
+        source_url: str,
+        task_id: str,
+        filename_stem: str,
+        temporary_prefix: str,
+        operation_label: str,
+        metadata: dict[str, object],
+        naming_context: AigcAssetNamingContext | None,
+        timeout_seconds: float,
+        max_bytes: int,
+        downloader: RemoteAssetDownloader,
+        references: list[AigcPipelineTaskAssetReference] | None = None,
+    ) -> Asset:
+        if self.client is None:
+            raise ConfigurationError("TOS client is not configured for asset upload.")
+        parsed_url = urlsplit(source_url)
+        if parsed_url.scheme != "https" or not parsed_url.netloc:
+            raise ValueError(f"{operation_label} URL must use HTTPS")
+
+        temporary_path: str | None = None
+        object_key: str | None = None
+        asset: Asset | None = None
+        object_uploaded = False
+        try:
+            with tempfile.NamedTemporaryFile(
+                prefix=temporary_prefix,
+                suffix=".part",
+                delete=False,
+            ) as destination:
+                temporary_path = destination.name
+                streamed = await self._stream_to_file(
+                    source_url,
+                    destination,
+                    expected_mime_type="video/*",
+                    timeout_seconds=timeout_seconds,
+                    max_bytes=max_bytes,
+                    downloader=downloader,
+                )
+
+            actual_mime_type = _video_mime_type_for_file(temporary_path)
+            declared_mime_type = _canonical_video_mime_type(streamed.mime_type)
+            if declared_mime_type != actual_mime_type:
+                raise ValueError("generated video MIME type does not match content")
+
+            extension = ".mov" if actual_mime_type == "video/quicktime" else ".mp4"
+            prepared = AssetCreate(
+                tool_asset_role=ToolAssetRole.OUTPUT,
+                type=AssetType.STORYBOARD_VIDEO,
+                asset_role=AssetRole.PUBLIC,
+                status=Status.SUCCEEDED,
+                stage=Stage.VIDEO,
+                mime_type=actual_mime_type,
+                size_bytes=streamed.size_bytes,
+                metadata={
+                    **metadata,
+                    **(
+                        aigc_output_name_metadata(
+                            naming_context,
+                            mime_type=actual_mime_type,
+                        )
+                        if naming_context is not None
+                        else {}
+                    ),
+                    "storage_provider": "tos",
+                },
+            )
+            object_key = self.generate_object_key(
+                asset_id=prepared.id,
+                asset_type=prepared.type,
+                stage=prepared.stage,
+                filename=f"{filename_stem}{extension}",
+                mime_type=actual_mime_type,
+            )
+            prepared = prepared.model_copy(
+                update={
+                    "object_key": object_key,
+                    "url": self.url_for_key(object_key),
+                },
+                deep=True,
+            )
+            object_uploaded = True
+            await asyncio.to_thread(
+                self._put_object_from_file,
+                key=object_key,
+                file_path=temporary_path,
+                content_type=actual_mime_type,
+                size_bytes=streamed.size_bytes,
+            )
+            try:
+                output_reference = AigcPipelineTaskAssetReference(
+                    task_id=task_id,
+                    direction=AigcAssetDirection.OUTPUT,
+                    slot="video",
+                    ordinal=0,
+                    asset_id=prepared.id,
+                )
+                if references is None:
+                    asset = repository.create_asset(prepared)
+                    repository.add_aigc_task_assets(
+                        [
+                            output_reference,
+                        ]
+                    )
+                else:
+                    asset = repository.create_aigc_output_asset(
+                        prepared,
+                        references=[
+                            *references,
+                            output_reference,
+                        ],
+                    )
+            except Exception:
+                if asset is not None:
+                    try:
+                        repository.delete_tool_asset(asset.id)
+                    except Exception:
+                        pass
+                await self._delete_uploaded_objects([object_key])
+                object_uploaded = False
+                raise
+            assert asset is not None
+            return asset
+        except Exception:
+            if object_key is not None and object_uploaded:
+                await self._delete_uploaded_objects([object_key])
+            raise
+        finally:
+            if temporary_path is not None:
+                try:
+                    os.unlink(temporary_path)
+                except FileNotFoundError:
+                    pass
+
+    async def _stream_to_file(
+        self,
+        url: str,
+        destination: BinaryIO,
+        *,
+        expected_mime_type: str,
+        timeout_seconds: float,
+        max_bytes: int,
+        downloader: RemoteAssetDownloader,
+    ) -> StreamedAsset:
+        stream_to_file = getattr(downloader, "stream_to_file", None)
+        async with asyncio.timeout(float(timeout_seconds)):
+            if callable(stream_to_file):
+                streamed = await stream_to_file(
+                    url,
+                    destination,
+                    expected_mime_type=expected_mime_type,
+                )
+                actual_size = destination.tell()
+                if actual_size > max_bytes:
+                    raise ValueError("generated asset exceeds maximum size")
+                if actual_size == 0:
+                    raise ValueError("generated asset response is empty")
+                return StreamedAsset(
+                    mime_type=streamed.mime_type,
+                    size_bytes=actual_size,
+                )
+
+            downloaded = await downloader.fetch(
+                url,
+                expected_mime_type=expected_mime_type,
+            )
+            if len(downloaded.content) > max_bytes:
+                raise ValueError("generated asset exceeds maximum size")
+            destination.write(downloaded.content)
+            destination.flush()
+            return StreamedAsset(
+                mime_type=downloaded.mime_type,
+                size_bytes=len(downloaded.content),
+            )
+
+    def _put_object_from_file(
+        self,
+        *,
+        key: str,
+        file_path: str,
+        content_type: str,
+        size_bytes: int,
+    ) -> None:
+        assert self.client is not None
+        put_object_from_file = getattr(self.client, "put_object_from_file", None)
+        if callable(put_object_from_file):
+            put_object_from_file(
+                key=key,
+                file_path=file_path,
+                content_type=content_type,
+                size_bytes=size_bytes,
+            )
+            return
+
+        with open(file_path, "rb") as content:
+            self.client.put_object(
+                key=key,
+                content=content,  # type: ignore[arg-type]
+                content_type=content_type,
+            )
 
     async def upload_asset_companion_from_source(
         self,
@@ -637,6 +1146,245 @@ def _extension_for(*, filename: str | None, mime_type: str | None) -> str:
     return ""
 
 
+def _validated_response_mime_type(
+    content_type: str | None,
+    *,
+    expected_mime_type: str | None,
+) -> str:
+    mime_type = (content_type or "").split(";", 1)[0].strip().lower()
+    actual_family = mime_type.split("/", 1)[0]
+    expected_family = (
+        expected_mime_type.split("/", 1)[0] if expected_mime_type else None
+    )
+    if expected_family in {"image", "video", "audio"}:
+        article = "an" if expected_family in {"image", "audio"} else "a"
+        if actual_family != expected_family:
+            raise ValueError(
+                f"generated asset response is not {article} {expected_family}"
+            )
+    elif actual_family not in {"image", "video", "audio"}:
+        raise ValueError("generated asset response is not a supported media type")
+    expects_exact_mime = (
+        expected_mime_type is not None and not expected_mime_type.endswith("/*")
+    )
+    if expects_exact_mime and mime_type != expected_mime_type:
+        raise ValueError("generated asset MIME type does not match")
+    return mime_type
+
+
+def _video_mime_type_for_file(file_path: str) -> str:
+    with open(file_path, "rb") as content:
+        header = content.read(32)
+    if len(header) < 12 or header[4:8] != b"ftyp":
+        raise ValueError("generated video is not an MP4 or MOV file")
+    return "video/quicktime" if header[8:12] == b"qt  " else "video/mp4"
+
+
+def _canonical_video_mime_type(mime_type: str) -> str:
+    if mime_type == "video/mp4":
+        return mime_type
+    if mime_type in {"video/quicktime", "video/mov"}:
+        return "video/quicktime"
+    raise ValueError("generated video must use MP4 or MOV MIME type")
+
+
+def _video_enhancement_metadata(
+    data: AigcVideoEnhancementAssetInput,
+) -> dict[str, str | int | float | bool | None]:
+    metadata: dict[str, str | int | float | bool | None] = {
+        "origin": "aigc",
+        "aigc_role": "output",
+        "provider": "mediakit",
+        "operation": "video_enhancement",
+        "pipeline_id": data.pipeline_id,
+        "run_id": data.run_id,
+        "node_id": data.node_id,
+        "task_id": data.task_id,
+        "input_asset_id": data.input_asset_id,
+        "provider_task_id": data.provider_task_id,
+        "provider_request_id": data.provider_request_id,
+        "tool_version": data.tool_version,
+        "scene": data.scene,
+        "enhance_style": data.enhance_style,
+        "resolution_mode": data.resolution_mode,
+        "resolution": data.resolution,
+        "resolution_limit": data.resolution_limit,
+        "fps": data.fps,
+        "bitrate_mode": data.bitrate_mode,
+        "bitrate_level": data.bitrate_level,
+        "bitrate": data.bitrate,
+        "bit_depth": data.bit_depth,
+        "duration_seconds": data.duration_seconds,
+        "executor_version": data.executor_version,
+    }
+    return {key: value for key, value in metadata.items() if value is not None}
+
+
+def _video_face_blur_metadata(
+    data: AigcVideoFaceBlurAssetInput,
+) -> dict[str, str | int | float | bool | None]:
+    metadata: dict[str, str | int | float | bool | None] = {
+        "origin": "aigc",
+        "aigc_role": "output",
+        "provider": "mediakit",
+        "operation": "face_blur_video",
+        "pipeline_id": data.pipeline_id,
+        "run_id": data.run_id,
+        "node_id": data.node_id,
+        "task_id": data.task_id,
+        "input_asset_id": data.input_asset_id,
+        "provider_task_id": data.provider_task_id,
+        "provider_request_id": data.provider_request_id,
+        "mask_mode": data.mask_mode,
+        "mask_strength": data.mask_strength,
+        "duration_seconds": data.duration_seconds,
+        "executor_version": data.executor_version,
+    }
+    return {key: value for key, value in metadata.items() if value is not None}
+
+
+def _multitrack_asset_references(
+    data: AigcMultiTrackAssetInput,
+) -> list[AigcPipelineTaskAssetReference]:
+    slot_aliases = {
+        "video": "video",
+        "videos": "video",
+        "image": "image",
+        "images": "image",
+        "audio": "audio",
+        "audios": "audio",
+        "subtitle": "subtitle",
+        "subtitles": "subtitle",
+        "srt": "subtitle",
+    }
+    grouped: dict[str, list[str]] = {
+        "video": [],
+        "image": [],
+        "audio": [],
+        "subtitle": [],
+    }
+    seen: set[str] = set()
+    for raw_slot, asset_ids in data.input_asset_ids.items():
+        slot = slot_aliases.get(raw_slot)
+        if slot is None:
+            raise ValueError(f"unsupported multi-track asset slot: {raw_slot}")
+        for asset_id in asset_ids:
+            normalized_id = asset_id.strip()
+            if not normalized_id:
+                raise ValueError("multi-track input asset ID must not be blank")
+            if normalized_id in seen:
+                continue
+            seen.add(normalized_id)
+            grouped[slot].append(normalized_id)
+
+    return [
+        AigcPipelineTaskAssetReference(
+            task_id=data.task_id,
+            direction=AigcAssetDirection.INPUT,
+            slot=slot,
+            ordinal=ordinal,
+            asset_id=asset_id,
+        )
+        for slot in ("video", "image", "audio", "subtitle")
+        for ordinal, asset_id in enumerate(grouped[slot])
+    ]
+
+
+def _multitrack_metadata(data: AigcMultiTrackAssetInput) -> dict[str, object]:
+    canvas = _copy_allowed_mapping(
+        data.canvas,
+        {"mode", "width", "height", "background_color"},
+    )
+    tracks = [_sanitize_multitrack_track(track) for track in data.tracks]
+    element_count = sum(len(track["elements"]) for track in tracks)
+    metadata: dict[str, object] = {
+        "origin": "aigc",
+        "aigc_role": "output",
+        "provider": "mediakit",
+        "operation": "multi_track_edit",
+        "pipeline_id": data.pipeline_id,
+        "run_id": data.run_id,
+        "node_id": data.node_id,
+        "task_id": data.task_id,
+        "provider_task_id": data.provider_task_id,
+        "track_count": len(tracks),
+        "element_count": element_count,
+        "canvas": canvas,
+        "tracks": tracks,
+        "duration_ms": data.duration_ms,
+        "width": data.width,
+        "height": data.height,
+        "fps": data.fps,
+        "executor_version": data.executor_version,
+    }
+    if data.provider_request_id is not None:
+        metadata["provider_request_id"] = data.provider_request_id
+    return metadata
+
+
+def _sanitize_multitrack_track(track: Mapping[str, object]) -> dict[str, object]:
+    sanitized = _copy_allowed_mapping(
+        track,
+        {"id", "name", "type", "order", "hidden", "muted"},
+    )
+    elements = track.get("elements")
+    sanitized["elements"] = (
+        [
+            _sanitize_multitrack_element(element)
+            for element in elements
+            if isinstance(element, Mapping)
+        ]
+        if isinstance(elements, Sequence)
+        and not isinstance(elements, (str, bytes, bytearray))
+        else []
+    )
+    return sanitized
+
+
+def _sanitize_multitrack_element(
+    element: Mapping[str, object],
+) -> dict[str, object]:
+    scalar_keys = {
+        "id",
+        "type",
+        "loop",
+        "speed",
+        "volume",
+        "fade_in_ms",
+        "fade_out_ms",
+        "inline_text",
+        "asset_id",
+    }
+    sanitized = _copy_allowed_mapping(element, scalar_keys)
+    nested_keys = {
+        "source": {"source_node_id", "source_handle"},
+        "target_time": {"start_ms", "end_ms"},
+        "source_trim": {"start_ms", "end_ms"},
+        "transform": {"x", "y", "width", "height", "rotation"},
+        "transition": {"type", "duration_ms"},
+        "style": {
+            "font_size",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "background_color",
+        },
+    }
+    for key, allowed in nested_keys.items():
+        value = element.get(key)
+        if isinstance(value, Mapping):
+            sanitized[key] = _copy_allowed_mapping(value, allowed)
+    return sanitized
+
+
+def _copy_allowed_mapping(
+    value: Mapping[str, object],
+    allowed: set[str],
+) -> dict[str, object]:
+    return {key: value[key] for key in allowed if key in value}
+
+
 def _validate_image_content(downloaded: DownloadedAsset) -> None:
     if downloaded.mime_type == "image/png":
         if not downloaded.content.startswith(b"\x89PNG\r\n\x1a\n"):
@@ -647,6 +1395,42 @@ def _validate_image_content(downloaded: DownloadedAsset) -> None:
             raise ValueError("generated image content does not match JPEG MIME type")
         return
     raise ValueError("generated image must be PNG or JPEG")
+
+
+def _validate_image_dimensions(
+    downloaded: DownloadedAsset,
+    *,
+    expected: tuple[int, int],
+) -> tuple[int, int]:
+    try:
+        with Image.open(BytesIO(downloaded.content)) as image:
+            image.load()
+            actual_format = image.format
+            actual = image.size
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise GeneratedImageValidationError(
+            "output_image_decode_failed",
+            "Generated image could not be decoded as PNG or JPEG",
+        ) from exc
+
+    expected_format = {
+        "image/png": "PNG",
+        "image/jpeg": "JPEG",
+    }.get(downloaded.mime_type)
+    if expected_format is None or actual_format != expected_format:
+        raise GeneratedImageValidationError(
+            "output_image_decode_failed",
+            "Generated image could not be decoded as the declared PNG or JPEG format",
+        )
+    if actual != expected:
+        raise GeneratedImageValidationError(
+            "output_dimensions_mismatch",
+            (
+                f"Generated image dimensions {actual[0]}x{actual[1]} "
+                f"do not match requested {expected[0]}x{expected[1]}"
+            ),
+        )
+    return actual
 
 
 def _slug(value: str) -> str:

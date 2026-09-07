@@ -4,8 +4,11 @@ import {
   AIGC_RUN_ERROR_FALLBACK,
   formatAigcDuration,
   formatAigcEndTime,
+  formatAigcErrorStage,
   formatAigcLogTime,
+  getAigcCacheReuse,
   getAigcNodeLogError,
+  getAigcProviderTrace,
   getAigcRunLogError,
   latestRelevantAttempt
 } from "@/lib/aigc/run-log";
@@ -124,7 +127,7 @@ describe("AIGC run log helpers", () => {
       code: "SCHEDULING_FAILED",
       message: "运行调度失败",
       requestId: "request-run",
-      stage: "scheduling"
+      stage: "validate"
     });
     expect(
       getAigcNodeLogError(node({ status: "blocked" }))?.message
@@ -164,6 +167,100 @@ describe("AIGC run log helpers", () => {
       message: "服务商处理失败",
       requestId: "request-task",
       stage: "provider"
+    });
+  });
+
+  it("reads safe provider trace identifiers and rejects unsafe metadata", () => {
+    expect(
+      getAigcProviderTrace(
+        node({
+          attempts: [
+            attempt(1, {
+              type: "video_face_blur",
+              result: {
+                kind: "assets",
+                text: null,
+                text_digest: null,
+                assets: [
+                  {
+                    asset_id: "blurred-video",
+                    ordinal: 0,
+                    mime_type: "video/mp4",
+                    download_url: "/api/assets/blurred-video/content",
+                    available: true,
+                    metadata: {
+                      provider_task_id: "mediakit-task_123",
+                      provider_request_id: "request/456"
+                    }
+                  }
+                ]
+              }
+            })
+          ]
+        })
+      )
+    ).toEqual({
+      requestId: "request/456",
+      taskId: "mediakit-task_123"
+    });
+
+    expect(
+      getAigcProviderTrace(
+        node({
+          result: {
+            kind: "assets",
+            text: null,
+            text_digest: null,
+            assets: [
+              {
+                asset_id: "unsafe",
+                ordinal: 0,
+                mime_type: "video/mp4",
+                download_url: "/api/assets/unsafe/content",
+                available: true,
+                metadata: {
+                  provider_task_id: "task\nsecret=value",
+                  provider_request_id: "<script>"
+                }
+              }
+            ]
+          }
+        })
+      )
+    ).toBeNull();
+  });
+
+  it("maps multi-track stages, scheduling errors, and cache reuse safely", () => {
+    expect(formatAigcErrorStage("scheduling")).toBe("validate");
+    expect(formatAigcErrorStage("submit")).toBe("submit");
+    expect(formatAigcErrorStage("poll")).toBe("poll");
+    expect(formatAigcErrorStage("asset_transfer")).toBe("transfer");
+    expect(formatAigcErrorStage("database")).toBe("persistence");
+    expect(
+      getAigcCacheReuse(
+        node({
+          status: "reused",
+          reused_from_task_id: "multitrack-task-previous"
+        })
+      )
+    ).toBe("multitrack-task-previous");
+    expect(
+      getAigcNodeLogError(
+        node({
+          status: "failed",
+          error: {
+            code: "invalid_input",
+            message: "Signed URL https://provider.example/video?token=secret",
+            request_id: "request-safe",
+            stage: "scheduling"
+          }
+        })
+      )
+    ).toEqual({
+      code: "invalid_input",
+      message: "执行失败，错误详情已脱敏",
+      requestId: "request-safe",
+      stage: "validate"
     });
   });
 });

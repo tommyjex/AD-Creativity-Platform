@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+import math
 import re
 from typing import Any
 from urllib.parse import urlsplit
@@ -56,11 +57,22 @@ class FaceBlurVideoClient:
         settings: Settings | None = None,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
+        request_timeout_seconds: float | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.settings.require_mediakit_config()
         assert self.settings.mediakit_api_key is not None
         self.transport = transport
+        self.request_timeout_seconds = (
+            float(request_timeout_seconds)
+            if request_timeout_seconds is not None
+            else float(self.settings.mediakit_face_blur_timeout_seconds)
+        )
+        if (
+            not math.isfinite(self.request_timeout_seconds)
+            or self.request_timeout_seconds <= 0
+        ):
+            raise ValueError("request_timeout_seconds must be positive")
 
     async def submit(
         self,
@@ -68,6 +80,7 @@ class FaceBlurVideoClient:
         video_url: str,
         mask_mode: str,
         mask_strength: str,
+        client_token: str | None = None,
     ) -> FaceBlurVideoTask:
         self._validate_video_url(video_url)
         if mask_mode not in {"mosaic", "blur"}:
@@ -81,15 +94,20 @@ class FaceBlurVideoClient:
                 detail="phase=validate; reason=invalid_mask_strength",
             )
 
+        payload = {
+            "video_url": video_url,
+            "mask_mode": mask_mode,
+            "mask_strength": mask_strength,
+        }
+        if client_token is not None:
+            self._validate_client_token(client_token)
+            payload["client_token"] = client_token
+
         async with self._client() as client:
             try:
                 response = await client.post(
                     self._SUBMIT_PATH,
-                    json={
-                        "video_url": video_url,
-                        "mask_mode": mask_mode,
-                        "mask_strength": mask_strength,
-                    },
+                    json=payload,
                 )
             except httpx.HTTPError:
                 raise MediaKitFaceBlurError(
@@ -160,7 +178,7 @@ class FaceBlurVideoClient:
         key = self.settings.mediakit_api_key.get_secret_value()
         return httpx.AsyncClient(
             base_url=self.settings.mediakit_base_url,
-            timeout=httpx.Timeout(float(self.settings.mediakit_asr_timeout_seconds)),
+            timeout=httpx.Timeout(self.request_timeout_seconds),
             transport=self.transport,
             headers={
                 "Authorization": f"Bearer {key}",
@@ -302,6 +320,18 @@ class FaceBlurVideoClient:
             raise MediaKitFaceBlurError(
                 "MediaKit face blur requires an HTTP or HTTPS video URL.",
                 detail="phase=validate; reason=invalid_video_url",
+            )
+
+    @staticmethod
+    def _validate_client_token(client_token: str) -> None:
+        if (
+            not isinstance(client_token, str)
+            or not 1 <= len(client_token) <= 64
+            or any(not 0x20 <= ord(character) <= 0x7E for character in client_token)
+        ):
+            raise MediaKitFaceBlurError(
+                "MediaKit face blur client token is invalid.",
+                detail="phase=validate; reason=invalid_client_token",
             )
 
     @staticmethod

@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable, Mapping, TypeAlias
 
+from backend.app.aigc_run_scope import (
+    AigcDagValidationError,
+    aigc_connected_node_ids,
+    aigc_run_scope_node_ids,
+)
 from backend.app.schemas import (
     AIGC_DEFAULT_IMAGE_MODEL,
     AIGC_MAX_EDGES,
@@ -20,6 +25,7 @@ from backend.app.schemas import (
     AudioNode,
     ImageNode,
     ImageToImageNode,
+    JsonParserNode,
     LayerCanvasNode,
     MultiTrackEditNode,
     TextNode,
@@ -29,21 +35,6 @@ from backend.app.schemas import (
 from backend.app.schemas.aigc import AigcV2Node
 from backend.app.schemas.aigc_definition_migration import migrate_aigc_definition_v2
 from backend.app.schemas.seedance import SEEDANCE_CAPABILITIES, SEEDANCE_DEFAULT_MODEL
-
-
-class AigcDagValidationError(ValueError):
-    def __init__(
-        self,
-        code: str,
-        message: str,
-        *,
-        node_id: str | None = None,
-        edge_id: str | None = None,
-    ) -> None:
-        super().__init__(message)
-        self.code = code
-        self.node_id = node_id
-        self.edge_id = edge_id
 
 
 class AigcPlanAction(str, Enum):
@@ -104,9 +95,11 @@ MODEL_NODE_TYPES = {
     AigcNodeType.MULTI_TRACK_EDIT,
 }
 EXECUTABLE_NODE_TYPES = MODEL_NODE_TYPES | {
+    AigcNodeType.JSON_PARSER,
     AigcNodeType.LAYER_CANVAS,
     AigcNodeType.LAYER_COMPOSITE,
 }
+CACHEABLE_NODE_TYPES = MODEL_NODE_TYPES | {AigcNodeType.JSON_PARSER}
 MODALITY_NODE_TYPES = {
     AigcNodeType.TEXT,
     AigcNodeType.IMAGE,
@@ -133,11 +126,11 @@ def validate_aigc_dag(
         raise AigcDagValidationError("too_many_edges", "edge limit exceeded")
     if (
         require_complete
-        and not any(node.type in MODEL_NODE_TYPES for node in definition.nodes)
+        and not any(node.type in EXECUTABLE_NODE_TYPES for node in definition.nodes)
     ):
         raise AigcDagValidationError(
             "model_node_required",
-            "the graph must contain at least one model node",
+            "the graph must contain at least one executable node",
         )
 
     node_by_id = {node.id: node for node in definition.nodes}
@@ -241,6 +234,20 @@ def validate_aigc_dag(
                 node_id=target.id,
                 edge_id=edge.id,
             )
+        if source_port.system_only and not (
+            isinstance(source, JsonParserNode)
+            and isinstance(target, TextNode)
+            and edge.source_handle == "items"
+            and edge.target_handle == "text"
+            and target.config.generated_by_parser_node_id == source.id
+            and target.config.generated_item_index is not None
+        ):
+            raise AigcDagValidationError(
+                "system_output_connection_invalid",
+                "system-only output must target its matching managed text node",
+                node_id=source.id,
+                edge_id=edge.id,
+            )
         input_key = (target.id, target_port.id)
         connection_count = input_connection_counts[input_key]
         max_connections = _max_input_connections(target, target_port.id)
@@ -262,6 +269,21 @@ def validate_aigc_dag(
             )
         input_connection_counts[input_key] += 1
         output_connection_counts[(source.id, source_port.id)] += 1
+        if (
+            source_port.system_only
+            and output_connection_counts[(source.id, source_port.id)]
+            > source_port.max_connections
+        ):
+            raise AigcDagValidationError(
+                "output_connection_limit_exceeded",
+                (
+                    f"output connection limit exceeded: "
+                    f"{source_port.id} accepts at most "
+                    f"{source_port.max_connections} edge(s)"
+                ),
+                node_id=source.id,
+                edge_id=edge.id,
+            )
         incoming[target.id].append(source.id)
         outgoing[source.id].append(target.id)
 
@@ -313,51 +335,6 @@ def validate_aigc_dag_structure(
 ) -> tuple[str, ...]:
     """Validate persistable graph structure without requiring runnable inputs."""
     return validate_aigc_dag(definition, require_complete=False)
-
-
-def aigc_connected_node_ids(
-    definition: AigcGraphDefinition,
-    start_node_id: str,
-) -> frozenset[str]:
-    definition = _canonical_graph(definition)
-    node_ids = {node.id for node in definition.nodes}
-    if start_node_id not in node_ids:
-        raise AigcDagValidationError(
-            "start_node_missing",
-            "incremental execution requires a valid start node",
-            node_id=start_node_id,
-        )
-
-    adjacency = {node_id: set() for node_id in node_ids}
-    for edge in definition.edges:
-        adjacency[edge.source_node_id].add(edge.target_node_id)
-        adjacency[edge.target_node_id].add(edge.source_node_id)
-
-    visited = {start_node_id}
-    pending = deque([start_node_id])
-    while pending:
-        current = pending.popleft()
-        for neighbor in adjacency[current] - visited:
-            visited.add(neighbor)
-            pending.append(neighbor)
-    return frozenset(visited)
-
-
-def aigc_run_scope_node_ids(
-    definition: AigcGraphDefinition,
-    *,
-    mode: AigcPipelineRunMode,
-    start_node_id: str | None,
-) -> frozenset[str]:
-    definition = _canonical_graph(definition)
-    if mode == AigcPipelineRunMode.FULL:
-        return frozenset(node.id for node in definition.nodes)
-    if start_node_id is None:
-        raise AigcDagValidationError(
-            "start_node_missing",
-            "incremental execution requires a valid start node",
-        )
-    return aigc_connected_node_ids(definition, start_node_id)
 
 
 def _max_input_connections(node: AigcGraphNode, port_id: str) -> int:
@@ -731,7 +708,7 @@ def build_aigc_execution_plan(
         if node_id in forced:
             actions[node_id] = AigcPlanAction.EXECUTE
             continue
-        if node.type not in MODEL_NODE_TYPES:
+        if node.type not in CACHEABLE_NODE_TYPES:
             actions[node_id] = AigcPlanAction.EXECUTE
             continue
         upstream_model_recomputed = any(

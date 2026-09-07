@@ -38,6 +38,7 @@ from backend.app.repositories import (
 from backend.app.schemas import (
     Asset,
     AssetCategory,
+    AssetRenameRequest,
     AssetRole,
     AssetType,
     CharacterAssetIterationOperation,
@@ -108,8 +109,10 @@ from backend.app.schemas import (
     ToolVideoGenerationRequest,
     ToolVideoPromptOptimizeRequest,
     ToolVideoPromptOptimizeResponse,
+    USER_DEFINED_ASSET_NAME_SCHEME,
     validate_visible_selling_copy,
 )
+from backend.app.services.aigc_asset_naming import AIGC_ASSET_NAME_SCHEME
 from backend.app.services.assets import AssetStorageService, StoredAssetInput
 from backend.app.services.background import BackgroundTaskRunner
 from backend.app.services.composer import (
@@ -1193,6 +1196,24 @@ def get_asset(
         ) from exc
 
 
+@router.patch("/assets/{asset_id}", response_model=Asset, tags=["assets"])
+def rename_asset(
+    asset_id: str,
+    payload: AssetRenameRequest,
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+) -> Asset:
+    try:
+        asset = repository.rename_asset(asset_id, name=payload.name)
+        return asset_storage.with_access_url(asset)
+    except NotFoundError as exc:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "asset not found",
+        ) from exc
+
+
 @router.get("/assets", response_model=list[Asset], tags=["assets"])
 def list_assets(
     project_id: str | None = None,
@@ -1983,7 +2004,10 @@ def _asset_download_filename(asset: Asset, *, preferred: str | None = None) -> s
         preserve_unicode = True
     elif isinstance(metadata_name, str) and metadata_name.strip():
         candidate = metadata_name.strip()
-        preserve_unicode = False
+        preserve_unicode = asset.metadata.get("name_scheme") in {
+            AIGC_ASSET_NAME_SCHEME,
+            USER_DEFINED_ASSET_NAME_SCHEME,
+        }
     elif asset.object_key:
         candidate = os.path.basename(urlsplit(asset.object_key).path)
         preserve_unicode = False
@@ -2012,7 +2036,11 @@ def _asset_download_filename(asset: Asset, *, preferred: str | None = None) -> s
 def _asset_content_disposition(filename: str) -> str:
     ascii_name = re.sub(r"[^A-Za-z0-9._-]+", "-", filename).strip(". -_")
     _, extension = os.path.splitext(filename)
-    if not ascii_name or not os.path.splitext(ascii_name)[0]:
+    if (
+        not ascii_name
+        or not os.path.splitext(ascii_name)[0]
+        or (extension and not ascii_name.lower().endswith(extension.lower()))
+    ):
         ascii_name = f"download{extension}"
     if ascii_name == filename:
         return f'attachment; filename="{ascii_name}"'

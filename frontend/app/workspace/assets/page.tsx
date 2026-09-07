@@ -1,8 +1,4 @@
-import {
-  WorkspaceAssetLibrary,
-  WORKSPACE_ASSET_SOURCES,
-  type WorkspaceAssetFilters
-} from "@/components/workspace/workspace-asset-library";
+import { WorkspaceAssetLibrary } from "@/components/workspace/workspace-asset-library";
 import {
   createApiClient,
   getUserFacingErrorMessage,
@@ -16,6 +12,10 @@ import {
   type Status,
   type ToolTask
 } from "@/lib/api-types";
+import {
+  WORKSPACE_ASSET_SOURCES,
+  type WorkspaceAssetFilters
+} from "@/lib/workspace-asset-source";
 
 type SearchParams = Promise<
   Record<string, string | string[] | undefined>
@@ -39,7 +39,7 @@ export default async function WorkspaceAssetsPage({
     const [nextProjects, projectAssets, toolAssets, nextToolTasks] =
       await Promise.all([
       api.listProjects({ next: { revalidate: 30 } }),
-      filters.source === "tools"
+      filters.source === "tools" || filters.source === "aigc"
         ? Promise.resolve([])
         : api.listAssets(toApiFilters(filters), { next: { revalidate: 30 } }),
       filters.source === "projects"
@@ -77,7 +77,10 @@ function parseFilters(
   const parsedSource = isWorkspaceAssetSource(source) ? source : undefined;
 
   return {
-    projectId: parsedSource === "tools" ? undefined : projectId || undefined,
+    projectId:
+      parsedSource === "tools" || parsedSource === "aigc"
+        ? undefined
+        : projectId || undefined,
     section: isAssetSection(section) ? section : undefined,
     source: parsedSource,
     status: isStatus(status) ? status : undefined
@@ -92,7 +95,10 @@ function parseFilters(
 function toApiFilters(filters: WorkspaceAssetFilters): AssetFilters {
   return {
     category: undefined,
-    projectId: filters.source === "tools" ? undefined : filters.projectId,
+    projectId:
+      filters.source === "tools" || filters.source === "aigc"
+        ? undefined
+        : filters.projectId,
     status: filters.status
   };
 }

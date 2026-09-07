@@ -1,0 +1,203 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: scripts/aigc-custom-dimensions-acceptance.spec.ts >> Task 6.4/6.5 exact browser acceptance
+- Location: scripts/aigc-custom-dimensions-acceptance.spec.ts:31:5
+
+# Error details
+
+```
+Test timeout of 600000ms exceeded.
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - banner [ref=f2e3]:
+      - link "AD CREATIVITY Campaign generation deck" [ref=f2e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f2e9]:
+          - generic [ref=f2e10]: AD CREATIVITY
+          - generic [ref=f2e11]: Campaign generation deck
+    - main [ref=f2e14]:
+      - generic [ref=f2e15]:
+        - generic: 验收模式：真实执行已禁用
+        - main [ref=f2e16]:
+          - generic [ref=f2e17]:
+            - generic [ref=f2e18]:
+              - link "返回" [ref=f2e19] [cursor=pointer]:
+                - /url: /workspace/aigc?view=pipelines
+              - generic [ref=f2e22]: 已保存 Revision 15
+            - generic [ref=f2e23]:
+              - button "详情" [pressed] [ref=f2e24] [cursor=pointer]
+              - button "另存为模板" [ref=f2e27] [cursor=pointer]
+              - button "执行" [disabled]
+          - generic [ref=f2e33]:
+            - application [ref=f2e35]:
+              - generic [ref=f2e37]:
+                - generic:
+                  - generic:
+                    - img:
+                      - group "Edge from task6-custom-text-prompt to task6-custom-text-to-image" [ref=f2e38] [cursor=pointer]
+                    - img:
+                      - group "Edge from task6-bbox-image-input to task6-custom-image-to-image" [ref=f2e41] [cursor=pointer]
+                    - img:
+                      - group "Edge from task6-custom-image-prompt to task6-custom-image-to-image" [ref=f2e44] [cursor=pointer]
+                    - img:
+                      - group "Edge from task6-preset-text-prompt to task6-preset-text-to-image" [ref=f2e47] [cursor=pointer]
+                    - img:
+                      - group "Edge from task6-preset-image-input to task6-preset-image-to-image" [ref=f2e50] [cursor=pointer]
+                    - img:
+                      - group "Edge from task6-preset-image-prompt to task6-preset-image-to-image" [ref=f2e53] [cursor=pointer]
+                    - img:
+                      - group "Edge from task6-preset-image-input to task6-image-edit" [ref=f2e56] [cursor=pointer]
+                    - img:
+                      - group "Edge from task6-image-edit-prompt to task6-image-edit" [ref=f2e59] [cursor=pointer]
+                    - img:
+                      - group "Edge from task6-preset-image-input to task6-layer-decomposition" [ref=f2e62] [cursor=pointer]
+                  - generic:
+                    - group [ref=f2e65]:
+                      - generic [ref=f2e66]:
+                        - generic "文本输出" [ref=f2e67]
+                        - generic [ref=f2e68]: 文本节点1
+                        - paragraph [ref=f2e71]: Task 6 受控验收：生成 2048x1024 横版商品海报。
+                    - group [ref=f2e72]:
+                      - generic [ref=f2e73]:
+                        - generic "提示词输入，已达到 1 个连接上限"
+                        - generic "图片输出" [ref=f2e74]
+                        - generic [ref=f2e75]: 文生图1
+                        - paragraph [ref=f2e78]: doubao-seedream-5-0-pro-260628 · 1:1 · 2048x1024
+                    - group [ref=f2e79]:
+                      - generic [ref=f2e80]:
+                        - generic "图片输出" [ref=f2e81]
+                        - generic [ref=f2e82]:
+                          - generic [ref=f2e83]: 图片节点1
+                          - button "精准编辑：添可商详图.jpg" [ref=f2e85] [cursor=pointer]
+                        - button "查看原图：添可商详图.jpg" [ref=f2e94]:
+                          - img "添可商详图.jpg" [ref=f2e95]
+                          - generic: 1464 × 600
+                          - generic: 已框选
+                    - group [ref=f2e96]:
+                      - generic [ref=f2e97]:
+                        - generic "文本输出" [ref=f2e98]
+                        - generic [ref=f2e99]: 文本节点2
+                        - paragraph [ref=f2e102]: Task 6 受控验收：保留构图并修改框选商品。 · 1 个区域引用
+                    - group [ref=f2e103]:
+                      - generic [ref=f2e104]:
+                        - generic "图片输入" [ref=f2e105]
+                        - generic "提示词输入，已达到 1 个连接上限"
+                        - generic "图片输出" [ref=f2e106]
+                        - generic [ref=f2e107]: 图生图1
+                        - generic [ref=f2e109]:
+                          - paragraph [ref=f2e110]: 参考图 1/10
+                          - paragraph [ref=f2e111]: 图生图 · doubao-seedream-5-0-pro-260628 · 2048x1024
+                    - group [ref=f2e112]:
+                      - generic [ref=f2e113]:
+                        - generic "文本输出" [ref=f2e114]
+                        - generic [ref=f2e115]: 文本节点3
+                        - paragraph [ref=f2e118]: Task 6 回归：使用预设档位生成方形商品图。
+                    - group [active] [ref=f2e119]:
+                      - generic [ref=f2e120]:
+                        - generic "提示词输入，已达到 1 个连接上限"
+                        - generic "图片输出" [ref=f2e129]
+                        - generic [ref=f2e130]: 文生图2
+                        - paragraph [ref=f2e133]: doubao-seedream-5-0-pro-260628 · 1:1 · 2K
+                    - group [ref=f2e134]:
+                      - generic [ref=f2e135]:
+                        - generic "图片输出" [ref=f2e136]
+                        - generic [ref=f2e137]:
+                          - generic [ref=f2e138]: 图片节点2
+                          - button "精准编辑：海康4.png" [ref=f2e140] [cursor=pointer]
+                        - button "查看原图：海康4.png" [ref=f2e149]:
+                          - img "海康4.png" [ref=f2e150]
+                          - generic: 1778 × 1322
+                    - group [ref=f2e151]:
+                      - generic [ref=f2e152]:
+                        - generic "文本输出" [ref=f2e153]
+                        - generic [ref=f2e154]: 文本节点4
+                        - paragraph [ref=f2e157]: Task 6 回归：普通预设图生图。
+                    - group [ref=f2e158]:
+                      - generic [ref=f2e159]:
+                        - generic "图片输入" [ref=f2e160]
+                        - generic "提示词输入，已达到 1 个连接上限"
+                        - generic "图片输出" [ref=f2e161]
+                        - generic [ref=f2e162]: 图生图2
+                        - generic [ref=f2e164]:
+                          - paragraph [ref=f2e165]: 参考图 1/10
+                          - paragraph [ref=f2e166]: 图生图 · doubao-seedream-5-0-pro-260628 · 2K
+                    - group [ref=f2e167]:
+                      - generic [ref=f2e168]:
+                        - generic "文本输出" [ref=f2e169]
+                        - generic [ref=f2e170]: 文本节点5
+                        - paragraph [ref=f2e173]: Task 6 回归：图片编辑仅修改单一目标。
+                    - group [ref=f2e174]:
+                      - generic [ref=f2e175]:
+                        - generic "编辑图片输入，已达到 1 张上限"
+                        - generic "提示词输入，已达到 1 个连接上限"
+                        - generic "图片输出" [ref=f2e176]
+                        - generic [ref=f2e177]: 图片编辑
+                        - paragraph [ref=f2e180]: 图片编辑 · doubao-seedream-5-0-pro-260628 · 2K
+                    - group [ref=f2e181]:
+                      - generic [ref=f2e182]:
+                        - generic "图片输入，已达到 1 张上限"
+                        - generic "提示词输入" [ref=f2e183]
+                        - generic "图层集输出" [ref=f2e184]
+                        - generic [ref=f2e185]: 图层拆分
+                        - paragraph [ref=f2e188]: 图层拆分 · doubao-seedream-5-0-pro-260628 · auto
+              - generic "Control Panel" [ref=f2e189]:
+                - button "Zoom In" [ref=f2e190] [cursor=pointer]
+                - button "Zoom Out" [disabled]
+                - button "Fit View" [ref=f2e193] [cursor=pointer]
+                - button "Toggle Interactivity" [ref=f2e196] [cursor=pointer]
+            - complementary [ref=f2e200]:
+              - generic [ref=f2e201]:
+                - generic [ref=f2e202]:
+                  - tab "配置" [selected] [ref=f2e203] [cursor=pointer]
+                  - tab "结果" [ref=f2e204] [cursor=pointer]
+                  - tab "运行" [ref=f2e205] [cursor=pointer]
+                - button "关闭详情栏" [ref=f2e206] [cursor=pointer]
+              - generic [ref=f2e211]:
+                - generic [ref=f2e212]:
+                  - text: 名称
+                  - textbox "名称" [ref=f2e213]: "[验收 Task 6 自定义图片尺寸] 2026-09-04T07:11:01.441Z"
+                - generic [ref=f2e214]:
+                  - text: 描述
+                  - textbox "描述" [ref=f2e215]: 自定义尺寸与既有图片模式回归专用；复用已有资产，验收页禁用执行。
+                - generic [ref=f2e217]:
+                  - heading "文生图2" [level=3] [ref=f2e222]
+                  - generic [ref=f2e223]:
+                    - generic [ref=f2e224]:
+                      - text: 尺寸方式
+                      - group "尺寸方式" [ref=f2e225]:
+                        - button "分辨率档位" [pressed] [ref=f2e226] [cursor=pointer]
+                        - button "自定义像素" [ref=f2e227] [cursor=pointer]
+                    - generic [ref=f2e228]:
+                      - generic [ref=f2e229]:
+                        - text: 画幅
+                        - combobox "画幅" [ref=f2e230]:
+                          - option "1:1" [selected]
+                          - option "4:3"
+                          - option "3:4"
+                          - option "16:9"
+                          - option "9:16"
+                      - generic [ref=f2e231]:
+                        - text: 分辨率档位
+                        - combobox "分辨率档位" [ref=f2e232]:
+                          - option "1K"
+                          - option "1.5K"
+                          - option "2K" [selected]
+                    - generic [ref=f2e233]:
+                      - text: 输出格式
+                      - combobox "输出格式" [ref=f2e234]:
+                        - option "PNG" [selected]
+                        - option "JPEG"
+  - button "Open Next.js Dev Tools" [ref=f2e240] [cursor=pointer]
+  - alert [ref=f2e244]
+```

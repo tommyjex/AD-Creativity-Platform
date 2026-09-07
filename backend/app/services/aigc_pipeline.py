@@ -6,12 +6,16 @@ from backend.app.schemas import (
     AigcPipeline,
     AigcPipelineCreate,
     AigcPipelineDefinition,
+    AigcPipelineDefinitionV2,
     AigcPipelineTemplate,
     AigcPipelineTemplateCreate,
     AigcPipelineTemplateUpdate,
     AigcPipelineUpdate,
     AigcSaveAsTemplateRequest,
     AigcTemplateInstantiateRequest,
+)
+from backend.app.schemas.aigc_definition_migration import (
+    migrate_aigc_definition_v2,
 )
 from backend.app.services.aigc_dag import validate_aigc_dag_structure
 
@@ -72,7 +76,8 @@ class AigcPipelineService:
                 name=data.name or template.name,
                 description=template.description,
                 definition=prepare_aigc_definition_for_save(
-                    template.definition
+                    template.definition,
+                    for_template=True,
                 ),
                 source_template_id=template.id,
                 source_template_revision=template.revision,
@@ -130,10 +135,10 @@ class AigcPipelineService:
 
 
 def prepare_aigc_definition_for_save(
-    definition: AigcPipelineDefinition,
+    definition: AigcPipelineDefinition | AigcPipelineDefinitionV2,
     *,
     for_template: bool = False,
-) -> AigcPipelineDefinition:
+) -> AigcPipelineDefinitionV2:
     canonical = canonicalize_aigc_definition(
         definition,
         for_template=for_template,
@@ -143,14 +148,23 @@ def prepare_aigc_definition_for_save(
 
 
 def canonicalize_aigc_definition(
-    definition: AigcPipelineDefinition,
+    definition: AigcPipelineDefinition | AigcPipelineDefinitionV2,
     *,
     for_template: bool = False,
-) -> AigcPipelineDefinition:
-    payload = definition.model_dump(mode="json", by_alias=True)
+) -> AigcPipelineDefinitionV2:
+    payload = migrate_aigc_definition_v2(
+        definition.model_dump(mode="json", by_alias=True)
+    )
     if for_template:
         nodes = payload.get("nodes", [])
         if isinstance(nodes, list):
+            cleared_image_node_ids = {
+                node.get("id")
+                for node in nodes
+                if isinstance(node, dict)
+                and node.get("type") == "image"
+                and isinstance(node.get("id"), str)
+            }
             for node in nodes:
                 if not isinstance(node, dict):
                     continue
@@ -158,14 +172,47 @@ def canonicalize_aigc_definition(
                 if not isinstance(config, dict):
                     continue
                 if node.get("type") in {
-                    "image_input",
-                    "video_input",
-                    "audio_input",
+                    "image",
+                    "video",
+                    "audio",
                 }:
                     config["asset_id"] = None
-                    if node.get("type") == "image_input":
+                    if node.get("type") == "image":
                         config["bbox"] = None
                         config["bbox_asset_id"] = None
-                elif node.get("type") == "text_input":
-                    config["bbox_references"] = []
-    return AigcPipelineDefinition.model_validate(payload)
+                        config["upstream_bbox"] = None
+                        config["upstream_bbox_asset_id"] = None
+                elif node.get("type") == "text":
+                    references = config.get("bbox_references", [])
+                    if isinstance(references, list):
+                        config["bbox_references"] = [
+                            reference
+                            for reference in references
+                            if not (
+                                isinstance(reference, dict)
+                                and reference.get("source_node_id")
+                                in cleared_image_node_ids
+                            )
+                        ]
+                    if config.get("generated_by_parser_node_id") is not None:
+                        config["text"] = ""
+                        config["upstream_text_override"] = None
+                        config.pop("generated_from_run_id", None)
+                elif node.get("type") == "multi_track_edit":
+                    _clear_multitrack_subtitle_assets(config)
+    return AigcPipelineDefinitionV2.model_validate(payload)
+
+
+def _clear_multitrack_subtitle_assets(config: dict[str, object]) -> None:
+    tracks = config.get("tracks")
+    if not isinstance(tracks, list):
+        return
+    for track in tracks:
+        if not isinstance(track, dict):
+            continue
+        elements = track.get("elements")
+        if not isinstance(elements, list):
+            continue
+        for element in elements:
+            if isinstance(element, dict) and element.get("type") == "subtitle":
+                element["asset_id"] = None

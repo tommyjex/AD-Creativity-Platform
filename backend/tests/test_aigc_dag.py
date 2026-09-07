@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from backend.app.aigc_run_scope import (
+    AigcDagValidationError as ScopeValidationError,
+    aigc_connected_node_ids as scope_connected_node_ids,
+    aigc_run_scope_node_ids as scope_run_node_ids,
+)
 from backend.app.schemas import (
     AigcNodeType,
     AigcPipelineDefinition,
@@ -20,6 +25,12 @@ from backend.app.services.aigc_dag import (
     validate_aigc_dag,
     validate_aigc_dag_structure,
 )
+
+
+def test_aigc_dag_reexports_repository_neutral_scope_api() -> None:
+    assert AigcDagValidationError is ScopeValidationError
+    assert aigc_connected_node_ids is scope_connected_node_ids
+    assert aigc_run_scope_node_ids is scope_run_node_ids
 
 
 def node(node_id: str, node_type: str, x: int, *, config=None):
@@ -1832,3 +1843,77 @@ def test_full_plan_executes_multi_track_edit_with_four_multi_inputs() -> None:
 
     assert plan.actions["edit"] == AigcPlanAction.EXECUTE
     assert plan.executable_node_ids == ("edit",)
+
+
+def test_json_parser_requires_one_text_input_and_participates_in_plan() -> None:
+    definition = v2_definition(
+        [
+            node("source", "text", 0, config={"text": '{"items":["one"]}'}),
+            node(
+                "parser",
+                "json_parser",
+                300,
+                config={"json_path": "$.items"},
+            ),
+        ],
+        [edge("source-parser", "source", "text", "parser", "text")],
+    )
+
+    plan = build_aigc_execution_plan(definition, mode="full")
+
+    assert plan.topological_order == ("source", "parser")
+    assert plan.actions["parser"] == AigcPlanAction.EXECUTE
+    assert plan.executable_node_ids == ("parser",)
+
+    missing = definition.model_copy(update={"edges": []}, deep=True)
+    with pytest.raises(AigcDagValidationError) as missing_error:
+        validate_aigc_dag(missing)
+    assert missing_error.value.code == "required_input_missing"
+    assert missing_error.value.node_id == "parser"
+
+
+def test_json_parser_output_only_accepts_matching_managed_text_nodes() -> None:
+    definition = v2_definition(
+        [
+            node("source", "text", 0, config={"text": '{"items":["one"]}'}),
+            node("parser", "json_parser", 300),
+            node(
+                "managed",
+                "text",
+                600,
+                config={
+                    "text": "one",
+                    "generated_by_parser_node_id": "parser",
+                    "generated_item_index": 0,
+                    "generated_from_run_id": "run-1",
+                },
+            ),
+        ],
+        [
+            edge("source-parser", "source", "text", "parser", "text"),
+            edge("parser-managed", "parser", "items", "managed", "text"),
+        ],
+    )
+
+    assert validate_aigc_dag_structure(definition) == (
+        "source",
+        "parser",
+        "managed",
+    )
+
+    payload = definition.model_dump(mode="json", by_alias=True)
+    payload["nodes"][2]["config"].pop("generated_by_parser_node_id")
+    payload["nodes"][2]["config"].pop("generated_item_index")
+    payload["nodes"][2]["config"].pop("generated_from_run_id")
+    manual = AigcPipelineDefinitionV2.model_validate(payload)
+    with pytest.raises(AigcDagValidationError) as manual_error:
+        validate_aigc_dag_structure(manual)
+    assert manual_error.value.code == "system_output_connection_invalid"
+    assert manual_error.value.edge_id == "parser-managed"
+
+    payload = definition.model_dump(mode="json", by_alias=True)
+    payload["nodes"][2]["config"]["generated_by_parser_node_id"] = "other-parser"
+    wrong_owner = AigcPipelineDefinitionV2.model_validate(payload)
+    with pytest.raises(AigcDagValidationError) as owner_error:
+        validate_aigc_dag_structure(wrong_owner)
+    assert owner_error.value.code == "system_output_connection_invalid"

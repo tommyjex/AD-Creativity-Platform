@@ -559,6 +559,10 @@ export interface Asset {
   updated_at: DateTimeString;
 }
 
+export interface AssetRenameRequest {
+  name: string;
+}
+
 export interface ToolTask {
   id: string;
   type: ToolTaskType;

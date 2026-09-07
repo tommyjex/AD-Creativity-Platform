@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from io import BytesIO
 
@@ -14,6 +15,7 @@ from backend.app.schemas import (
     AigcPipelineDefinition,
     AigcPipelineRun,
     AigcPipelineRunNode,
+    AigcPipelineTaskAssetReference,
     AigcPipelineTaskAttempt,
     AigcResultKind,
     AigcRunNodeStatus,
@@ -26,17 +28,26 @@ from backend.app.schemas import (
     ImageOutputFormat,
     Status,
     ToolAssetRole,
+    ReferenceAssetKind,
 )
 from backend.app.services.aigc_gateway import (
     AIGC_DEFAULT_IMAGE_MODEL,
     AIGC_DEFAULT_TEXT_MODEL,
     AIGC_IMAGE_EXECUTOR_VERSION,
     AIGC_LLM_EXECUTOR_VERSION,
+    AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION,
+    AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION,
     AIGC_VIDEO_EXECUTOR_VERSION,
     AigcGatewayError,
     AigcModelGateway,
 )
-from backend.app.services.assets import AssetStorageService, DownloadedAsset
+from backend.app.services.assets import (
+    AigcMultiTrackAssetInput,
+    AigcVideoFaceBlurAssetInput,
+    AigcVideoEnhancementAssetInput,
+    AssetStorageService,
+    DownloadedAsset,
+)
 from backend.app.services.generation import ModelArkGenerationService
 from backend.app.services.modelark import (
     AigcTextGenerationRequest,
@@ -46,6 +57,20 @@ from backend.app.services.modelark import (
     MockModelArkAdapter,
     ModelArkProviderError,
     SeedanceVideoGenerationRequest,
+)
+from backend.app.services.mediakit_video_enhancement import (
+    MediaKitVideoEnhancementError,
+    VideoEnhancementTask,
+    VideoEnhancementTaskStatus,
+)
+from backend.app.services.mediakit_face_blur import (
+    FaceBlurTaskStatus,
+    FaceBlurVideoTask,
+    MediaKitFaceBlurError,
+)
+from backend.app.services.mediakit_multitrack import (
+    MultiTrackTask,
+    MultiTrackTaskStatus,
 )
 
 
@@ -139,6 +164,66 @@ def pipeline_definition(task_type: AigcTaskType) -> AigcPipelineDefinition:
                         "config": {},
                     }
                 ]
+            }
+        )
+    if task_type == AigcTaskType.VIDEO_ENHANCEMENT:
+        return AigcPipelineDefinition.model_validate(
+            {
+                "nodes": [
+                    {
+                        "id": "source",
+                        "type": "video_input",
+                        "position": {"x": 0, "y": 0},
+                        "size": {"width": 240, "height": 180},
+                        "config": {"asset_id": "source-video"},
+                    },
+                    {
+                        "id": "model",
+                        "type": "video_enhancement",
+                        "position": {"x": 320, "y": 0},
+                        "size": {"width": 280, "height": 200},
+                        "config": {},
+                    },
+                ],
+                "edges": [
+                    {
+                        "id": "edge-video",
+                        "sourceNodeId": "source",
+                        "sourceHandle": "video",
+                        "targetNodeId": "model",
+                        "targetHandle": "video",
+                    }
+                ],
+            }
+        )
+    if task_type == AigcTaskType.VIDEO_FACE_BLUR:
+        return AigcPipelineDefinition.model_validate(
+            {
+                "nodes": [
+                    {
+                        "id": "source",
+                        "type": "video_input",
+                        "position": {"x": 0, "y": 0},
+                        "size": {"width": 240, "height": 180},
+                        "config": {"asset_id": "source-video"},
+                    },
+                    {
+                        "id": "model",
+                        "type": "video_face_blur",
+                        "position": {"x": 320, "y": 0},
+                        "size": {"width": 280, "height": 200},
+                        "config": {},
+                    },
+                ],
+                "edges": [
+                    {
+                        "id": "edge-video",
+                        "sourceNodeId": "source",
+                        "sourceHandle": "video",
+                        "targetNodeId": "model",
+                        "targetHandle": "video",
+                    }
+                ],
             }
         )
     model_type = (
@@ -314,8 +399,16 @@ def png_bytes(
 
 
 class LayerResultDownloader:
-    def __init__(self, *, layer_alpha: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        base_size: tuple[int, int] = (512, 512),
+        layer_alpha: bool = True,
+        layer_size: tuple[int, int] = (256, 256),
+    ) -> None:
+        self.base_size = base_size
         self.layer_alpha = layer_alpha
+        self.layer_size = layer_size
 
     async def fetch(
         self,
@@ -324,11 +417,31 @@ class LayerResultDownloader:
         expected_mime_type: str | None = None,
     ) -> DownloadedAsset:
         if url.endswith("base.png"):
-            return DownloadedAsset(png_bytes((512, 512)), "image/png")
+            return DownloadedAsset(png_bytes(self.base_size), "image/png")
         return DownloadedAsset(
-            png_bytes((256, 256), alpha=self.layer_alpha),
+            png_bytes(self.layer_size, alpha=self.layer_alpha),
             "image/png",
         )
+
+
+class GeneratedImageDownloader:
+    def __init__(
+        self,
+        *,
+        content: bytes,
+        mime_type: str = "image/png",
+    ) -> None:
+        self.content = content
+        self.mime_type = mime_type
+
+    async def fetch(
+        self,
+        _url: str,
+        *,
+        expected_mime_type: str | None = None,
+    ) -> DownloadedAsset:
+        assert expected_mime_type == self.mime_type
+        return DownloadedAsset(self.content, self.mime_type)
 
 
 class ImageEditDownloader:
@@ -378,6 +491,135 @@ def video_params() -> dict[str, object]:
         "aspect_ratio": "16:9",
         "generate_audio": False,
     }
+
+
+def video_enhancement_params(**changes: object) -> dict[str, object]:
+    params: dict[str, object] = {
+        "input_asset_id": "source-video",
+        "tool_version": "standard",
+        "scene": "aigc",
+        "enhance_style": "hd",
+        "resolution_mode": "preset",
+        "resolution": "1080p",
+        "resolution_limit": None,
+        "fps": None,
+        "bitrate_mode": "level",
+        "bitrate_level": "medium",
+        "bitrate": None,
+        "bit_depth": 8,
+    }
+    params.update(changes)
+    return params
+
+
+def video_face_blur_params(**changes: object) -> dict[str, object]:
+    params: dict[str, object] = {
+        "input_asset_id": "source-video",
+        "mask_mode": "mosaic",
+        "mask_strength": "medium",
+    }
+    params.update(changes)
+    return params
+
+
+class FakeFaceBlurVideoClient:
+    def __init__(
+        self,
+        *,
+        states: list[FaceBlurVideoTask] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.error = error
+        self.submit_calls: list[dict[str, object]] = []
+        self.get_calls: list[str] = []
+        self.states = states or [
+            FaceBlurVideoTask(
+                task_id="face-blur-task-safe",
+                status=FaceBlurTaskStatus.QUEUED,
+                request_id="submit-request-safe",
+            ),
+            FaceBlurVideoTask(
+                task_id="face-blur-task-safe",
+                status=FaceBlurTaskStatus.RUNNING,
+                request_id="poll-request-safe",
+            ),
+            FaceBlurVideoTask(
+                task_id="face-blur-task-safe",
+                status=FaceBlurTaskStatus.SUCCEEDED,
+                request_id="poll-request-safe",
+                output_video_url="https://provider.example/face-blur.mp4",
+                duration_seconds=12.5,
+            ),
+        ]
+
+    async def submit(self, **kwargs) -> FaceBlurVideoTask:
+        self.submit_calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+        return self.states.pop(0)
+
+    async def get_task(self, *, task_id: str) -> FaceBlurVideoTask:
+        self.get_calls.append(task_id)
+        if self.error is not None:
+            raise self.error
+        return self.states.pop(0)
+
+
+class FakeVideoEnhancementClient:
+    def __init__(self, *, error: Exception | None = None) -> None:
+        self.error = error
+        self.submit_calls: list[dict[str, object]] = []
+        self.poll_calls: list[dict[str, object]] = []
+
+    async def submit(self, **kwargs) -> VideoEnhancementTask:
+        self.submit_calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+        return VideoEnhancementTask(
+            task_id="enhancement-task-safe",
+            request_id="submit-request-safe",
+            status=VideoEnhancementTaskStatus.QUEUED,
+        )
+
+    async def poll(self, **kwargs) -> VideoEnhancementTask:
+        self.poll_calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+        return VideoEnhancementTask(
+            task_id="enhancement-task-safe",
+            request_id="poll-request-safe",
+            status=VideoEnhancementTaskStatus.SUCCEEDED,
+            output_video_url="https://provider.example/enhanced.mp4?signature=secret",
+            duration_seconds=12.5,
+            fps=60,
+            resolution="1920x1080",
+            tool_version="standard",
+        )
+
+
+class FakeMultiTrackClient:
+    def __init__(self) -> None:
+        self.submit_calls: list[dict[str, object]] = []
+        self.poll_calls: list[dict[str, object]] = []
+
+    async def submit(self, **kwargs) -> MultiTrackTask:
+        self.submit_calls.append(kwargs)
+        return MultiTrackTask(
+            task_id="multitrack-task-safe",
+            request_id="submit-request-safe",
+            status=MultiTrackTaskStatus.QUEUED,
+        )
+
+    async def poll(self, **kwargs) -> MultiTrackTask:
+        self.poll_calls.append(kwargs)
+        return MultiTrackTask(
+            task_id="multitrack-task-safe",
+            request_id="poll-request-safe",
+            status=MultiTrackTaskStatus.SUCCEEDED,
+            output_video_url=(
+                "https://provider.example/multitrack.mp4?signature=secret"
+            ),
+        )
 
 
 def test_gateway_rejects_edit_video_shorter_than_four_seconds(
@@ -584,12 +826,258 @@ def test_gateway_persists_text_to_image_output_asset(
     saved = repository.get_asset(output.asset_id)
     assert saved.metadata["origin"] == "aigc"
     assert saved.metadata["pipeline_id"] == task.pipeline_id
+    assert saved.metadata["name"] == "Gateway-test-文生图-图片1.png"
+    assert saved.metadata["name_scheme"] == "aigc_canvas_node_v1"
     assert output.download_url == f"/api/assets/{saved.id}/content"
     references = repository.list_aigc_task_assets(task.task_id)
     assert [(item.direction.value, item.asset_id) for item in references] == [
         ("output", saved.id)
     ]
+    assert generation.image_requests[0]["size"] == "2K"
     assert "画幅比例：16:9" in generation.image_requests[0]["prompt"]
+    assert saved.metadata["size"] == "2K"
+    assert saved.metadata["aspect_ratio"] == "16:9"
+    assert "target_width" not in saved.metadata
+
+
+@pytest.mark.parametrize(
+    ("task_type", "reference_asset_ids"),
+    [
+        (AigcTaskType.TEXT_TO_IMAGE, []),
+        (AigcTaskType.IMAGE_TO_IMAGE, ["source-image"]),
+        (
+            AigcTaskType.IMAGE_TO_IMAGE,
+            ["source-image", "reference-1", "reference-2"],
+        ),
+    ],
+)
+def test_gateway_forwards_custom_size_without_aspect_ratio_prompt(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    task_type: AigcTaskType,
+    reference_asset_ids: list[str],
+) -> None:
+    for asset_id in reference_asset_ids:
+        create_image_asset(repository, asset_id)
+    test_asset_storage.downloader = GeneratedImageDownloader(
+        content=png_bytes((2048, 1024)),
+    )
+    generation = FakeAigcGeneration()
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    params: dict[str, object] = {
+        "model": AIGC_DEFAULT_IMAGE_MODEL,
+        "prompt": "保持精确构图",
+        "aspect_ratio": "9:16",
+        "size": "02048x01024",
+        "format": "png",
+    }
+    if reference_asset_ids:
+        params["reference_asset_ids"] = reference_asset_ids
+    task = create_persisted_task(repository, task_type, params)
+
+    execution = asyncio.run(gateway.execute(task))
+
+    request = generation.image_requests[0]
+    assert request["size"] == "2048x1024"
+    assert request["prompt"] == "保持精确构图"
+    assert "画幅比例" not in str(request["prompt"])
+    if reference_asset_ids:
+        assert str(request["source_image_url"]).startswith(
+            "https://local-assets.tos.local/"
+        )
+    else:
+        assert request["source_image_url"] is None
+    assert len(request["reference_image_urls"]) == max(
+        0,
+        len(reference_asset_ids) - 1,
+    )
+    saved = repository.get_asset(execution.result.assets[0].asset_id)
+    assert saved.metadata["size"] == "2048x1024"
+    assert saved.metadata["target_width"] == 2048
+    assert saved.metadata["target_height"] == 1024
+    assert saved.metadata["width"] == 2048
+    assert saved.metadata["height"] == 1024
+    assert "aspect_ratio" not in saved.metadata
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_code", "message"),
+    [
+        (
+            png_bytes((1024, 1024)),
+            "output_dimensions_mismatch",
+            "1024x1024",
+        ),
+        (
+            b"not-a-decodable-image",
+            "output_image_decode_failed",
+            "could not be decoded",
+        ),
+    ],
+)
+def test_gateway_rejects_invalid_custom_size_output_without_residue(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    content: bytes,
+    expected_code: str,
+    message: str,
+) -> None:
+    create_image_asset(repository, "source-image")
+    test_asset_storage.downloader = GeneratedImageDownloader(content=content)
+    generation = FakeAigcGeneration()
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.IMAGE_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "保持精确尺寸",
+            "size": "2048x1024",
+            "format": "png",
+            "reference_asset_ids": ["source-image"],
+        },
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == expected_code
+    assert error.value.error.stage == "output_validation"
+    assert message in error.value.error.message
+    assert repository.list_aigc_task_assets(task.task_id) == []
+    assert [asset.id for asset in repository.list_assets()] == ["source-image"]
+    storage_client = test_asset_storage.client
+    assert storage_client is not None
+    assert storage_client.puts == []  # type: ignore[attr-defined]
+    assert storage_client.objects == {}  # type: ignore[attr-defined]
+
+
+def test_gateway_cleans_custom_image_relations_after_upload_failure(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_image_asset(repository, "source-image")
+    test_asset_storage.downloader = GeneratedImageDownloader(
+        content=png_bytes((2048, 1024)),
+    )
+    storage_client = test_asset_storage.client
+    assert storage_client is not None
+    storage_client.fail_uploads = True  # type: ignore[attr-defined]
+    gateway = AigcModelGateway(
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.IMAGE_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "上传失败清理",
+            "size": "2048x1024",
+            "format": "png",
+            "reference_asset_ids": ["source-image"],
+        },
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "asset_persistence_failed"
+    assert error.value.error.stage == "asset_persistence"
+    assert error.value.retryable is True
+    assert repository.list_aigc_task_assets(task.task_id) == []
+    assert [asset.id for asset in repository.list_assets()] == ["source-image"]
+    assert storage_client.objects == {}  # type: ignore[attr-defined]
+
+
+def test_gateway_cleans_custom_image_object_asset_and_relations_on_db_failure(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_image_asset(repository, "source-image")
+    test_asset_storage.downloader = GeneratedImageDownloader(
+        content=png_bytes((2048, 1024)),
+    )
+    gateway = AigcModelGateway(
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.IMAGE_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "数据库失败清理",
+            "size": "2048x1024",
+            "format": "png",
+            "reference_asset_ids": ["source-image"],
+        },
+    )
+    original_create_assets = repository.create_assets
+
+    def partially_fail_create_assets(items):
+        original_create_assets(items)
+        raise RuntimeError("simulated DB failure")
+
+    monkeypatch.setattr(repository, "create_assets", partially_fail_create_assets)
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "asset_persistence_failed"
+    assert error.value.error.stage == "asset_persistence"
+    assert repository.list_aigc_task_assets(task.task_id) == []
+    assert [asset.id for asset in repository.list_assets()] == ["source-image"]
+    storage_client = test_asset_storage.client
+    assert storage_client is not None
+    assert storage_client.objects == {}  # type: ignore[attr-defined]
+    assert storage_client.deletes == [  # type: ignore[attr-defined]
+        storage_client.puts[0]["key"]  # type: ignore[attr-defined]
+    ]
+
+
+@pytest.mark.parametrize(
+    "size",
+    ["2048X1024", "512x512", "2048x1024 "],
+)
+def test_gateway_revalidates_image_size_before_provider_call(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    size: str,
+) -> None:
+    generation = FakeAigcGeneration()
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.TEXT_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "非法尺寸不得执行",
+            "size": size,
+        },
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "invalid_input"
+    assert error.value.error.stage == "input_resolution"
+    assert generation.image_requests == []
 
 
 def test_gateway_resolves_img2img_asset_by_id(
@@ -768,7 +1256,10 @@ def test_gateway_plain_image_edit_remains_compatible(
         }
     ]
     output = execution.result.assets[0]
-    assert repository.get_asset(output.asset_id).asset_role == AssetRole.PUBLIC
+    saved = repository.get_asset(output.asset_id)
+    assert saved.asset_role == AssetRole.PUBLIC
+    assert saved.metadata["name"] == "Gateway-test-图片编辑-图片1.png"
+    assert saved.metadata["name_scheme"] == "aigc_canvas_node_v1"
     assert [
         (item.direction.value, item.slot, item.asset_id)
         for item in repository.list_aigc_task_assets(task.task_id)
@@ -813,6 +1304,8 @@ def test_gateway_layer_edit_resizes_png_and_applies_original_alpha_mask(
     assert saved.source_task_id is None
     assert saved.metadata["aigc_role"] == "edited_layer"
     assert saved.metadata["task_id"] == task.task_id
+    assert "name" not in saved.metadata
+    assert "name_scheme" not in saved.metadata
     client = test_asset_storage.client
     assert client is not None
     assert saved.object_key is not None
@@ -1116,6 +1609,92 @@ def test_gateway_decomposes_image_and_persists_internal_layer_snapshot(
         assert "A" in image.getbands()
 
 
+def test_gateway_uses_provider_canvas_dimensions_for_scaled_layer_result(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_layer_source(
+        repository,
+        test_asset_storage,
+        size=(1464, 600),
+    )
+    test_asset_storage.downloader = LayerResultDownloader(
+        base_size=(1600, 656),
+        layer_size=(478, 75),
+    )
+    generation = FakeAigcGeneration()
+    generation.layer_result = LayerDecompositionResult(
+        base_url="https://provider.example/layers/base.png",
+        layers=[
+            DecomposedImageLayer(
+                z_index=1,
+                url="https://provider.example/layers/layer-1.png",
+                name="Headline",
+                description="Foreground headline",
+                bbox_absolute=(128, 170, 606, 245),
+                bbox_normalized=(80, 259, 378, 372),
+            )
+        ],
+    )
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.LAYER_DECOMPOSITION,
+        layer_decomposition_params(),
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    layer_set = execution.result.layer_set
+    assert layer_set is not None
+    assert (layer_set.canvas_width, layer_set.canvas_height) == (1600, 656)
+    assert layer_set.layers[0].bbox_absolute == (128, 170, 606, 245)
+    assert generation.layer_requests[0]["canvas_width"] == 1464
+    assert generation.layer_requests[0]["canvas_height"] == 600
+
+
+def test_gateway_rejects_layer_bbox_outside_provider_canvas(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_layer_source(repository, test_asset_storage)
+    test_asset_storage.downloader = LayerResultDownloader()
+    generation = FakeAigcGeneration()
+    generation.layer_result = LayerDecompositionResult(
+        base_url="https://provider.example/layers/base.png",
+        layers=[
+            DecomposedImageLayer(
+                z_index=1,
+                url="https://provider.example/layers/layer-1.png",
+                name="Invalid",
+                description="Outside the provider canvas",
+                bbox_absolute=(0, 0, 513, 512),
+                bbox_normalized=(0, 0, 1000, 1000),
+            )
+        ],
+    )
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.LAYER_DECOMPOSITION,
+        layer_decomposition_params(),
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "invalid_input"
+    assert repository.list_aigc_task_assets(task.task_id) == []
+
+
 @pytest.mark.parametrize(
     ("size", "pad_to_30mb"),
     [
@@ -1335,6 +1914,523 @@ def test_gateway_rolls_back_partial_layer_upload(
     assert storage_client.deletes[0] not in storage_client.objects
 
 
+def test_gateway_resolves_multi_track_assets_and_uses_mock_mediakit(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for asset_id, asset_type in (
+        ("video-input", AssetType.UPLOADED_VIDEO),
+        ("image-input", AssetType.UPLOADED_IMAGE),
+        ("audio-input", AssetType.UPLOADED_AUDIO),
+    ):
+        create_media_asset(
+            repository,
+            asset_id,
+            asset_type,
+            metadata=(
+                {"duration_seconds": 2}
+                if asset_type
+                in {AssetType.UPLOADED_VIDEO, AssetType.UPLOADED_AUDIO}
+                else None
+            ),
+        )
+    repository.create_asset(
+        AssetCreate(
+            id="subtitle-input",
+            tool_asset_role=ToolAssetRole.INPUT,
+            type=AssetType.SUBTITLE,
+            status=Status.SUCCEEDED,
+            object_key="aigc/subtitle-input.srt",
+            mime_type="application/x-subrip",
+        )
+    )
+    params = {
+        "project": {
+            "canvas": {
+                "mode": "custom",
+                "width": 1920,
+                "height": 1080,
+                "background_color": "#000000FF",
+            },
+            "output": {"format": "mp4", "fps": 30},
+            "tracks": [
+                {
+                    "id": "video-track",
+                    "name": "视频",
+                    "type": "video",
+                    "order": 0,
+                    "hidden": False,
+                    "muted": False,
+                    "elements": [
+                        {
+                            "id": "video-element",
+                            "type": "video",
+                            "source": {
+                                "source_node_id": "video",
+                                "source_handle": "video",
+                            },
+                            "target_time": {"start_ms": 0, "end_ms": 2000},
+                            "loop": False,
+                            "transform": {
+                                "x": 0,
+                                "y": 0,
+                                "width": 1920,
+                                "height": 1080,
+                                "rotation": 0,
+                            },
+                            "speed": 1,
+                            "volume": 1,
+                            "fade_in_ms": 0,
+                            "fade_out_ms": 0,
+                            "transition": None,
+                            "source_trim": {"start_ms": 0, "end_ms": 2000},
+                        }
+                    ],
+                },
+                {
+                    "id": "text-track",
+                    "name": "文字",
+                    "type": "text",
+                    "order": 1,
+                    "hidden": False,
+                    "muted": False,
+                    "elements": [
+                        {
+                            "id": "text-element",
+                            "type": "text",
+                            "source": {
+                                "source_node_id": "text",
+                                "source_handle": "text",
+                            },
+                            "inline_text": None,
+                            "target_time": {"start_ms": 0, "end_ms": 2000},
+                            "loop": False,
+                            "transform": {
+                                "x": 100,
+                                "y": 100,
+                                "width": 600,
+                                "height": 100,
+                                "rotation": 0,
+                            },
+                            "style": {
+                                "font_size": 48,
+                                "color": "#FFFFFFFF",
+                                "bold": False,
+                                "italic": False,
+                                "underline": False,
+                                "background_color": "#00000000",
+                            },
+                        }
+                    ],
+                },
+                {
+                    "id": "image-track",
+                    "name": "图片",
+                    "type": "image",
+                    "order": 2,
+                    "hidden": False,
+                    "muted": False,
+                    "elements": [
+                        {
+                            "id": "image-element",
+                            "type": "image",
+                            "source": {
+                                "source_node_id": "image",
+                                "source_handle": "image",
+                            },
+                            "target_time": {"start_ms": 0, "end_ms": 2000},
+                            "loop": False,
+                            "transform": {
+                                "x": 0,
+                                "y": 0,
+                                "width": 640,
+                                "height": 360,
+                                "rotation": 0,
+                            },
+                        }
+                    ],
+                },
+                {
+                    "id": "audio-track",
+                    "name": "音频",
+                    "type": "audio",
+                    "order": 3,
+                    "hidden": False,
+                    "muted": False,
+                    "elements": [
+                        {
+                            "id": "audio-element",
+                            "type": "audio",
+                            "source": {
+                                "source_node_id": "audio",
+                                "source_handle": "audio",
+                            },
+                            "target_time": {"start_ms": 0, "end_ms": 2000},
+                            "loop": False,
+                            "speed": 1,
+                            "volume": 1,
+                            "fade_in_ms": 0,
+                            "fade_out_ms": 0,
+                            "source_trim": {"start_ms": 0, "end_ms": 2000},
+                        }
+                    ],
+                },
+                {
+                    "id": "subtitle-track",
+                    "name": "字幕",
+                    "type": "subtitle",
+                    "order": 4,
+                    "hidden": False,
+                    "muted": False,
+                    "elements": [
+                        {
+                            "id": "subtitle-element",
+                            "type": "subtitle",
+                            "asset_id": "subtitle-input",
+                            "target_time": {"start_ms": 0, "end_ms": 2000},
+                            "loop": False,
+                            "transform": {
+                                "x": 100,
+                                "y": 900,
+                                "width": 1720,
+                                "height": 100,
+                                "rotation": 0,
+                            },
+                            "style": {
+                                "font_size": 48,
+                                "color": "#FFFFFFFF",
+                                "bold": False,
+                                "italic": False,
+                                "underline": False,
+                                "background_color": "#00000000",
+                            },
+                        }
+                    ],
+                },
+            ],
+        },
+        "resolved_sources": {
+            "video-element": {"type": "video", "asset_id": "video-input"},
+            "image-element": {"type": "image", "asset_id": "image-input"},
+            "audio-element": {"type": "audio", "asset_id": "audio-input"},
+            "text-element": {"type": "text", "text": "当前 Run 文本"},
+            "subtitle-element": {
+                "type": "subtitle",
+                "asset_id": "subtitle-input",
+            },
+        },
+    }
+    definition = pipeline_definition(AigcTaskType.LLM)
+    pipeline = repository.create_aigc_pipeline(
+        AigcPipelineCreate(name="Multi-track gateway", definition=definition)
+    )
+    run = repository.create_aigc_run(
+        AigcPipelineRun(
+            pipeline_id=pipeline.id,
+            run_number=1,
+            pipeline_revision=0,
+            mode="full",
+            definition_snapshot=definition,
+        ),
+        idempotency_key="multi-track-gateway-run",
+        nodes=[
+            AigcPipelineRunNode(
+                node_id=item.id,
+                included_in_plan=item.id == "model",
+                status=(
+                    AigcRunNodeStatus.READY
+                    if item.id == "model"
+                    else AigcRunNodeStatus.SUCCEEDED
+                ),
+            )
+            for item in definition.nodes
+        ],
+    )
+    task = repository.create_aigc_task_attempt(
+        AigcPipelineTaskAttempt(
+            pipeline_id=pipeline.id,
+            run_id=run.run.id,
+            node_id="model",
+            type=AigcTaskType.MULTI_TRACK_EDIT,
+            params=params,
+        ),
+        idempotency_key="multi-track-gateway-task",
+    )
+    client = FakeMultiTrackClient()
+    captured: list[AigcMultiTrackAssetInput] = []
+
+    async def store_multitrack(repo, data):
+        captured.append(data)
+        return repo.create_asset(
+            AssetCreate(
+                id="multitrack-output",
+                tool_asset_role=ToolAssetRole.OUTPUT,
+                type=AssetType.STORYBOARD_VIDEO,
+                asset_role=AssetRole.PUBLIC,
+                status=Status.SUCCEEDED,
+                object_key="aigc/multitrack-output.mp4",
+                mime_type="video/mp4",
+                metadata={
+                    "provider": "mediakit",
+                    "operation": "multi_track_edit",
+                    "track_count": len(data.tracks),
+                    "element_count": sum(
+                        len(track["elements"]) for track in data.tracks
+                    ),
+                    "duration_ms": data.duration_ms,
+                    "width": data.width,
+                    "height": data.height,
+                    "fps": data.fps,
+                    "provider_task_id": data.provider_task_id,
+                    "provider_request_id": data.provider_request_id,
+                        "executor_version": data.executor_version,
+                },
+            )
+        )
+
+    monkeypatch.setattr(
+        test_asset_storage,
+        "store_aigc_multitrack_video",
+        store_multitrack,
+    )
+    gateway = AigcModelGateway(
+        repository,
+        FakeAigcGeneration(),  # type: ignore[arg-type]
+        test_asset_storage,
+        multitrack_client_factory=lambda: client,
+        multitrack_poll_interval_seconds=7,
+        multitrack_timeout_seconds=99,
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    assert execution.executor_version == "aigc-multitrack-v1"
+    assert execution.result.kind == AigcResultKind.ASSETS
+    assert execution.result.assets[0].asset_id == "multitrack-output"
+    assert execution.result.assets[0].metadata == {
+        "provider": "mediakit",
+        "operation": "multi_track_edit",
+        "provider_task_id": "multitrack-task-safe",
+        "provider_request_id": "poll-request-safe",
+        "track_count": 5,
+        "element_count": 5,
+        "duration_ms": 2000,
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "executor_version": "aigc-multitrack-v1",
+    }
+    assert execution.provider_output_url is None
+    assert client.poll_calls == [
+        {
+            "task_id": "multitrack-task-safe",
+            "timeout_seconds": 99,
+            "poll_interval_seconds": 7,
+        }
+    ]
+    submit = client.submit_calls[0]
+    assert submit["idempotency_key"] == task.task_id
+    provider_project = submit["project"]
+    assert isinstance(provider_project, dict)
+    assert set(provider_project) == {"canvas", "track", "output"}
+    assert provider_project["track"][0][0]["url"].startswith(  # type: ignore[index,union-attr]
+        "https://"
+    )
+    assert provider_project["track"][1][0]["text"] == "当前 Run 文本"  # type: ignore[index]
+    assert "/subtitle-input.srt?" in provider_project["track"][4][0]["url"]  # type: ignore[index]
+    assert "source" not in provider_project["track"][0][0]  # type: ignore[index]
+    assert captured[0].input_asset_ids == {
+        "video": ("video-input",),
+        "image": ("image-input",),
+        "audio": ("audio-input",),
+        "subtitle": ("subtitle-input",),
+    }
+    assert captured[0].duration_ms == 2000
+    assert captured[0].width == 1920
+    assert captured[0].height == 1080
+    assert captured[0].fps == 30
+    assert captured[0].provider_task_id == "multitrack-task-safe"
+    assert captured[0].provider_request_id == "poll-request-safe"
+    assert captured[0].naming_context is not None
+    assert captured[0].naming_context.pipeline_name == "Multi-track gateway"
+    assert captured[0].naming_context.node_id == task.node_id
+    assert "signature=secret" not in repr(task.params)
+    assert "signature=secret" not in repr(execution.result)
+    assert "signature=secret" not in repr(
+        repository.get_asset("multitrack-output").metadata
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "asset_type", "metadata"),
+    [
+        ("video", AssetType.UPLOADED_VIDEO, {"duration_seconds": 2}),
+        ("audio", AssetType.UPLOADED_AUDIO, {"duration_ms": 2000}),
+    ],
+)
+def test_gateway_rejects_multi_track_source_trim_past_asset_duration_before_submit(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    kind: str,
+    asset_type: AssetType,
+    metadata: dict[str, object],
+) -> None:
+    asset_id = f"{kind}-trim-input"
+    create_media_asset(
+        repository,
+        asset_id,
+        asset_type,
+        metadata=metadata,
+    )
+    transform = (
+        {
+            "transform": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080,
+                "rotation": 0,
+            },
+            "transition": None,
+        }
+        if kind == "video"
+        else {}
+    )
+    params = {
+        "project": {
+            "canvas": {
+                "mode": "custom",
+                "width": 1920,
+                "height": 1080,
+                "background_color": "#000000FF",
+            },
+            "output": {"format": "mp4", "fps": 30},
+            "tracks": [
+                {
+                    "id": f"{kind}-track",
+                    "name": kind,
+                    "type": kind,
+                    "elements": [
+                        {
+                            "id": f"{kind}-element",
+                            "type": kind,
+                            "source": {
+                                "source_node_id": kind,
+                                "source_handle": kind,
+                            },
+                            "target_time": {"start_ms": 0, "end_ms": 2001},
+                            "source_trim": {"start_ms": 0, "end_ms": 2001},
+                            "speed": 1,
+                            "volume": 1,
+                            "fade_in_ms": 0,
+                            "fade_out_ms": 0,
+                            **transform,
+                        }
+                    ],
+                }
+            ],
+        },
+        "resolved_sources": {
+            f"{kind}-element": {"type": kind, "asset_id": asset_id}
+        },
+    }
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.LLM,
+        params,
+    ).model_copy(update={"type": AigcTaskType.MULTI_TRACK_EDIT})
+    client = FakeMultiTrackClient()
+    gateway = AigcModelGateway(
+        repository,
+        FakeAigcGeneration(),  # type: ignore[arg-type]
+        test_asset_storage,
+        multitrack_client_factory=lambda: client,
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "invalid_input"
+    assert error.value.error.stage == "input_resolution"
+    assert client.submit_calls == []
+    assert client.poll_calls == []
+
+
+@pytest.mark.parametrize("speed", [0, -1, 0.000001])
+def test_gateway_rejects_invalid_multi_track_speed_before_submit(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    speed: float,
+) -> None:
+    create_media_asset(
+        repository,
+        "audio-speed-input",
+        AssetType.UPLOADED_AUDIO,
+        metadata={"duration_seconds": 2},
+    )
+    params = {
+        "project": {
+            "canvas": {
+                "mode": "custom",
+                "width": 1920,
+                "height": 1080,
+                "background_color": "#000000FF",
+            },
+            "output": {"format": "mp4", "fps": 30},
+            "tracks": [
+                {
+                    "id": "audio-track",
+                    "name": "audio",
+                    "type": "audio",
+                    "elements": [
+                        {
+                            "id": "audio-element",
+                            "type": "audio",
+                            "source": {
+                                "source_node_id": "audio",
+                                "source_handle": "audio",
+                            },
+                            "target_time": {"start_ms": 0, "end_ms": 2000},
+                            "source_trim": {"start_ms": 0, "end_ms": 2000},
+                            "speed": speed,
+                            "volume": 1,
+                            "fade_in_ms": 0,
+                            "fade_out_ms": 0,
+                        }
+                    ],
+                }
+            ],
+        },
+        "resolved_sources": {
+            "audio-element": {
+                "type": "audio",
+                "asset_id": "audio-speed-input",
+            }
+        },
+    }
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.LLM,
+        params,
+    ).model_copy(update={"type": AigcTaskType.MULTI_TRACK_EDIT})
+    client = FakeMultiTrackClient()
+    gateway = AigcModelGateway(
+        repository,
+        FakeAigcGeneration(),  # type: ignore[arg-type]
+        test_asset_storage,
+        multitrack_client_factory=lambda: client,
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "invalid_speed"
+    assert error.value.error.stage == "validate"
+    assert client.submit_calls == []
+    assert client.poll_calls == []
+
+
 def _solid_png(
     size: tuple[int, int],
     color: tuple[int, int, int, int],
@@ -1498,6 +2594,8 @@ def test_gateway_composites_replacement_into_immutable_derived_layer_set(
     assert saved.mime_type == "image/png"
     assert saved.source_task_id is None
     assert saved.metadata["task_id"] == task.task_id
+    assert saved.metadata["name"] == "Gateway-test-图层合成-图片1.png"
+    assert saved.metadata["name_scheme"] == "aigc_canvas_node_v1"
     client = test_asset_storage.client
     assert client is not None
     assert saved.object_key is not None
@@ -1729,6 +2827,8 @@ def test_gateway_executes_video_with_ordered_inputs_and_persists_output(
     assert saved.metadata["run_id"] == task.run_id
     assert saved.metadata["node_id"] == task.node_id
     assert saved.metadata["task_id"] == task.task_id
+    assert saved.metadata["name"] == "Gateway-test-生视频-视频1.mp4"
+    assert saved.metadata["name_scheme"] == "aigc_canvas_node_v1"
     assert saved.metadata["generate_audio"] is False
     assert saved.metadata["prompt_sha256"]
     assert "prompt" not in saved.metadata
@@ -1934,4 +3034,693 @@ def test_gateway_marks_video_transfer_failure_as_retryable(
 
     assert error.value.error.code == "asset_transfer_failed"
     assert error.value.error.stage == "asset_transfer"
+    assert error.value.retryable is True
+
+
+def test_gateway_executes_video_enhancement_and_streams_result(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 1920,
+            "height": 1080,
+            "duration_seconds": 12,
+            "fps": 30,
+            "video_codec": "h264",
+            "audio_codec": "aac",
+        },
+    )
+    client = FakeVideoEnhancementClient()
+    captured: list[AigcVideoEnhancementAssetInput] = []
+
+    async def store_enhancement(repo, data):
+        captured.append(data)
+        output = repo.create_asset(
+            AssetCreate(
+                id="enhancement-output",
+                tool_asset_role=ToolAssetRole.OUTPUT,
+                type=AssetType.STORYBOARD_VIDEO,
+                asset_role=AssetRole.PUBLIC,
+                status=Status.SUCCEEDED,
+                object_key="aigc/enhancement-output.mp4",
+                mime_type="video/mp4",
+                metadata={
+                    "provider": "mediakit",
+                    "provider_task_id": data.provider_task_id,
+                    "resolution": data.resolution,
+                    "fps": data.fps,
+                    "duration_seconds": data.duration_seconds,
+                    "tool_version": data.tool_version,
+                    "bit_depth": data.bit_depth,
+                },
+            )
+        )
+        repo.add_aigc_task_assets(
+            [
+                AigcPipelineTaskAssetReference(
+                    task_id=data.task_id,
+                    direction=AigcAssetDirection.OUTPUT,
+                    slot="video",
+                    ordinal=0,
+                    asset_id=output.id,
+                )
+            ]
+        )
+        return output
+
+    monkeypatch.setattr(
+        test_asset_storage,
+        "store_aigc_video_enhancement",
+        store_enhancement,
+    )
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),  # cached inspection avoids probing
+        video_enhancement_client_factory=lambda: client,
+        video_enhancement_poll_interval_seconds=7,
+        video_enhancement_timeout_seconds=90,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_ENHANCEMENT,
+        video_enhancement_params(),
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    assert execution.executor_version == AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION
+    assert client.submit_calls[0]["video_url"].startswith("https://")
+    assert client.submit_calls[0]["idempotency_key"] == (
+        f"{task.pipeline_id}:{task.run_id}:{task.node_id}"
+    )
+    assert client.poll_calls == [
+        {
+            "task_id": "enhancement-task-safe",
+            "timeout_seconds": 90,
+            "poll_interval_seconds": 7,
+        }
+    ]
+    assert captured[0].source_url.startswith(
+        "https://provider.example/enhanced.mp4"
+    )
+    assert captured[0].provider_task_id == "enhancement-task-safe"
+    assert captured[0].provider_request_id == "poll-request-safe"
+    assert captured[0].input_asset_id == "source-video"
+    assert captured[0].naming_context is not None
+    assert captured[0].naming_context.pipeline_name == "Gateway test"
+    assert captured[0].naming_context.node_id == task.node_id
+    assert execution.result.assets[0].asset_id == "enhancement-output"
+    assert execution.result.assets[0].metadata == {
+        "resolution": "1920x1080",
+        "fps": 60,
+        "duration_seconds": 12.5,
+        "tool_version": "standard",
+        "bit_depth": 8,
+    }
+    assert [
+        (item.direction.value, item.slot, item.ordinal, item.asset_id)
+        for item in repository.list_aigc_task_assets(task.task_id)
+    ] == [
+        ("input", "video", 0, "source-video"),
+        ("output", "video", 0, "enhancement-output"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "duration", "params", "message"),
+    [
+        (359, 640, 12, {}, "short edge"),
+        (1440, 2561, 12, {}, "long edge"),
+        (
+            1920,
+            1080,
+            40.01,
+            {
+                "tool_version": "professional",
+                "scene": None,
+                "bit_depth": 16,
+                "bitrate_mode": None,
+                "bitrate_level": None,
+                "bitrate": None,
+            },
+            "40 seconds",
+        ),
+    ],
+)
+def test_gateway_rejects_invalid_video_enhancement_media_before_provider(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    width: int,
+    height: int,
+    duration: float,
+    params: dict[str, object],
+    message: str,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": width,
+            "height": height,
+            "duration_seconds": duration,
+            "fps": 30,
+            "video_codec": "h264",
+        },
+    )
+    client = FakeVideoEnhancementClient()
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        video_enhancement_client_factory=lambda: client,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_ENHANCEMENT,
+        video_enhancement_params(**params),
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "invalid_media_input"
+    assert error.value.error.stage == "input_resolution"
+    assert message in error.value.error.message
+    assert client.submit_calls == []
+    assert repository.list_aigc_task_assets(task.task_id) == []
+
+
+def test_gateway_maps_mediakit_timeout_without_leaking_provider_detail(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 1280,
+            "height": 720,
+            "duration_seconds": 12,
+            "fps": 30,
+            "video_codec": "h264",
+        },
+    )
+
+    class TimeoutClient(FakeVideoEnhancementClient):
+        async def poll(self, **kwargs) -> VideoEnhancementTask:
+            self.poll_calls.append(kwargs)
+            raise MediaKitVideoEnhancementError(
+                "MediaKit video enhancement polling timed out.",
+                code="poll_timeout",
+                phase="poll",
+                request_id="request-safe",
+                task_id="task-safe",
+            )
+
+    client = TimeoutClient()
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        video_enhancement_client_factory=lambda: client,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_ENHANCEMENT,
+        video_enhancement_params(),
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "timeout"
+    assert error.value.error.stage == "poll"
+    assert error.value.error.request_id == "request-safe"
+    assert error.value.retryable is True
+    assert "signature" not in error.value.error.message
+
+
+def test_gateway_marks_video_enhancement_transfer_failure_retryable(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 1280,
+            "height": 720,
+            "duration_seconds": 12,
+            "fps": 30,
+            "video_codec": "h264",
+        },
+    )
+
+    async def fail_transfer(*_args, **_kwargs):
+        raise RuntimeError("temporary storage failure")
+
+    monkeypatch.setattr(
+        test_asset_storage,
+        "store_aigc_video_enhancement",
+        fail_transfer,
+    )
+    client = FakeVideoEnhancementClient()
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        video_enhancement_client_factory=lambda: client,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_ENHANCEMENT,
+        video_enhancement_params(),
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "asset_transfer_failed"
+    assert error.value.error.stage == "asset_transfer"
+    assert error.value.error.request_id == "poll-request-safe"
+    assert error.value.retryable is True
+
+
+def test_gateway_executes_video_face_blur_with_stable_token_and_trace(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 3840,
+            "height": 2160,
+            "duration_seconds": 600,
+            "fps": 25,
+            "video_codec": "h264",
+        },
+    )
+    client = FakeFaceBlurVideoClient()
+    captured: list[AigcVideoFaceBlurAssetInput] = []
+
+    async def store_face_blur(repo, data):
+        captured.append(data)
+        output = repo.create_asset(
+            AssetCreate(
+                id="face-blur-output",
+                tool_asset_role=ToolAssetRole.OUTPUT,
+                type=AssetType.STORYBOARD_VIDEO,
+                asset_role=AssetRole.PUBLIC,
+                status=Status.SUCCEEDED,
+                object_key="aigc/face-blur-output.mp4",
+                mime_type="video/mp4",
+                metadata={
+                    "provider": "mediakit",
+                    "operation": "face_blur_video",
+                    "provider_task_id": data.provider_task_id,
+                    "provider_request_id": data.provider_request_id,
+                    "duration_seconds": data.duration_seconds,
+                    "mask_mode": data.mask_mode,
+                    "mask_strength": data.mask_strength,
+                },
+            )
+        )
+        repo.add_aigc_task_assets(
+            [
+                AigcPipelineTaskAssetReference(
+                    task_id=data.task_id,
+                    direction=AigcAssetDirection.OUTPUT,
+                    slot="video",
+                    ordinal=0,
+                    asset_id=output.id,
+                )
+            ]
+        )
+        return output
+
+    monkeypatch.setattr(
+        test_asset_storage,
+        "store_aigc_video_face_blur",
+        store_face_blur,
+    )
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        face_blur_client_factory=lambda: client,
+        face_blur_poll_interval_seconds=0.001,
+        face_blur_timeout_seconds=1,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_FACE_BLUR,
+        video_face_blur_params(),
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    assert execution.executor_version == AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION
+    assert len(client.submit_calls) == 1
+    assert str(client.submit_calls[0]["video_url"]).startswith("https://")
+    assert client.submit_calls[0]["mask_mode"] == "mosaic"
+    assert client.submit_calls[0]["mask_strength"] == "medium"
+    token = str(client.submit_calls[0]["client_token"])
+    assert token.startswith("aigc-face-blur-")
+    assert len(token) <= 64
+    identity = (
+        f"{task.pipeline_id}:{task.run_id}:{task.node_id}:attempt:{task.attempt}"
+    )
+    assert token == (
+        f"aigc-face-blur-{hashlib.sha256(identity.encode()).hexdigest()[:40]}"
+    )
+    assert client.get_calls == ["face-blur-task-safe", "face-blur-task-safe"]
+    assert captured[0].provider_task_id == "face-blur-task-safe"
+    assert captured[0].provider_request_id == "poll-request-safe"
+    assert captured[0].input_asset_id == "source-video"
+    assert captured[0].naming_context is not None
+    assert captured[0].naming_context.pipeline_name == "Gateway test"
+    assert captured[0].naming_context.node_id == task.node_id
+    assert execution.result.assets[0].asset_id == "face-blur-output"
+    assert execution.result.assets[0].metadata == {
+        "provider_task_id": "face-blur-task-safe",
+        "provider_request_id": "poll-request-safe",
+        "duration_seconds": 12.5,
+        "mask_mode": "mosaic",
+        "mask_strength": "medium",
+    }
+    assert [
+        (item.direction.value, item.slot, item.ordinal, item.asset_id)
+        for item in repository.list_aigc_task_assets(task.task_id)
+    ] == [
+        ("input", "video", 0, "source-video"),
+        ("output", "video", 0, "face-blur-output"),
+    ]
+    assert repository.get_aigc_task_attempt(task.task_id).progress == 50
+
+
+def test_gateway_cleans_references_after_face_blur_transfer_failure(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 1920,
+            "height": 1080,
+            "duration_seconds": 12,
+            "fps": 30,
+            "video_codec": "h264",
+        },
+    )
+
+    async def fail_transfer(*_args, **_kwargs):
+        raise RuntimeError("temporary storage failure")
+
+    monkeypatch.setattr(
+        test_asset_storage,
+        "store_aigc_video_face_blur",
+        fail_transfer,
+    )
+    client = FakeFaceBlurVideoClient(
+        states=[
+            FaceBlurVideoTask(
+                task_id="face-blur-task-safe",
+                status=FaceBlurTaskStatus.SUCCEEDED,
+                request_id="request-safe",
+                output_video_url="https://provider.example/face-blur.mp4",
+            )
+        ]
+    )
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        face_blur_client_factory=lambda: client,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_FACE_BLUR,
+        video_face_blur_params(),
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "asset_transfer_failed"
+    assert error.value.error.stage == "asset_transfer"
+    assert error.value.error.request_id == "request-safe"
+    assert error.value.retryable is True
+    assert repository.list_aigc_task_assets(task.task_id) == []
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "duration", "fps", "message"),
+    [
+        (4097, 2160, 600, 25, "long edge"),
+        (4096, 2161, 600, 60, "short edge"),
+        (1920, 1080, 600.01, 30, "600 seconds"),
+        (1920, 1080, 600, 24.99, "between 25 and 60"),
+        (1920, 1080, 600, 60.01, "between 25 and 60"),
+    ],
+)
+def test_gateway_rejects_invalid_video_face_blur_media_before_provider(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    width: int,
+    height: int,
+    duration: float,
+    fps: float,
+    message: str,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": width,
+            "height": height,
+            "duration_seconds": duration,
+            "fps": fps,
+            "video_codec": "h264",
+        },
+    )
+    client = FakeFaceBlurVideoClient()
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        face_blur_client_factory=lambda: client,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_FACE_BLUR,
+        video_face_blur_params(),
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "invalid_media_input"
+    assert error.value.error.stage == "input_resolution"
+    assert message in error.value.error.message
+    assert client.submit_calls == []
+    assert repository.list_aigc_task_assets(task.task_id) == []
+
+
+@pytest.mark.parametrize("invalid_input", ["status", "mime", "access"])
+def test_gateway_rejects_unavailable_video_face_blur_asset(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_input: str,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        status=(
+            Status.FAILED
+            if invalid_input == "status"
+            else Status.SUCCEEDED
+        ),
+        mime_type=(
+            "image/png"
+            if invalid_input == "mime"
+            else "video/mp4"
+        ),
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 1920,
+            "height": 1080,
+            "duration_seconds": 12,
+            "fps": 30,
+            "video_codec": "h264",
+        },
+    )
+    if invalid_input == "access":
+        monkeypatch.setattr(
+            test_asset_storage,
+            "signed_access_url",
+            lambda _asset: None,
+        )
+    client = FakeFaceBlurVideoClient()
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        face_blur_client_factory=lambda: client,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_FACE_BLUR,
+        video_face_blur_params(),
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "invalid_input"
+    assert error.value.error.stage == "input_resolution"
+    assert client.submit_calls == []
+
+
+def test_gateway_maps_face_blur_provider_error_without_leaking_detail(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 1920,
+            "height": 1080,
+            "duration_seconds": 12,
+            "fps": 30,
+            "video_codec": "h264",
+        },
+    )
+    client = FakeFaceBlurVideoClient(
+        error=MediaKitFaceBlurError(
+            "MediaKit face blur task failed.",
+            detail=(
+                "phase=query; status=failed; code=InternalError; "
+                "request_id=request-safe; task_id=task-safe; "
+                "signature=must-not-leak"
+            ),
+        )
+    )
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        face_blur_client_factory=lambda: client,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_FACE_BLUR,
+        video_face_blur_params(),
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "provider_error"
+    assert error.value.error.stage == "query"
+    assert error.value.error.request_id == "request-safe"
+    assert error.value.error.message == "MediaKit face blur task failed."
+    assert error.value.retryable is True
+
+
+def test_gateway_times_out_face_blur_polling(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 1920,
+            "height": 1080,
+            "duration_seconds": 12,
+            "fps": 30,
+            "video_codec": "h264",
+        },
+    )
+
+    class RunningClient(FakeFaceBlurVideoClient):
+        async def get_task(self, *, task_id: str) -> FaceBlurVideoTask:
+            self.get_calls.append(task_id)
+            return FaceBlurVideoTask(
+                task_id=task_id,
+                status=FaceBlurTaskStatus.RUNNING,
+                request_id="request-safe",
+            )
+
+    client = RunningClient()
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        face_blur_client_factory=lambda: client,
+        face_blur_poll_interval_seconds=0.001,
+        face_blur_timeout_seconds=0.005,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_FACE_BLUR,
+        video_face_blur_params(),
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "timeout"
+    assert error.value.error.stage == "poll"
     assert error.value.retryable is True

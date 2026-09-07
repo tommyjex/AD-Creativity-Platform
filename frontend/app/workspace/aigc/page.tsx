@@ -11,6 +11,12 @@ import type {
 
 const PAGE_SIZE = 20;
 
+export function parseAigcView(
+  view: string | string[] | undefined
+): "templates" | "pipelines" {
+  return view === "pipelines" ? "pipelines" : "templates";
+}
+
 function emptyPage<T>(): AigcPage<T> {
   return {
     items: [],
@@ -20,7 +26,12 @@ function emptyPage<T>(): AigcPage<T> {
   };
 }
 
-export default async function AigcWorkspacePage() {
+export default async function AigcWorkspacePage({
+  searchParams
+}: {
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
+  const { view } = await searchParams;
   const api = createApiClient();
   let initialTemplates = emptyPage<AigcPipelineTemplate>();
   let initialPipelines = emptyPage<AigcPipeline>();
@@ -46,6 +57,7 @@ export default async function AigcWorkspacePage() {
       initialError={initialError}
       initialPipelines={initialPipelines}
       initialTemplates={initialTemplates}
+      initialView={parseAigcView(view)}
     />
   );
 }
