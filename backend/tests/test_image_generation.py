@@ -175,6 +175,43 @@ def test_byteplus_project_image_request_uses_fixed_single_image_parameters(
     assert "sequential_image_generation" not in call
     assert result.mime_type == "image/jpeg"
     assert result.metadata["operation"] == operation.value
+    assert result.metadata["size"] == "1.5K"
+    assert "target_width" not in result.metadata
+    assert isinstance(request.size, ImageGenerationSize)
+
+
+@pytest.mark.parametrize(
+    ("adapter_factory", "provider"),
+    [
+        (
+            lambda: BytePlusModelArkAdapter(_settings(), client=_ArkClient()),
+            "byteplus-modelark",
+        ),
+        (lambda: MockModelArkAdapter(_settings()), "mock-modelark"),
+    ],
+)
+def test_project_image_adapters_share_custom_size_metadata(
+    adapter_factory,
+    provider: str,
+) -> None:
+    adapter = adapter_factory()
+    request = ProjectImageGenerationRequest(
+        project_id="project-1",
+        model=_settings().ark_image_model,
+        operation=ImageGenerationOperation.TEXT_TO_IMAGE,
+        prompt="Generate a centered product image.",
+        size="02048x01024",
+    )
+
+    result = asyncio.run(adapter.generate_project_image(request))
+
+    assert request.size == "2048x1024"
+    assert result.metadata["provider"] == provider
+    assert result.metadata["size"] == "2048x1024"
+    assert result.metadata["target_width"] == 2048
+    assert result.metadata["target_height"] == 1024
+    if isinstance(adapter, BytePlusModelArkAdapter):
+        assert adapter.client.images.calls[0]["size"] == "2048x1024"
 
 
 def test_mock_project_image_generation_is_deterministic() -> None:

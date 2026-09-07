@@ -8,7 +8,8 @@ import {
   buildArtifactItems,
   getSafeLastFrameUrl,
   getSafePreviewUrl,
-  getWorkspaceAssetDescription
+  getWorkspaceAssetDescription,
+  partitionWorkspaceAssets
 } from "@/lib/asset-display";
 import type { Asset, ProjectListItem } from "@/lib/api-types";
 
@@ -18,7 +19,8 @@ const apiMocks = vi.hoisted(() => ({
   listAssets: vi.fn(),
   listProjects: vi.fn(),
   listToolAssets: vi.fn(),
-  listToolTasks: vi.fn()
+  listToolTasks: vi.fn(),
+  renameAsset: vi.fn()
 }));
 
 vi.mock("@/lib/api-client", () => ({
@@ -126,6 +128,33 @@ const toolVideoAsset = createAsset({
   url: "/api/assets/tool-video-1/content"
 });
 
+const aigcInputAsset = createAsset({
+  asset_role: "public",
+  category: null,
+  id: "aigc-input",
+  metadata: { aigc_role: "legacy-value", name: "参考商品图", origin: "aigc" },
+  project_id: null,
+  stage: null,
+  tool_asset_role: "input",
+  tool_task_id: null,
+  type: "uploaded_image",
+  url: "/api/assets/aigc-input/content"
+});
+
+const aigcOutputAsset = createAsset({
+  ...aigcInputAsset,
+  id: "aigc-output",
+  metadata: {
+    description: "Provider description",
+    name: "商品主图-图生图1-图片1.png",
+    name_scheme: "aigc_canvas_node_v1",
+    origin: "aigc"
+  },
+  tool_asset_role: "output",
+  type: "generated_image",
+  url: "/api/assets/aigc-output/content"
+});
+
 const toolTask = {
   created_at: "2026-08-10T10:00:00Z",
   finished_at: null,
@@ -146,6 +175,7 @@ describe("WorkspaceAssetLibrary", () => {
     apiMocks.listProjects.mockReset();
     apiMocks.listToolAssets.mockReset();
     apiMocks.listToolTasks.mockReset();
+    apiMocks.renameAsset.mockReset();
   });
 
   it("fetches assets without a backend category and keeps sections client-side", async () => {
@@ -226,6 +256,49 @@ describe("WorkspaceAssetLibrary", () => {
       next: { revalidate: 30 }
     });
     expect(screen.getByLabelText("来源")).toHaveValue("tools");
+    expect(screen.getByRole("heading", { name: "工具资产" })).toBeInTheDocument();
+  });
+
+  it("parses source=aigc and clears project filtering from requests and forms", async () => {
+    apiMocks.listProjects.mockResolvedValue([project]);
+    apiMocks.listToolAssets.mockResolvedValue([aigcInputAsset]);
+    apiMocks.listToolTasks.mockResolvedValue([]);
+
+    render(
+      await WorkspaceAssetsPage({
+        searchParams: Promise.resolve({
+          project_id: project.id,
+          source: "aigc"
+        })
+      })
+    );
+
+    expect(apiMocks.listAssets).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("来源")).toHaveValue("aigc");
+    expect(screen.getByLabelText("项目")).toBeDisabled();
+    expect(screen.getByLabelText("项目")).toHaveValue("");
+    const form = screen.getByRole("button", { name: "筛选" }).closest("form");
+    expect(new FormData(form as HTMLFormElement).has("project_id")).toBe(false);
+    expect(
+      screen.getByRole("heading", { name: "AIGC 工作台" })
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to all assets for an unknown source", async () => {
+    apiMocks.listProjects.mockResolvedValue([project]);
+    apiMocks.listAssets.mockResolvedValue([characterAsset]);
+    apiMocks.listToolAssets.mockResolvedValue([toolVideoAsset]);
+    apiMocks.listToolTasks.mockResolvedValue([toolTask]);
+
+    render(
+      await WorkspaceAssetsPage({
+        searchParams: Promise.resolve({ source: "unknown-source" })
+      })
+    );
+
+    expect(screen.getByLabelText("来源")).toHaveValue("all");
+    expect(apiMocks.listAssets).toHaveBeenCalledOnce();
+    expect(apiMocks.listToolAssets).toHaveBeenCalledOnce();
     expect(screen.getByRole("heading", { name: "工具资产" })).toBeInTheDocument();
   });
 
@@ -314,37 +387,121 @@ describe("WorkspaceAssetLibrary", () => {
     );
   });
 
-  it("identifies AIGC input and output assets in the shared library", () => {
-    const aigcInput = createAsset({
-      category: null,
-      id: "aigc-input",
-      metadata: { aigc_role: "input", name: "参考商品图", origin: "aigc" },
-      project_id: null,
-      stage: null,
-      tool_asset_role: "input",
-      tool_task_id: null,
-      type: "uploaded_image",
-      url: "/api/assets/aigc-input/content"
-    });
-    const aigcOutput = createAsset({
-      ...aigcInput,
-      id: "aigc-output",
-      metadata: { aigc_role: "output", name: "生成主图", origin: "aigc" },
-      tool_asset_role: "output",
-      url: "/api/assets/aigc-output/content"
-    });
-
+  it("shows AIGC input and output with dedicated source and role labels", () => {
     render(
       <WorkspaceAssetLibrary
-        assets={[aigcInput, aigcOutput]}
-        filters={{ source: "tools" }}
+        assets={[aigcInputAsset, aigcOutputAsset]}
+        filters={{ source: "aigc" }}
         projects={[project]}
       />
     );
 
-    expect(screen.getAllByText("AIGC 工作台")).toHaveLength(2);
-    expect(screen.getByText("AIGC 输入素材")).toBeInTheDocument();
-    expect(screen.getByText("AIGC 输出产物")).toBeInTheDocument();
+    expect(screen.getAllByText("AIGC 工作台").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText("AIGC 输入")).toBeInTheDocument();
+    expect(screen.getByText("AIGC 输出")).toBeInTheDocument();
+    expect(
+      screen.getByText("商品主图-图生图1-图片1.png")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Provider description")).not.toBeInTheDocument();
+  });
+
+  it("keeps tools and AIGC mutually exclusive", () => {
+    const { rerender } = render(
+      <WorkspaceAssetLibrary
+        assets={[toolVideoAsset, aigcInputAsset, aigcOutputAsset]}
+        filters={{ source: "tools" }}
+        projects={[project]}
+        toolTasks={[toolTask]}
+      />
+    );
+
+    expect(screen.getByText("人物打码结果")).toBeInTheDocument();
+    expect(screen.queryByText("参考商品图")).not.toBeInTheDocument();
+
+    rerender(
+      <WorkspaceAssetLibrary
+        assets={[toolVideoAsset, aigcInputAsset, aigcOutputAsset]}
+        filters={{ source: "aigc" }}
+        projects={[project]}
+        toolTasks={[toolTask]}
+      />
+    );
+
+    expect(screen.queryByText("人物打码结果")).not.toBeInTheDocument();
+    expect(screen.getByText("参考商品图")).toBeInTheDocument();
+  });
+
+  it("combines AIGC source with status, section, and keyword filters", () => {
+    const failedVideo = createAsset({
+      ...aigcInputAsset,
+      id: "aigc-video",
+      metadata: { name: "失败视频", origin: "aigc" },
+      mime_type: "video/mp4",
+      status: "failed",
+      type: "uploaded_video"
+    });
+
+    render(
+      <WorkspaceAssetLibrary
+        assets={[aigcInputAsset, aigcOutputAsset, failedVideo]}
+        filters={{ section: "product", source: "aigc", status: "succeeded" }}
+        projects={[project]}
+      />
+    );
+
+    expect(screen.getByText("参考商品图")).toBeInTheDocument();
+    expect(screen.queryByText("失败视频")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("搜索资产"), {
+      target: { value: "图生图1" }
+    });
+
+    expect(screen.queryByText("参考商品图")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("商品主图-图生图1-图片1.png")
+    ).toBeInTheDocument();
+  });
+
+  it("shows an AIGC-specific empty state", () => {
+    render(
+      <WorkspaceAssetLibrary
+        assets={[toolVideoAsset]}
+        filters={{ source: "aigc" }}
+        projects={[project]}
+      />
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "暂无 AIGC 工作台资产" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("人物打码结果")).not.toBeInTheDocument();
+  });
+
+  it("shows the unified AIGC name and source details in preview and download", () => {
+    render(
+      <WorkspaceAssetLibrary
+        assets={[aigcOutputAsset]}
+        filters={{ source: "aigc" }}
+        projects={[project]}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "放大查看商品主图-图生图1-图片1.png预览"
+      })
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("商品主图-图生图1-图片1.png")).toBeInTheDocument();
+    expect(within(dialog).getByText("AIGC 工作台")).toBeInTheDocument();
+    expect(within(dialog).getByText("AIGC 输出")).toBeInTheDocument();
+    expect(within(dialog).getByRole("link", { name: "下载资产" })).toHaveAttribute(
+      "href",
+      expect.stringContaining(
+        "filename=%E5%95%86%E5%93%81%E4%B8%BB%E5%9B%BE-%E5%9B%BE%E7%94%9F%E5%9B%BE1-%E5%9B%BE%E7%89%871.png"
+      )
+    );
   });
 
   it("uses the tool deletion endpoint without affecting project assets", async () => {
@@ -388,6 +545,253 @@ describe("WorkspaceAssetLibrary", () => {
     expect(
       screen.getByRole("img", { name: "尾帧图预览" })
     ).toHaveAttribute("src", "http://backend.local/api/assets/video-1/last-frame");
+    expect(screen.getAllByRole("button", { name: "重命名资产" })).toHaveLength(2);
+    const lastFrameCard = screen
+      .getByRole("img", { name: "尾帧图预览" })
+      .closest("article");
+    expect(
+      within(lastFrameCard as HTMLElement).queryByRole("button", {
+        name: "重命名资产"
+      })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows stable rename and delete actions outside independent thumbnails", () => {
+    render(
+      <WorkspaceAssetLibrary
+        assets={[characterAsset, toolVideoAsset, aigcInputAsset]}
+        filters={{}}
+        projects={[project]}
+        toolTasks={[toolTask]}
+      />
+    );
+
+    const renameButtons = screen.getAllByRole("button", {
+      name: "重命名资产"
+    });
+    expect(renameButtons).toHaveLength(3);
+    for (const button of renameButtons) {
+      expect(button).toHaveAttribute("title", "重命名资产");
+      expect(button.closest("[data-asset-actions]")).toContainElement(
+        within(button.closest("[data-asset-actions]") as HTMLElement).getByRole(
+          "button",
+          { name: "删除资产" }
+        )
+      );
+      expect(button.closest("[data-asset-actions]")?.parentElement).not.toHaveClass(
+        "absolute"
+      );
+    }
+  });
+
+  it("renames an asset and immediately updates search, preview, and download", async () => {
+    const renamedAsset: Asset = {
+      ...aigcOutputAsset,
+      metadata: {
+        ...aigcOutputAsset.metadata,
+        name: "  用户新品图.png  ",
+        name_scheme: "user_defined_v1"
+      },
+      url: "https://cdn.example.test/renamed.png"
+    };
+    apiMocks.renameAsset.mockResolvedValue(renamedAsset);
+
+    render(
+      <WorkspaceAssetLibrary
+        assets={[aigcOutputAsset]}
+        filters={{ source: "aigc" }}
+        projects={[project]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名资产" }));
+    const dialog = screen.getByRole("dialog");
+    const input = within(dialog).getByLabelText("资产名称");
+    expect(input).toHaveValue("商品主图-图生图1-图片1.png");
+
+    fireEvent.change(input, { target: { value: "  用户新品图.png  " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+
+    await waitFor(() =>
+      expect(apiMocks.renameAsset).toHaveBeenCalledWith("aigc-output", {
+        name: "用户新品图.png"
+      })
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("用户新品图.png")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("搜索资产"), {
+      target: { value: "商品主图" }
+    });
+    expect(
+      screen.getByRole("heading", { name: "未找到匹配" })
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("搜索资产"), {
+      target: { value: "用户新品" }
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "放大查看用户新品图.png预览" })
+    );
+    const previewDialog = screen.getByRole("dialog");
+    expect(within(previewDialog).getByText("用户新品图.png")).toBeInTheDocument();
+    expect(
+      within(previewDialog).getByRole("img", { name: "用户新品图.png大图" })
+    ).toHaveAttribute(
+      "src",
+      "https://cdn.example.test/renamed.png"
+    );
+    expect(
+      within(previewDialog).getByRole("link", { name: "下载资产" })
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining(
+        "filename=%E7%94%A8%E6%88%B7%E6%96%B0%E5%93%81%E5%9B%BE.png"
+      )
+    );
+  });
+
+  it("disables invalid or unchanged names and enables a valid change", () => {
+    render(
+      <WorkspaceAssetLibrary
+        assets={[characterAsset]}
+        filters={{ section: "character" }}
+        projects={[project]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名资产" }));
+    const dialog = screen.getByRole("dialog");
+    const input = within(dialog).getByLabelText("资产名称");
+    const saveButton = within(dialog).getByRole("button", { name: "保存" });
+
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.change(input, {
+      target: { value: "  晨间通勤中的年轻女性  " }
+    });
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.change(input, { target: { value: "   " } });
+    expect(saveButton).toBeDisabled();
+    const blankNameError = within(dialog).getByRole("alert");
+    expect(blankNameError).toHaveTextContent("请输入资产名称。");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-describedby", blankNameError.id);
+
+    fireEvent.change(input, { target: { value: "😀".repeat(121) } });
+    expect(saveButton).toBeDisabled();
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "名称不能超过 120 个字符。"
+    );
+
+    fireEvent.change(input, { target: { value: "名称\u0001" } });
+    expect(saveButton).toBeDisabled();
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "名称不能包含控制字符。"
+    );
+
+    fireEvent.change(input, { target: { value: "有效的新名称😀" } });
+    expect(saveButton).toBeEnabled();
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(input).not.toHaveAttribute("aria-describedby");
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    expect(apiMocks.renameAsset).not.toHaveBeenCalled();
+  });
+
+  it("keeps the dialog and original name when renaming fails", async () => {
+    apiMocks.renameAsset.mockRejectedValue(new Error("request failed"));
+    render(
+      <WorkspaceAssetLibrary
+        assets={[characterAsset]}
+        filters={{ section: "character" }}
+        projects={[project]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名资产" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("资产名称"), {
+      target: { value: "失败的新名称" }
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+
+    await waitFor(() =>
+      expect(within(dialog).getByRole("alert")).toHaveTextContent(
+        "服务暂时不可用，请稍后重试。"
+      )
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("晨间通勤中的年轻女性")).toBeInTheDocument();
+  });
+
+  it("disables rename controls and ignores duplicate submissions", async () => {
+    let resolveRename: (asset: Asset) => void = () => undefined;
+    apiMocks.renameAsset.mockImplementation(
+      () =>
+        new Promise<Asset>((resolve) => {
+          resolveRename = resolve;
+        })
+    );
+    render(
+      <WorkspaceAssetLibrary
+        assets={[characterAsset]}
+        filters={{ section: "character" }}
+        projects={[project]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重命名资产" }));
+    const dialog = screen.getByRole("dialog");
+    const input = within(dialog).getByLabelText("资产名称");
+    fireEvent.change(input, { target: { value: "新角色名称" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(input).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "保存中…" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "取消" })).toBeDisabled();
+    expect(
+      within(dialog).queryByRole("button", { name: "关闭" })
+    ).not.toBeInTheDocument();
+    expect(apiMocks.renameAsset).toHaveBeenCalledTimes(1);
+
+    resolveRename({
+      ...characterAsset,
+      metadata: {
+        ...characterAsset.metadata,
+        name: "新角色名称",
+        name_scheme: "user_defined_v1"
+      }
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+  });
+
+  it("keeps the last-frame title fixed while matching the renamed host", () => {
+    const renamedStoryboard: Asset = {
+      ...storyboardVideoAsset,
+      metadata: {
+        ...storyboardVideoAsset.metadata,
+        name: "新版分镜",
+        name_scheme: "user_defined_v1"
+      }
+    };
+    render(
+      <WorkspaceAssetLibrary
+        assets={[renamedStoryboard]}
+        filters={{ section: "artifacts" }}
+        projects={[project]}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("搜索资产"), {
+      target: { value: "新版分镜" }
+    });
+
+    expect(screen.getByText("新版分镜")).toBeInTheDocument();
+    expect(screen.getByText("尾帧图")).toBeInTheDocument();
   });
 
   it("keeps external http URLs and categorized metadata", () => {
@@ -399,9 +803,11 @@ describe("WorkspaceAssetLibrary", () => {
       />
     );
 
-    expect(
-      screen.getByRole("img", { name: "晨间通勤中的年轻女性预览" })
-    ).toHaveAttribute("src", characterAsset.url);
+    const imagePreview = screen.getByRole("img", {
+      name: "晨间通勤中的年轻女性预览"
+    });
+    expect(imagePreview).toHaveAttribute("src", characterAsset.url);
+    expect(imagePreview).toHaveClass("object-contain");
     expect(screen.getByText("晨光地铁站")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
   });
@@ -420,9 +826,11 @@ describe("WorkspaceAssetLibrary", () => {
     );
 
     const dialog = screen.getByRole("dialog");
-    expect(
-      within(dialog).getByRole("img", { name: "晨间通勤中的年轻女性大图" })
-    ).toHaveAttribute("src", characterAsset.url);
+    const enlargedImage = within(dialog).getByRole("img", {
+      name: "晨间通勤中的年轻女性大图"
+    });
+    expect(enlargedImage).toHaveAttribute("src", characterAsset.url);
+    expect(enlargedImage).toHaveClass("object-contain");
     expect(within(dialog).getByText("便携咖啡机投放")).toBeInTheDocument();
   });
 
@@ -443,6 +851,9 @@ describe("WorkspaceAssetLibrary", () => {
     expect(
       within(dialog).getByLabelText("分镜视频片段播放")
     ).toHaveAttribute("src", "http://backend.local/api/assets/video-1/content");
+    expect(
+      screen.getByLabelText("分镜视频片段预览")
+    ).toHaveClass("object-contain");
   });
 
   it("does not make cards without a preview URL clickable", () => {
@@ -511,7 +922,7 @@ describe("WorkspaceAssetLibrary", () => {
     expect(within(dialog).getByText("doubao-seedream-5-0-pro")).toBeInTheDocument();
     expect(within(dialog).getByRole("link", { name: "下载资产" })).toHaveAttribute(
       "href",
-      "http://backend.local/api/assets/generated-1/content"
+      "http://backend.local/api/assets/generated-1/content?download=1"
     );
   });
 
@@ -657,7 +1068,7 @@ describe("WorkspaceAssetLibrary", () => {
   });
 
   it("paginates sections that exceed the page size", () => {
-    const many = Array.from({ length: 8 }, (_, index) =>
+    const many = Array.from({ length: 32 }, (_, index) =>
       createAsset({
         category: "character",
         id: `character-${index}`,
@@ -674,12 +1085,71 @@ describe("WorkspaceAssetLibrary", () => {
     );
 
     expect(screen.getByText("第 1 / 2 页")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "删除资产" })).toHaveLength(6);
+    expect(screen.getAllByRole("button", { name: "删除资产" })).toHaveLength(30);
 
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));
 
     expect(screen.getByText("第 2 / 2 页")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "删除资产" })).toHaveLength(2);
+  });
+
+  it("keeps exactly thirty assets on one page without pagination", () => {
+    const thirtyAssets = Array.from({ length: 30 }, (_, index) =>
+      createAsset({
+        category: "character",
+        id: `single-page-character-${index}`,
+        metadata: { name: `单页角色 ${index}` }
+      })
+    );
+
+    render(
+      <WorkspaceAssetLibrary
+        assets={thirtyAssets}
+        filters={{ section: "character" }}
+        projects={[project]}
+      />
+    );
+
+    expect(screen.getAllByRole("button", { name: "删除资产" })).toHaveLength(30);
+    expect(screen.queryByRole("button", { name: "下一页" })).not.toBeInTheDocument();
+  });
+
+  it("uses the shared responsive grid for every asset section", () => {
+    render(
+      <WorkspaceAssetLibrary
+        assets={[
+          characterAsset,
+          sceneAsset,
+          storyboardVideoAsset,
+          generatedImageAsset,
+          toolVideoAsset,
+          aigcInputAsset
+        ]}
+        filters={{}}
+        projects={[project]}
+        toolTasks={[toolTask]}
+      />
+    );
+
+    for (const heading of [
+      "角色资产",
+      "场景资产",
+      "图片成品",
+      "产物",
+      "工具资产",
+      "AIGC 工作台"
+    ]) {
+      const section = screen.getByRole("heading", { name: heading }).closest("section");
+      const grid = section?.querySelector("[data-asset-grid]");
+
+      expect(grid).toHaveClass(
+        "min-w-0",
+        "grid-cols-1",
+        "sm:grid-cols-2",
+        "lg:grid-cols-3",
+        "xl:grid-cols-6"
+      );
+    }
   });
 
   it("shows a safe loading error instead of an empty-state action", () => {
@@ -741,6 +1211,47 @@ describe("buildArtifactItems", () => {
     ]);
 
     expect(items.map((item) => item.kind)).toEqual(["storyboard_video"]);
+  });
+});
+
+describe("partitionWorkspaceAssets", () => {
+  it("uses project-first classification, hides internal assets, and deduplicates IDs", () => {
+    const projectConflict = createAsset({
+      id: "project-conflict",
+      metadata: { origin: "aigc" },
+      project_id: project.id,
+      tool_asset_role: "output"
+    });
+    const internalAigc = createAsset({
+      ...aigcOutputAsset,
+      asset_role: "internal_layer",
+      id: "internal-aigc"
+    });
+    const partition = partitionWorkspaceAssets([
+      projectConflict,
+      projectConflict,
+      toolVideoAsset,
+      aigcInputAsset,
+      aigcOutputAsset,
+      internalAigc,
+      createAsset({ id: "orphan", project_id: null, tool_asset_role: null })
+    ]);
+
+    expect(partition.projects.map((item) => item.id)).toEqual([
+      "project-conflict"
+    ]);
+    expect(partition.tools.map((item) => item.id)).toEqual(["tool-video-1"]);
+    expect(partition.aigc.map((item) => item.id)).toEqual([
+      "aigc-input",
+      "aigc-output"
+    ]);
+    expect(
+      new Set([
+        ...partition.projects,
+        ...partition.tools,
+        ...partition.aigc
+      ].map((item) => item.id)).size
+    ).toBe(4);
   });
 });
 

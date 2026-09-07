@@ -2,6 +2,7 @@ import type {
   ApiErrorPayload,
   Asset,
   AssetCategory,
+  AssetRenameRequest,
   CanvasLayout,
   CanvasLayoutUpdate,
   CharacterAssetIterationRequest,
@@ -875,6 +876,24 @@ export function createApiClient(options: ApiClientOptions = {}) {
       );
     },
 
+    renameAsset(
+      assetId: string,
+      payload: AssetRenameRequest,
+      requestOptions?: RequestOptions
+    ) {
+      return request<Asset>(
+        fetcher,
+        baseUrl,
+        `/api/assets/${encodeURIComponent(assetId)}`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "PATCH"
+        }
+      );
+    },
+
     deleteAsset(
       projectId: string,
       assetId: string,
@@ -1560,7 +1579,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       );
     },
 
-    optimizeAigcImagePrompt(
+    optimizeAigcPrompt(
       payload: AigcPromptOptimizeRequest,
       requestOptions?: RequestOptions
     ) {
@@ -1716,6 +1735,37 @@ export function createApiClient(options: ApiClientOptions = {}) {
             {
               "Content-Type":
                 options.mimeType || file.type || "application/octet-stream"
+            },
+            options.headers
+          ),
+          json: false,
+          method: "POST"
+        }
+      );
+    },
+
+    uploadAigcSubtitle(
+      file: Blob,
+      options: { filename?: string; mimeType?: string } & RequestOptions = {}
+    ) {
+      const searchParams = new URLSearchParams();
+      if (options.filename) searchParams.set("filename", options.filename);
+      searchParams.set(
+        "mime_type",
+        options.mimeType || file.type || "application/x-subrip"
+      );
+      return request<Asset>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/assets/subtitles?${searchParams.toString()}`,
+        {
+          ...options,
+          body: file,
+          headers: mergeHeaders(
+            defaultHeaders,
+            {
+              "Content-Type":
+                options.mimeType || file.type || "application/x-subrip"
             },
             options.headers
           ),

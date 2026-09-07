@@ -41,6 +41,7 @@ import {
   layerCanvasSourceIsCurrent,
   layerSetSummary
 } from "@/lib/aigc/layers";
+import { migrateAigcDefinitionV2 } from "@/lib/aigc/definition-migration";
 import type {
   AigcLayer,
   AigcLayerSet,
@@ -307,9 +308,10 @@ function AigcLayerEditorContent({
         draft.layers
       )
     };
+    const currentDefinition = migrateAigcDefinitionV2(pipeline.definition);
     const definition = {
-      ...pipeline.definition,
-      nodes: pipeline.definition.nodes.map((candidate) =>
+      ...currentDefinition,
+      nodes: currentDefinition.nodes.map((candidate) =>
         candidate.id === node.id && candidate.type === "layer_canvas"
           ? { ...candidate, config }
           : candidate
@@ -341,10 +343,14 @@ function AigcLayerEditorContent({
   }
 
   return (
-    <main className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-background">
-      <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 sm:flex-nowrap sm:gap-3">
+    <main
+      className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#0b0d10] text-[#f2f4f7] [--accent-foreground:210_20%_96%] [--accent:216_13%_17%] [--background:216_20%_7%] [--border:215_14%_19%] [--card-foreground:210_20%_96%] [--card:216_13%_11%] [--foreground:210_20%_96%] [--input:215_14%_22%] [--muted-foreground:215_9%_63%] [--muted:216_13%_15%] [--popover-foreground:210_20%_96%] [--popover:216_13%_11%] [--primary-foreground:0_0%_100%] [--primary:217_91%_60%] [--secondary-foreground:210_16%_90%] [--secondary:216_13%_15%]"
+      data-testid="aigc-layer-editor"
+    >
+      <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-[#2a3038] bg-[#15181d] px-3 py-2 sm:flex-nowrap sm:gap-3">
         <Button
           aria-label="返回 AIGC 画布"
+          className="text-zinc-400 hover:bg-[#252a31] hover:text-white"
           onClick={requestReturn}
           size="icon"
           type="button"
@@ -359,7 +365,7 @@ function AigcLayerEditorContent({
           </p>
         </div>
         <Button
-          className="flex-1 sm:flex-none"
+          className="flex-1 border-[#343a43] bg-[#1d2127] text-zinc-200 hover:border-[#46505c] hover:bg-[#252a31] hover:text-white sm:flex-none"
           disabled={isSaving}
           onClick={requestReturn}
           type="button"
@@ -387,7 +393,7 @@ function AigcLayerEditorContent({
         data-testid="aigc-layer-editor-workspace"
       >
         <aside
-          className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-card px-3 py-2 lg:flex-col lg:border-b-0 lg:border-r lg:px-0 lg:py-3"
+          className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-[#2a3038] bg-[#14171b] px-3 py-2 lg:flex-col lg:border-b-0 lg:border-r lg:px-0 lg:py-3"
           data-testid="aigc-layer-editor-toolbar"
         >
           <ToolButton icon={Layers3} label="选择图层" onClick={() => undefined} pressed />
@@ -419,11 +425,11 @@ function AigcLayerEditorContent({
         </aside>
 
         <section
-          className="relative grid min-h-[24rem] w-full shrink-0 place-items-center overflow-auto bg-[radial-gradient(circle_at_center,hsl(var(--secondary))_0,hsl(var(--background))_72%)] p-3 sm:min-h-[32rem] sm:p-6 lg:min-h-0 lg:shrink"
+          className="relative grid min-h-[24rem] w-full shrink-0 place-items-center overflow-auto bg-[#0d1014] p-3 sm:min-h-[32rem] sm:p-6 lg:min-h-0 lg:shrink"
           data-testid="aigc-layer-editor-canvas-region"
         >
           <div
-            className="relative isolate max-h-full max-w-full shrink-0 touch-none overflow-hidden bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]"
+            className="relative isolate max-h-full max-w-full shrink-0 touch-none overflow-hidden bg-white shadow-[0_24px_80px_rgba(0,0,0,0.58)]"
             data-testid="aigc-layer-canvas"
             ref={canvasRef}
             style={{
@@ -582,13 +588,13 @@ function AigcLayerEditorContent({
                 );
               })}
           </div>
-          <span className="absolute bottom-3 left-3 rounded border bg-card/90 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+          <span className="absolute bottom-3 left-3 rounded border border-[#343a43] bg-[#171a1f]/90 px-2 py-1 font-mono text-[10px] text-zinc-400 shadow-lg shadow-black/30 backdrop-blur">
             {Math.round(zoom * 100)}%
           </span>
         </section>
 
         <aside
-          className="flex shrink-0 flex-col border-t border-border bg-card lg:min-h-0 lg:border-l lg:border-t-0"
+          className="flex shrink-0 flex-col border-t border-[#2a3038] bg-[#171a1f] lg:min-h-0 lg:border-l lg:border-t-0"
           data-testid="aigc-layer-editor-sidebar"
         >
           <div className="p-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
@@ -641,8 +647,8 @@ function AigcLayerEditorContent({
                     selected={selected?.id === layer.id}
                   />
                 ))}
-              <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/35 p-2.5">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-md border bg-card">
+              <div className="flex items-center gap-3 rounded-md border border-[#2a3038] bg-[#1d2127] p-2.5">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-[#343a43] bg-[#171a1f]">
                   <LockKeyhole className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -659,7 +665,7 @@ function AigcLayerEditorContent({
               selected && updateLayer(selected.id, changes)
             }
           />
-          <div className="border-t border-border p-3">
+          <div className="border-t border-[#2a3038] bg-[#171a1f] p-3">
             {failedAssetIds.length > 0 ? (
               <p className="mb-2 text-xs font-semibold leading-5 text-destructive" role="alert">
                 图层资产加载失败：{failedAssetIds.join("、")}
@@ -708,8 +714,10 @@ function LayerRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-lg border p-2",
-        selected ? "border-primary/50 bg-primary/[0.07]" : "bg-background"
+        "flex items-center gap-2 rounded-md border p-2 transition-colors",
+        selected
+          ? "border-blue-500/70 bg-[#172235]"
+          : "border-[#2a3038] bg-[#1d2127] hover:border-[#3a424d] hover:bg-[#20252c]"
       )}
     >
       <button
@@ -718,7 +726,7 @@ function LayerRow({
         onClick={onSelect}
         type="button"
       >
-        <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md border bg-secondary/50">
+        <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md border border-[#343a43] bg-[#14171b]">
           {assetUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img alt="" className="h-full w-full object-contain" src={assetUrl} />
@@ -755,7 +763,7 @@ function TransformControls({
   onChange: (changes: Partial<Pick<AigcLayer, "scale" | "x" | "y">>) => void;
 }) {
   return (
-    <div className="border-t border-border bg-secondary/25 p-3">
+    <div className="border-t border-[#2a3038] bg-[#171a1f] p-3">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         Transform
       </p>
@@ -767,6 +775,7 @@ function TransformControls({
                 <span>{axis}（底图像素）</span>
                 <Input
                   aria-label={`${axis} 坐标`}
+                  className="border-[#343a43] bg-[#1d2127] text-zinc-100"
                   onChange={(event) => {
                     const value = Number(event.target.value);
                     if (Number.isFinite(value)) {
@@ -798,6 +807,7 @@ function TransformControls({
             />
             <Input
               aria-label="图层缩放数值"
+              className="border-[#343a43] bg-[#1d2127] text-zinc-100"
               max={MAX_LAYER_SCALE}
               min={MIN_LAYER_SCALE}
               onChange={(event) =>
@@ -836,9 +846,9 @@ function ToolButton({
       aria-label={label}
       aria-pressed={pressed || undefined}
       className={cn(
-        "grid place-items-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-25",
+        "grid place-items-center rounded-md border border-transparent text-zinc-400 transition-colors hover:border-[#343a43] hover:bg-[#252a31] hover:text-white disabled:cursor-not-allowed disabled:opacity-25",
         small ? "h-7 w-7" : "h-9 w-9",
-        pressed && "bg-primary/10 text-primary"
+        pressed && "border-blue-500/40 bg-[#172235] text-blue-400"
       )}
       disabled={disabled}
       onClick={onClick}
@@ -852,10 +862,14 @@ function ToolButton({
 
 export function LayerEditorError({ message }: { message: string }) {
   return (
-    <main className="grid h-[calc(100dvh-4rem)] place-items-center px-6">
-      <div className="max-w-lg rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-center">
+    <main className="grid h-[100dvh] place-items-center bg-[#0b0d10] px-6 text-[#f2f4f7] [--border:215_14%_19%] [--card:216_13%_11%] [--foreground:210_20%_96%] [--muted-foreground:215_9%_63%]">
+      <div className="max-w-lg rounded-md border border-red-500/30 bg-[#171a1f] p-6 text-center shadow-2xl shadow-black/40">
         <p className="text-sm font-semibold text-destructive">{message}</p>
-        <Button asChild className="mt-4" variant="outline">
+        <Button
+          asChild
+          className="mt-4 border-[#343a43] bg-[#1d2127] text-zinc-100 hover:bg-[#252a31]"
+          variant="outline"
+        >
           <Link href={"/workspace/aigc" as Route}>返回 AIGC 工作台</Link>
         </Button>
       </div>

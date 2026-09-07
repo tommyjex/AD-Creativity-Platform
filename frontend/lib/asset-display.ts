@@ -32,6 +32,13 @@ export const ASSET_SIDEBAR_OPTIONS = [
 
 export type AssetSidebarOption = (typeof ASSET_SIDEBAR_OPTIONS)[number];
 
+export type WorkspaceAssetSourceGroup = "projects" | "tools" | "aigc";
+
+export type WorkspaceAssetPartition = Record<
+  WorkspaceAssetSourceGroup,
+  Asset[]
+>;
+
 const SECTION_LABELS = {
   artifacts: "产物",
   character: "角色",
@@ -192,16 +199,97 @@ export function getStatusLabel(status: Status): string {
   return STATUS_LABELS[status];
 }
 
+export function getWorkspaceAssetSourceGroup(
+  asset: Asset
+): WorkspaceAssetSourceGroup | null {
+  if (
+    asset.asset_role === "internal_base" ||
+    asset.asset_role === "internal_layer"
+  ) {
+    return null;
+  }
+  if (asset.project_id !== null) {
+    return "projects";
+  }
+  if (asset.tool_asset_role == null) {
+    return null;
+  }
+  return getMetadataText(asset.metadata.origin) === "aigc" ? "aigc" : "tools";
+}
+
+export function partitionWorkspaceAssets(
+  assets: Asset[]
+): WorkspaceAssetPartition {
+  const assetsById = new Map<
+    string,
+    { asset: Asset; source: WorkspaceAssetSourceGroup }
+  >();
+  const sourcePriority: Record<WorkspaceAssetSourceGroup, number> = {
+    aigc: 2,
+    tools: 1,
+    projects: 3
+  };
+
+  for (const asset of assets) {
+    const source = getWorkspaceAssetSourceGroup(asset);
+    if (!source) continue;
+    const existing = assetsById.get(asset.id);
+    if (!existing || sourcePriority[source] > sourcePriority[existing.source]) {
+      assetsById.set(asset.id, { asset, source });
+    }
+  }
+
+  const partition: WorkspaceAssetPartition = {
+    aigc: [],
+    projects: [],
+    tools: []
+  };
+  for (const { asset, source } of assetsById.values()) {
+    partition[source].push(asset);
+  }
+  return partition;
+}
+
 export function getWorkspaceAssetDescription(asset: Asset): string {
   const metadata = asset.metadata;
+  const userDefinedName =
+    getMetadataText(metadata.name_scheme) === "user_defined_v1"
+      ? getMetadataText(metadata.name)
+      : null;
+  const unifiedAigcName =
+    getMetadataText(metadata.name_scheme) === "aigc_canvas_node_v1"
+      ? getMetadataText(metadata.name)
+      : null;
 
   return (
+    userDefinedName ??
+    unifiedAigcName ??
     getMetadataText(metadata.description) ??
     getMetadataText(metadata.name) ??
     getMetadataText(metadata.prompt_summary) ??
     getMetadataText(metadata.prompt) ??
     (asset.category ? DEFAULT_DESCRIPTIONS[asset.category] : "创意资产")
   );
+}
+
+export type AssetDisplayNameValidation =
+  | { name: string }
+  | { error: string };
+
+export function validateAssetDisplayName(
+  value: string
+): AssetDisplayNameValidation {
+  const name = value.trim();
+  if (name.length === 0) {
+    return { error: "请输入资产名称。" };
+  }
+  if (/[\u0000-\u001f\u007f]/.test(name)) {
+    return { error: "名称不能包含控制字符。" };
+  }
+  if (Array.from(name).length > 120) {
+    return { error: "名称不能超过 120 个字符。" };
+  }
+  return { name };
 }
 
 /** Case-insensitive substring match; an empty keyword matches everything. */
@@ -231,12 +319,25 @@ export function getSafePreviewUrl(asset: Asset): string | null {
   return getSafeAssetContentUrl(asset.url);
 }
 
+export function getAssetContentUrlById(assetId: string): string | null {
+  const normalizedId = assetId.trim();
+  if (!normalizedId) return null;
+  const baseUrl = getBackendBaseUrl().replace(/\/+$/, "");
+  return `${baseUrl}/api/assets/${encodeURIComponent(normalizedId)}/content`;
+}
+
 export function getSafeAssetContentUrl(value: string | null): string | null {
   return getSafeMediaUrl(value, "/content");
 }
 
 export function getAssetDownloadUrl(asset: Asset): string | null {
-  return getAssetDownloadUrlById(asset.id);
+  const nameScheme = getMetadataText(asset.metadata.name_scheme);
+  const filename =
+    nameScheme === "user_defined_v1" ||
+    nameScheme === "aigc_canvas_node_v1"
+      ? getMetadataText(asset.metadata.name) ?? undefined
+      : undefined;
+  return getAssetDownloadUrlById(asset.id, filename);
 }
 
 export function getAssetDownloadUrlById(

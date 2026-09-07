@@ -192,6 +192,11 @@ describe("AigcLayerEditor", () => {
   it("keeps every editor region reachable in the responsive mobile flow", () => {
     renderEditor();
 
+    expect(screen.getByTestId("aigc-layer-editor")).toHaveClass(
+      "h-[100dvh]",
+      "bg-[#0b0d10]",
+      "text-[#f2f4f7]"
+    );
     expect(screen.getByTestId("aigc-layer-editor-workspace")).toHaveClass(
       "flex",
       "flex-col",
@@ -201,13 +206,19 @@ describe("AigcLayerEditor", () => {
     );
     expect(screen.getByTestId("aigc-layer-editor-toolbar")).toHaveClass(
       "overflow-x-auto",
+      "bg-[#14171b]",
       "lg:flex-col"
     );
     expect(screen.getByTestId("aigc-layer-editor-canvas-region")).toHaveClass(
+      "bg-[#0d1014]",
       "min-h-[24rem]",
       "lg:min-h-0"
     );
+    expect(
+      screen.getByTestId("aigc-layer-editor-canvas-region").className
+    ).not.toContain("radial-gradient");
     expect(screen.getByTestId("aigc-layer-editor-sidebar")).toHaveClass(
+      "bg-[#171a1f]",
       "border-t",
       "lg:border-l"
     );

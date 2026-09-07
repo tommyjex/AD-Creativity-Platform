@@ -9,6 +9,7 @@ from pydantic import Field, ValidationError
 
 from ..core.config import get_settings
 from ..schemas import (
+    AigcPromptOptimizeRequest,
     AigcPromptOptimizeResponse,
     AssetCreate,
     Brief,
@@ -20,7 +21,6 @@ from ..schemas import (
     ImageEditAnnotation,
     FrozenImageReferenceRegion,
     ImageGenerationOperation,
-    ImageGenerationSize,
     ImageLayerDecompositionSize,
     ImageOutputFormat,
     ImagePurpose,
@@ -64,6 +64,7 @@ from .modelark import (
     ModelArkStreamEvent,
     ModelArkTextParseError,
     ProjectImageGenerationRequest,
+    SeedreamGenerationSize,
     SeedanceVideoGenerationRequest,
     TextGenerationRequest,
     ToolVideoGenerationRequest,
@@ -73,6 +74,7 @@ from .modelark import (
     VideoPromptOptimizationRequest,
     VideoPromptOptimizationShotContext,
 )
+from .prompt_optimization import validate_prompt_optimization_result
 
 
 STORYBOARD_DURATION_TOLERANCE_SECONDS = 0.5
@@ -134,7 +136,7 @@ class ModelArkGenerationService:
         model: str,
         operation: ImageGenerationOperation,
         prompt: str,
-        size: ImageGenerationSize,
+        size: SeedreamGenerationSize,
         output_format: ImageOutputFormat,
         source_image_url: str | None = None,
         reference_image_urls: Sequence[str] | None = None,
@@ -878,6 +880,119 @@ class ModelArkGenerationService:
             raise ModelArkProviderError(
                 "AIGC image prompt optimization failed"
             ) from exc
+
+    async def optimize_aigc_prompt(
+        self,
+        request: AigcPromptOptimizeRequest,
+    ) -> AigcPromptOptimizeResponse:
+        try:
+            result = await self.adapter.optimize_aigc_prompt(request)
+            response = AigcPromptOptimizeResponse.model_validate(
+                result.model_dump(mode="json")
+            )
+            # #region debug-point A-D:prompt-optimization-result
+            try:
+                import json
+                import time
+                import urllib.request
+
+                urllib.request.urlopen(
+                    urllib.request.Request(
+                        "http://127.0.0.1:7781/event",
+                        data=json.dumps(
+                            {
+                                "sessionId": "prompt-optimization-unavailable",
+                                "runId": "post-fix",
+                                "hypothesisId": "A-D",
+                                "location": (
+                                    "generation.py:"
+                                    "ModelArkGenerationService."
+                                    "optimize_aigc_prompt"
+                                ),
+                                "msg": (
+                                    "[DEBUG] Validating prompt optimization result"
+                                ),
+                                "data": {
+                                    "targetType": request.target_type,
+                                    "inputReferenceCount": len(
+                                        request.reference_instructions
+                                    ),
+                                    "outputReferenceCount": len(
+                                        response.optimized_reference_instructions
+                                    ),
+                                    "optimizedTextLength": len(
+                                        response.optimized_text
+                                    ),
+                                },
+                                "traceId": request.target_node_id,
+                                "ts": int(time.time() * 1000),
+                            }
+                        ).encode(),
+                        headers={"Content-Type": "application/json"},
+                    ),
+                    timeout=0.2,
+                ).read()
+            except Exception:
+                pass
+            # #endregion
+            if (
+                request.target_type in {"text_to_image", "image_to_image"}
+                and not request.reference_instructions
+                and response.optimized_reference_instructions
+            ):
+                response = response.model_copy(
+                    update={"optimized_reference_instructions": []}
+                )
+            validate_prompt_optimization_result(request, response)
+            # #region debug-point A-D:prompt-optimization-success
+            try:
+                import json
+                import time
+                import urllib.request
+
+                urllib.request.urlopen(
+                    urllib.request.Request(
+                        "http://127.0.0.1:7781/event",
+                        data=json.dumps(
+                            {
+                                "sessionId": "prompt-optimization-unavailable",
+                                "runId": "post-fix",
+                                "hypothesisId": "A-D",
+                                "location": (
+                                    "generation.py:"
+                                    "ModelArkGenerationService."
+                                    "optimize_aigc_prompt"
+                                ),
+                                "msg": "[DEBUG] Prompt optimization succeeded",
+                                "data": {
+                                    "targetType": request.target_type,
+                                    "outputReferenceCount": len(
+                                        response.optimized_reference_instructions
+                                    ),
+                                    "optimizedTextLength": len(
+                                        response.optimized_text
+                                    ),
+                                },
+                                "traceId": request.target_node_id,
+                                "ts": int(time.time() * 1000),
+                            }
+                        ).encode(),
+                        headers={"Content-Type": "application/json"},
+                    ),
+                    timeout=0.2,
+                ).read()
+            except Exception:
+                pass
+            # #endregion
+            return response
+        except (ModelArkProviderError, ModelArkTextParseError):
+            raise
+        except (ValidationError, ValueError) as exc:
+            raise ModelArkTextParseError(
+                "AIGC prompt optimization output failed validation"
+            ) from exc
+        except Exception as exc:
+            raise ModelArkProviderError("AIGC prompt optimization failed") from exc
 
     async def stream_storyboard_shot_video_prompt_optimization(
         self,

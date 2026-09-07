@@ -5,14 +5,17 @@ import pytest
 
 from backend.app.schemas.aigc import (
     AIGC_NODE_REGISTRY,
+    AIGC_V2_NODE_REGISTRY,
     AigcEditedLayer,
     AigcImageLayer,
+    AigcJsonParserItem,
     AigcLayer,
     AigcLayerSet,
     AigcLayerSetSummary,
     AigcLayerTransformPatch,
     AigcNodeType,
     AigcPipelineDefinition,
+    AigcPipelineDefinitionV2,
     AigcPipelineRunCreate,
     AigcPipelineTaskSnapshot,
     AigcPipelineTemplateCreate,
@@ -23,8 +26,12 @@ from backend.app.schemas.aigc import (
     AigcResultKind,
     AigcTaskType,
     AigcTaskResult,
+    ImageConfig,
+    ImageModelConfig,
     ImageToImageConfig,
+    JsonParserConfig,
     LayerCanvasConfig,
+    TextConfig,
     VideoGenerationConfig,
     aigc_node_run_key,
 )
@@ -80,6 +87,8 @@ def test_node_registry_contains_all_schema_version_one_nodes() -> None:
         AigcNodeType.TEXT_TO_IMAGE,
         AigcNodeType.IMAGE_TO_IMAGE,
         AigcNodeType.VIDEO_GENERATION,
+        AigcNodeType.VIDEO_ENHANCEMENT,
+        AigcNodeType.VIDEO_FACE_BLUR,
         AigcNodeType.LAYER_CANVAS,
         AigcNodeType.LAYER_COMPOSITE,
         AigcNodeType.TEXT_OUTPUT,
@@ -174,6 +183,123 @@ def test_node_registry_contains_all_schema_version_one_nodes() -> None:
             ["multimodal_reference"],
         ),
     }
+
+
+def test_json_parser_contract_and_registry_are_consistent() -> None:
+    config = JsonParserConfig()
+    assert config.json_path == "$.items"
+
+    parser = next(
+        item
+        for item in AIGC_V2_NODE_REGISTRY
+        if item.type == AigcNodeType.JSON_PARSER
+    )
+    assert parser.label == "JSON 解析器"
+    assert parser.category.value == "control"
+    assert parser.executable is True
+    assert [
+        (port.id, port.type, port.required, port.multiple, port.max_connections)
+        for port in parser.inputs
+    ] == [("text", AigcPortType.TEXT, True, False, 1)]
+    assert [
+        (
+            port.id,
+            port.type,
+            port.required,
+            port.multiple,
+            port.max_connections,
+            port.system_only,
+        )
+        for port in parser.outputs
+    ] == [("items", AigcPortType.TEXT, False, True, 20, True)]
+
+    definition = AigcPipelineDefinitionV2.model_validate(
+        {
+            "schemaVersion": 2,
+            "nodes": [
+                {
+                    "id": "parser",
+                    "type": "json_parser",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 280, "height": 180},
+                    "config": {},
+                },
+                {
+                    "id": "item",
+                    "type": "text",
+                    "position": {"x": 340, "y": 0},
+                    "size": {"width": 240, "height": 180},
+                    "config": {
+                        "text": "first",
+                        "generated_by_parser_node_id": "parser",
+                        "generated_item_index": 0,
+                        "generated_from_run_id": "run-1",
+                    },
+                },
+            ],
+        }
+    )
+    parser_node = definition.nodes[0]
+    text_node = definition.nodes[1]
+    assert parser_node.config.json_path == "$.items"  # type: ignore[union-attr]
+    assert text_node.config.generated_item_index == 0  # type: ignore[union-attr]
+
+
+def test_json_parser_contract_rejects_invalid_managed_text_fields_and_keys() -> None:
+    with pytest.raises(ValidationError, match="json_parser_invalid_path"):
+        JsonParserConfig(json_path="$[")
+
+    with pytest.raises(ValidationError, match="managed text run id"):
+        TextConfig.model_validate(
+            {
+                "generated_from_run_id": "run-1",
+            }
+        )
+
+    base_text = {
+        "id": "item-1",
+        "type": "text",
+        "position": {"x": 0, "y": 0},
+        "size": {"width": 240, "height": 180},
+        "config": {
+            "text": "first",
+            "generated_by_parser_node_id": "parser",
+            "generated_item_index": 0,
+            "generated_from_run_id": "run-1",
+        },
+    }
+    duplicate = {
+        **base_text,
+        "id": "item-2",
+        "position": {"x": 300, "y": 0},
+    }
+    with pytest.raises(ValidationError, match="managed text keys must be unique"):
+        AigcPipelineDefinitionV2.model_validate(
+            {
+                "schemaVersion": 2,
+                "nodes": [base_text, duplicate],
+            }
+        )
+
+
+def test_json_parser_structured_result_requires_ordered_items() -> None:
+    result = AigcTaskResult(
+        kind="text_items",
+        items=[
+            AigcJsonParserItem(index=0, text="first", summary="a" * 64),
+            AigcJsonParserItem(index=1, text='{"a":1}', summary="b" * 64),
+        ],
+    )
+    assert [item.index for item in result.items] == [0, 1]
+
+    assert AigcTaskResult(kind="text_items").items == []
+    with pytest.raises(ValidationError, match="contiguous"):
+        AigcTaskResult(
+            kind="text_items",
+            items=[
+                AigcJsonParserItem(index=1, text="second", summary="a" * 64)
+            ],
+        )
 
 
 def test_seedance_capabilities_are_shared_with_tool_contract() -> None:
@@ -312,6 +438,96 @@ def test_legacy_image_to_image_definition_defaults_and_serializes_operation() ->
         ]
         == "image_to_image"
     )
+
+
+def test_schema_version_one_image_configs_normalize_and_serialize_custom_sizes() -> None:
+    definition = AigcPipelineDefinition.model_validate(
+        {
+            "schemaVersion": 1,
+            "nodes": [
+                {
+                    "id": "text-to-image",
+                    "type": "text_to_image",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 280, "height": 200},
+                    "config": {"size": "02048x01024"},
+                },
+                {
+                    "id": "image-to-image",
+                    "type": "image_to_image",
+                    "position": {"x": 320, "y": 0},
+                    "size": {"width": 280, "height": 200},
+                    "config": {
+                        "operation": "image_to_image",
+                        "size": "01920x01080",
+                    },
+                },
+            ],
+        }
+    )
+
+    dumped = definition.model_dump(mode="json", by_alias=True)
+
+    assert dumped["schemaVersion"] == 1
+    assert dumped["nodes"][0]["config"]["size"] == "2048x1024"
+    assert dumped["nodes"][1]["config"]["size"] == "1920x1080"
+
+
+@pytest.mark.parametrize(
+    ("config_type", "payload"),
+    [
+        (ImageModelConfig, {"size": "512x512"}),
+        (
+            ImageToImageConfig,
+            {"operation": "image_to_image", "size": "2048X1024"},
+        ),
+        (
+            ImageToImageConfig,
+            {"operation": "image_edit", "size": "2048x1024"},
+        ),
+        (
+            ImageToImageConfig,
+            {"operation": "layer_decomposition", "size": "2048x1024"},
+        ),
+        (
+            ImageToImageConfig,
+            {"operation": "image_edit", "size": "auto"},
+        ),
+        (
+            ImageToImageConfig,
+            {"operation": "image_to_image", "size": "auto"},
+        ),
+    ],
+)
+def test_image_configs_reject_invalid_or_mode_incompatible_sizes(
+    config_type: type[ImageModelConfig],
+    payload: dict[str, str],
+) -> None:
+    with pytest.raises(ValidationError):
+        config_type.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("operation", "size"),
+    [
+        ("image_edit", "1K"),
+        ("image_edit", "1.5K"),
+        ("image_edit", "2K"),
+        ("layer_decomposition", "auto"),
+        ("layer_decomposition", "1K"),
+        ("layer_decomposition", "1.5K"),
+        ("layer_decomposition", "2K"),
+    ],
+)
+def test_restricted_image_operations_keep_their_existing_size_sets(
+    operation: str,
+    size: str,
+) -> None:
+    config = ImageToImageConfig.model_validate(
+        {"operation": operation, "size": size}
+    )
+
+    assert config.size == size
 
 
 def test_layer_nodes_have_serializable_default_configs() -> None:
@@ -595,26 +811,73 @@ def test_input_configs_reject_invalid_bbox_state(
         )
 
 
+def test_image_config_requires_paired_upstream_bbox_binding() -> None:
+    bbox = {
+        "type": "bbox",
+        "x1": 100,
+        "y1": 200,
+        "x2": 700,
+        "y2": 800,
+    }
+
+    config = ImageConfig.model_validate(
+        {
+            "upstream_bbox": bbox,
+            "upstream_bbox_asset_id": "upstream-image",
+        }
+    )
+    assert config.upstream_bbox is not None
+    assert config.upstream_bbox_asset_id == "upstream-image"
+
+    with pytest.raises(ValidationError, match="upstream_bbox_asset_mismatch"):
+        ImageConfig.model_validate({"upstream_bbox": bbox})
+
+
 def test_prompt_optimization_request_validates_structured_content() -> None:
     request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_to_image",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 2,
+        },
+        optimization_direction="强化产品质感",
         text="  红色包装产品主图  ",
         reference_instructions=["保留商标位置"],
-        generation_modes=["text_to_image", "image_to_image"],
-        reference_image_count=2,
     )
 
     assert request.text == "  红色包装产品主图  "
     assert request.reference_instructions == ["保留商标位置"]
 
     with pytest.raises(ValidationError, match="must not be blank"):
-        AigcPromptOptimizeRequest(text=" ", reference_instructions=[""])
-    with pytest.raises(ValidationError, match="must be unique"):
         AigcPromptOptimizeRequest(
-            text="产品图",
-            generation_modes=["text_to_image", "text_to_image"],
+            target_node_id="llm",
+            target_type="llm",
+            target_config={"model": "doubao-seed-evolving", "system_prompt": ""},
+            text=" ",
         )
     with pytest.raises(ValidationError, match="coordinate_tag_forbidden"):
-        AigcPromptOptimizeRequest(text="<bbox>1 2 3 4</bbox>")
+        AigcPromptOptimizeRequest(
+            target_node_id="llm",
+            target_type="llm",
+            target_config={"model": "doubao-seed-evolving", "system_prompt": ""},
+            text="<bbox>1 2 3 4</bbox>",
+        )
+    with pytest.raises(ValidationError, match="target_config does not match"):
+        AigcPromptOptimizeRequest(
+            target_node_id="llm",
+            target_type="llm",
+            target_config={
+                "model": "doubao-seedream-5-0-pro-260628",
+                "aspect_ratio": "1:1",
+                "size": "2K",
+                "reference_image_count": 0,
+            },
+            text="产品图",
+        )
 
 
 def test_pipeline_definition_rejects_duplicate_nodes_and_missing_endpoints() -> None:

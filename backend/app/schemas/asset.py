@@ -18,6 +18,8 @@ from .enums import (
 )
 from .task import GenerationTask
 
+USER_DEFINED_ASSET_NAME_SCHEME = "user_defined_v1"
+
 
 class AssetBase(SchemaModel):
     project_id: Optional[str] = Field(default=None, min_length=1)
@@ -65,6 +67,25 @@ class AssetCreate(AssetBase):
 class Asset(AssetCreate):
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+
+class AssetRenameRequest(SchemaModel):
+    name: str
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def validate_name(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        if any(
+            ord(character) <= 0x1F or ord(character) == 0x7F
+            for character in value
+        ):
+            raise ValueError("name must not contain ASCII control characters")
+        stripped = value.strip()
+        if not 1 <= len(stripped) <= 120:
+            raise ValueError("name must contain 1 to 120 Unicode code points")
+        return stripped
 
 
 class CharacterAssetIterationRequest(SchemaModel):

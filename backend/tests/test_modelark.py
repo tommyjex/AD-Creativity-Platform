@@ -11,6 +11,7 @@ import pytest
 import backend.app.services.modelark as modelark_module
 from backend.app.core.config import Settings
 from backend.app.schemas import (
+    AigcPromptOptimizeRequest,
     Brief,
     Stage,
     Status,
@@ -84,6 +85,7 @@ class FakeResponsesClient:
     def __init__(self, responses: list[object] | None = None) -> None:
         self.calls: list[dict[str, object]] = []
         self.responses = list(responses or [])
+        self.with_raw_response = SimpleNamespace(create=self.create)
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
@@ -93,6 +95,14 @@ class FakeResponsesClient:
         if isinstance(response, Exception):
             raise response
         return response
+
+
+class FakeRawResponse:
+    def __init__(self, payload: object) -> None:
+        self.payload = payload
+
+    def json(self) -> object:
+        return self.payload
 
 
 class FakeContentGenerationTasksClient:
@@ -1907,6 +1917,112 @@ def test_aigc_image_prompt_optimizer_uses_structured_seedream_contract() -> None
     call = client.chat.completions.calls[0]
     assert call["response_format"] == {"type": "json_object"}
     assert call["temperature"] == 0.1
+
+
+def test_aigc_prompt_optimizer_uses_responses_without_thinking() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="llm-1",
+        target_type="llm",
+        target_config={
+            "model": "doubao-seed-evolving",
+            "system_prompt": "你是广告分析师",
+        },
+        optimization_direction="提升结构清晰度",
+        text="分析投放素材",
+    )
+    client = FakeArkClient(
+        response_responses=[
+            FakeRawResponse(
+                {
+                    "output": [
+                        {
+                            "content": [
+                                {
+                                    "text": json.dumps(
+                                        {
+                                            "optimized_text": (
+                                                "请分析投放素材并输出结构化结论。"
+                                            ),
+                                            "optimized_reference_instructions": [],
+                                        },
+                                        ensure_ascii=False,
+                                    )
+                                }
+                            ]
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+
+    result = asyncio.run(
+        BytePlusModelArkAdapter(_settings(), client=client)
+        .optimize_aigc_prompt(request)
+    )
+
+    assert result.optimized_text == "请分析投放素材并输出结构化结论。"
+    assert client.chat.completions.calls == []
+    assert len(client.responses.calls) == 1
+    call = client.responses.calls[0]
+    assert call["model"] == "doubao-seed-evolving"
+    assert call["text"] == {"format": {"type": "json_object"}}
+    assert call["thinking"] == {"type": "disabled"}
+    assert call["max_output_tokens"] == 4096
+    assert call["timeout"] == 120
+    assert [item["role"] for item in call["input"]] == ["system", "user"]
+    assert all(
+        item["content"][0]["type"] == "input_text"
+        for item in call["input"]
+    )
+
+
+def test_aigc_prompt_optimizer_accepts_observed_reference_field_alias() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_to_image",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 4,
+        },
+        text="生成家庭场景",
+    )
+    client = FakeArkClient(
+        response_responses=[
+            FakeRawResponse(
+                {
+                    "output": [
+                        {
+                            "content": [
+                                {
+                                    "text": json.dumps(
+                                        {
+                                            "optimized_text": "生成清晰的家庭场景",
+                                            "optim_reference_instructions": [
+                                                "参考图1"
+                                            ],
+                                        },
+                                        ensure_ascii=False,
+                                    )
+                                }
+                            ]
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+
+    result = asyncio.run(
+        BytePlusModelArkAdapter(_settings(), client=client)
+        .optimize_aigc_prompt(request)
+    )
+
+    assert result.optimized_text == "生成清晰的家庭场景"
+    assert result.optimized_reference_instructions == ["参考图1"]
 
 
 def test_aigc_image_prompt_service_rejects_changed_reference_count() -> None:

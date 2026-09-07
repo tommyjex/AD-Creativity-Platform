@@ -39,20 +39,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiClient, getUserFacingErrorMessage } from "@/lib/api-client";
+import { migrateAigcDefinitionV2 } from "@/lib/aigc/definition-migration";
 import type {
-  AigcNode,
   AigcPage,
   AigcPipeline,
   AigcPipelineDefinition,
+  AigcPipelineDefinitionV2,
   AigcPipelineTemplate,
-  AigcPipelineRunStatus
+  AigcPipelineRunStatus,
+  AigcV2Node
 } from "@/lib/aigc/types";
 import { formatDate } from "@/lib/project-display";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
-const EMPTY_DEFINITION: AigcPipelineDefinition = {
-  schemaVersion: 1,
+const EMPTY_DEFINITION: AigcPipelineDefinitionV2 = {
+  schemaVersion: 2,
   nodes: [],
   edges: [],
   viewport: { x: 0, y: 0, zoom: 1 }
@@ -74,16 +76,18 @@ interface AigcWorkspaceProps {
   initialError?: string;
   initialPipelines: AigcPage<AigcPipeline>;
   initialTemplates: AigcPage<AigcPipelineTemplate>;
+  initialView?: AigcView;
 }
 
 export function AigcWorkspace({
   initialError,
   initialPipelines,
-  initialTemplates
+  initialTemplates,
+  initialView = "templates"
 }: AigcWorkspaceProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<AigcView>("templates");
+  const [view, setView] = useState<AigcView>(initialView);
   const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -591,15 +595,22 @@ function AigcCard({
 function TopologyPreview({
   definition
 }: {
-  definition: AigcPipelineDefinition;
+  definition: AigcPipelineDefinition | AigcPipelineDefinitionV2;
 }) {
-  const layout = useMemo(() => normalizeTopology(definition.nodes), [definition.nodes]);
+  const normalized = useMemo(
+    () => migrateAigcDefinitionV2(definition),
+    [definition]
+  );
+  const layout = useMemo(
+    () => normalizeTopology(normalized.nodes),
+    [normalized.nodes]
+  );
   const points = new Map(layout.map((entry) => [entry.node.id, entry]));
 
   return (
     <div className="relative aspect-[16/10] overflow-hidden bg-secondary/55">
       <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--border)/0.42)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--border)/0.42)_1px,transparent_1px)] bg-[size:20px_20px]" />
-      {definition.nodes.length === 0 ? (
+      {normalized.nodes.length === 0 ? (
         <div className="absolute inset-0 grid place-items-center text-muted-foreground">
           <span className="flex items-center gap-2 text-xs">
             <Plus className="h-4 w-4" />
@@ -609,7 +620,7 @@ function TopologyPreview({
       ) : (
         <>
           <svg aria-hidden="true" className="absolute inset-0 h-full w-full">
-            {definition.edges.map((edge) => {
+            {normalized.edges.map((edge) => {
               const source = points.get(edge.sourceNodeId);
               const target = points.get(edge.targetNodeId);
               if (!source || !target) return null;
@@ -643,7 +654,7 @@ function TopologyPreview({
   );
 }
 
-function normalizeTopology(nodes: AigcNode[]) {
+function normalizeTopology(nodes: AigcV2Node[]) {
   if (nodes.length === 0) return [];
   const minX = Math.min(...nodes.map((node) => node.position.x));
   const maxX = Math.max(...nodes.map((node) => node.position.x));
@@ -659,11 +670,11 @@ function normalizeTopology(nodes: AigcNode[]) {
   }));
 }
 
-function nodeTone(node: AigcNode): string {
-  if (node.type === "text_input" || node.type === "image_input") {
+function nodeTone(node: AigcV2Node): string {
+  if (node.type === "text" || node.type === "image") {
     return "border-info/45 bg-info/20";
   }
-  if (node.type === "text_output" || node.type === "image_output") {
+  if (node.type === "video" || node.type === "audio") {
     return "border-success/45 bg-success/20";
   }
   return "border-primary/45 bg-primary/20";

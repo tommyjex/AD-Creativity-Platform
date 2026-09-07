@@ -1,10 +1,19 @@
 import { AIGC_NODE_REGISTRY_BY_TYPE } from "@/lib/aigc/node-registry";
+import {
+  SeedreamImageDimensionError,
+  isSeedreamImagePresetSize,
+  normalizeSeedreamImageSize
+} from "@/lib/aigc/image-dimensions";
 import type {
   AigcEdge,
   AigcImageOperation,
+  AigcImageToImageSize,
   AigcNode,
   AigcPipelineDefinition,
-  AigcPortDefinition
+  AigcPipelineDefinitionV2,
+  AigcV2Node,
+  AigcPortDefinition,
+  ImageToImageConfig
 } from "@/lib/aigc/types";
 import { layerDecompositionAssetError } from "@/lib/aigc/media-validation";
 import type { Asset } from "@/lib/api-types";
@@ -19,7 +28,9 @@ export interface AigcSeedreamValidationIssue {
     | "invalid_media_input"
     | "output_not_allowed_for_mode"
     | "required_input_missing"
-    | "edit_target_conflict";
+    | "edit_target_conflict"
+    | "invalid_image_size"
+    | "size_not_allowed_for_mode";
   message: string;
   nodeId: string;
 }
@@ -38,6 +49,48 @@ export function seedreamImageOperation(
 
 export function seedreamImageTitle(node: SeedreamImageNode): string {
   return OPERATION_LABELS[seedreamImageOperation(node)];
+}
+
+export function normalizeSeedreamImageSizeForStorage(
+  size: AigcImageToImageSize
+): AigcImageToImageSize {
+  try {
+    return normalizeSeedreamImageSize(size);
+  } catch {
+    return size;
+  }
+}
+
+export function normalizeSeedreamImageConfig(
+  config: ImageToImageConfig,
+  previousOperation?: AigcImageOperation
+): ImageToImageConfig {
+  const operation = config.operation ?? "image_to_image";
+  let size: AigcImageToImageSize = config.size;
+
+  if (
+    operation === "layer_decomposition" &&
+    previousOperation !== undefined &&
+    previousOperation !== operation
+  ) {
+    size = "auto";
+  } else if (
+    operation === "image_edit" &&
+    previousOperation !== undefined &&
+    previousOperation !== operation &&
+    !isSeedreamImagePresetSize(size)
+  ) {
+    size = "2K";
+  } else if (operation === "image_to_image") {
+    size =
+      size === "auto" ? "2K" : normalizeSeedreamImageSizeForStorage(size);
+  }
+
+  return {
+    ...config,
+    operation,
+    size
+  } as ImageToImageConfig;
 }
 
 export function seedreamImageInputCount(
@@ -118,7 +171,7 @@ export function seedreamImageInputLimit(
 
 export function isSeedreamImageEdgeIncompatible(
   edge: AigcEdge,
-  nodes: readonly AigcNode[],
+  nodes: readonly (AigcNode | AigcV2Node)[],
   edges: readonly AigcEdge[]
 ): boolean {
   const source = nodes.find((node) => node.id === edge.sourceNodeId);
@@ -136,17 +189,23 @@ export function isSeedreamImageEdgeIncompatible(
 }
 
 export function validateSeedreamImageDefinition(
-  definition: Pick<AigcPipelineDefinition, "nodes" | "edges">
+  definition:
+    | Pick<AigcPipelineDefinition, "nodes" | "edges">
+    | Pick<AigcPipelineDefinitionV2, "nodes" | "edges">
 ): AigcSeedreamValidationIssue[] {
-  return definition.nodes.flatMap((node) =>
-    node.type === "image_to_image"
+  return definition.nodes.flatMap((node) => {
+    const sizeIssue = validateSeedreamImageNodeSize(node);
+    if (sizeIssue) return [sizeIssue];
+    return node.type === "image_to_image"
       ? validateSeedreamImageNode(node, definition.edges)
-      : []
-  );
+      : [];
+  });
 }
 
 export function validateLayerDecompositionAssets(
-  definition: Pick<AigcPipelineDefinition, "nodes" | "edges">,
+  definition:
+    | Pick<AigcPipelineDefinition, "nodes" | "edges">
+    | Pick<AigcPipelineDefinitionV2, "nodes" | "edges">,
   nodeId: string,
   assets: readonly Asset[]
 ): AigcSeedreamValidationIssue[] {
@@ -169,7 +228,7 @@ export function validateLayerDecompositionAssets(
       const source = definition.nodes.find(
         (candidate) => candidate.id === edge.sourceNodeId
       );
-      if (source?.type !== "image_input" || !source.config.asset_id) return [];
+      if (source?.type !== "image" || !source.config.asset_id) return [];
       const asset = assetById.get(source.config.asset_id);
       return asset ? [asset] : [];
     });
@@ -277,4 +336,60 @@ function validateSeedreamImageNode(
   }
 
   return [];
+}
+
+function validateSeedreamImageNodeSize(
+  node: AigcNode | AigcV2Node
+): AigcSeedreamValidationIssue | null {
+  if (node.type !== "text_to_image" && node.type !== "image_to_image") {
+    return null;
+  }
+  const issue = (
+    code: "invalid_image_size" | "size_not_allowed_for_mode",
+    message: string
+  ): AigcSeedreamValidationIssue => ({ code, message, nodeId: node.id });
+  const size: unknown = node.config.size;
+
+  if (node.type === "image_to_image") {
+    const operation = seedreamImageOperation(node);
+    if (
+      (operation === "image_to_image" && size === "auto") ||
+      (operation === "image_edit" && !isSeedreamImagePresetSize(size)) ||
+      (operation === "layer_decomposition" &&
+        size !== "auto" &&
+        !isSeedreamImagePresetSize(size))
+    ) {
+      return issue(
+        "size_not_allowed_for_mode",
+        `${seedreamImageTitle(node)}模式不支持尺寸 ${String(size)}`
+      );
+    }
+  }
+
+  if (size === "auto") return null;
+  try {
+    normalizeSeedreamImageSize(size);
+    return null;
+  } catch (error) {
+    return issue(
+      "invalid_image_size",
+      seedreamImageDimensionErrorMessage(error)
+    );
+  }
+}
+
+function seedreamImageDimensionErrorMessage(error: unknown): string {
+  if (!(error instanceof SeedreamImageDimensionError)) {
+    return "图片尺寸无效";
+  }
+  if (error.code === "invalid_format") {
+    return "图片尺寸格式必须为 WIDTHxHEIGHT";
+  }
+  if (error.code === "non_positive") {
+    return "图片宽度和高度必须为正整数";
+  }
+  if (error.code === "pixel_count_out_of_range") {
+    return "图片总像素必须在 921,600–4,624,220 之间";
+  }
+  return "图片宽高比必须在 1:16–16:1 之间";
 }

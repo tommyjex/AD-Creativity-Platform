@@ -1,4 +1,3 @@
-import React from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/layout/app-shell";
@@ -111,6 +110,54 @@ describe("AppShell top navigation", () => {
     expect(screen.getByRole("link", { name: "项目" })).not.toHaveAttribute(
       "aria-current"
     );
+  });
+
+  it("uses an immersive shell only on the AIGC layer editor route", () => {
+    navigationState.pathname =
+      "/workspace/aigc/pipelines/pipeline-1/nodes/canvas-node/layers";
+    render(
+      <AppShell>
+        <div>图层编辑内容</div>
+      </AppShell>
+    );
+
+    expect(screen.queryByRole("banner")).toBeNull();
+    expect(screen.queryByText("AD CREATIVITY")).toBeNull();
+    expect(screen.getByTestId("app-shell")).toHaveClass(
+      "min-h-[100dvh]",
+      "bg-[#0b0d10]"
+    );
+    expect(screen.getByTestId("app-shell-content")).not.toHaveClass("pt-16");
+  });
+
+  it("uses the immersive shell on the AIGC timeline editor route", () => {
+    navigationState.pathname =
+      "/workspace/aigc/pipelines/pipeline-1/nodes/edit-node/timeline";
+    render(
+      <AppShell>
+        <div>时间线编辑内容</div>
+      </AppShell>
+    );
+
+    expect(screen.queryByRole("banner")).toBeNull();
+    expect(screen.getByTestId("app-shell")).toHaveClass(
+      "min-h-[100dvh]",
+      "bg-[#0b0d10]"
+    );
+    expect(screen.getByTestId("app-shell-content")).not.toHaveClass("pt-16");
+  });
+
+  it("keeps the global shell on non-layer AIGC routes", () => {
+    navigationState.pathname =
+      "/workspace/aigc/pipelines/pipeline-1/nodes/canvas-node";
+    render(
+      <AppShell>
+        <div>普通 AIGC 内容</div>
+      </AppShell>
+    );
+
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(screen.getByTestId("app-shell-content")).toHaveClass("pt-16");
   });
 
   it("links the home workspace entry to the projects module", () => {

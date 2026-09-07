@@ -11,9 +11,11 @@ from .api.dependencies import (
     discard_aigc_pipeline_runtime,
     get_aigc_pipeline_runtime,
     get_asset_storage_service,
+    get_face_blur_video_client_factory,
     get_media_inspector_service,
     get_modelark_generation_service,
     get_repository,
+    get_video_enhancement_client_factory,
 )
 from .api.router import api_router
 from .core.config import get_settings
@@ -58,6 +60,14 @@ async def _lifespan(application: FastAPI):
                 application,
                 get_media_inspector_service,
             ),
+            video_enhancement_client_factory=await _resolve_dependency(
+                application,
+                get_video_enhancement_client_factory,
+            ),
+            face_blur_client_factory=await _resolve_dependency(
+                application,
+                get_face_blur_video_client_factory,
+            ),
             settings=await _resolve_dependency(application, get_settings),
         )
     application.state.aigc_pipeline_runtime = runtime
@@ -98,6 +108,56 @@ def create_app() -> FastAPI:
 
     @application.get("/health", tags=["health"])
     async def health_check() -> dict[str, str]:
+        # #region debug-point A-D:queued-task-runtime-state
+        try:
+            import json
+            import time
+            import urllib.request
+
+            runtime = application.state.aigc_pipeline_runtime
+            task = runtime.repository.get_aigc_task_attempt(
+                "e609612d-ccc9-4c3f-8465-6a0ff6fb26e9"
+            )
+            urllib.request.urlopen(
+                urllib.request.Request(
+                    "http://127.0.0.1:7780/event",
+                    data=json.dumps(
+                        {
+                            "sessionId": "aigc-task-stuck-queued",
+                            "runId": "post-fix",
+                            "hypothesisId": "A-D",
+                            "location": "main.py:health_check",
+                            "msg": "[DEBUG] Queued task runtime state",
+                            "data": {
+                                "taskId": task.task_id,
+                                "taskStatus": task.status.value,
+                                "taskCreatedAt": task.created_at.isoformat(),
+                                "taskStartedAt": (
+                                    task.started_at.isoformat()
+                                    if task.started_at
+                                    else None
+                                ),
+                                "taskRunId": task.run_id,
+                                "queueSize": runtime.queue.qsize(),
+                                "isEnqueued": task.task_id in runtime._enqueued,
+                                "leaseToken": runtime._lease_token,
+                                "workerCount": len(runtime._workers),
+                                "workerDone": [
+                                    worker.done()
+                                    for worker in runtime._workers
+                                ],
+                            },
+                            "traceId": task.task_id,
+                            "ts": int(time.time() * 1000),
+                        }
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                ),
+                timeout=0.2,
+            ).read()
+        except Exception:
+            pass
+        # #endregion
         return {
             "status": "ok",
             "name": APP_NAME,

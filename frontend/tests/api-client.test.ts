@@ -556,6 +556,43 @@ describe("createApiClient", () => {
     expect(fetcher.mock.calls[0][0]).toBe("http://backend.local/api/assets");
   });
 
+  it("renames an encoded asset id with a PATCH request", async () => {
+    const renamedAsset = {
+      ...assetFixture,
+      metadata: {
+        ...assetFixture.metadata,
+        name: "用户名称",
+        name_scheme: "user_defined_v1"
+      }
+    };
+    const fetcher = vi.fn<FetchFunction>(async () =>
+      jsonResponse(renamedAsset)
+    );
+    const api = createApiClient({
+      baseUrl: "http://backend.local",
+      fetcher
+    });
+
+    await expect(
+      api.renameAsset(
+        "asset/with space",
+        { name: "用户名称" },
+        { cache: "no-store" }
+      )
+    ).resolves.toEqual(renamedAsset);
+
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe(
+      "http://backend.local/api/assets/asset%2Fwith%20space"
+    );
+    expect(init?.method).toBe("PATCH");
+    expect(init?.cache).toBe("no-store");
+    expect(JSON.parse(String(init?.body))).toEqual({ name: "用户名称" });
+    expect((init?.headers as Headers).get("content-type")).toBe(
+      "application/json"
+    );
+  });
+
   it("lists tool assets and tasks, then deletes encoded tool asset and task IDs", async () => {
     const fetcher = vi
       .fn<FetchFunction>()
@@ -1285,13 +1322,21 @@ describe("AIGC API client", () => {
     const fetcher = vi.fn<FetchFunction>(async () => jsonResponse(response));
     const api = createApiClient({ baseUrl: "http://backend.local", fetcher });
     const payload = {
-      text: "产品图",
+      optimization_direction: "强化商品质感",
       reference_instructions: ["保留商标"],
-      generation_modes: ["image_to_image" as const],
-      reference_image_count: 2
+      target_config: {
+        aspect_ratio: "1:1" as const,
+        model: "doubao-seedream-5-0-pro-260628",
+        operation: "image_to_image" as const,
+        reference_image_count: 2,
+        size: "2K" as const
+      },
+      target_node_id: "image-model-1",
+      target_type: "image_to_image" as const,
+      text: "产品图"
     };
 
-    await expect(api.optimizeAigcImagePrompt(payload)).resolves.toEqual(response);
+    await expect(api.optimizeAigcPrompt(payload)).resolves.toEqual(response);
     expect(fetcher).toHaveBeenCalledWith(
       "http://backend.local/api/aigc/prompts/optimize",
       expect.objectContaining({
@@ -1420,6 +1465,21 @@ describe("AIGC API client", () => {
     expect(init?.method).toBe("POST");
     expect(init?.body).toBe(file);
     expect((init?.headers as Headers).get("content-type")).toBe("audio/mpeg");
+  });
+
+  it("uploads AIGC subtitles to the dedicated binary endpoint", async () => {
+    const fetcher = vi.fn<FetchFunction>(async () => jsonResponse({}));
+    const api = createApiClient({ baseUrl: "http://backend.local", fetcher });
+    const file = new Blob(["srt"], { type: "application/x-subrip" });
+
+    await api.uploadAigcSubtitle(file, { filename: "captions.srt" });
+
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe(
+      "http://backend.local/api/aigc/assets/subtitles?filename=captions.srt&mime_type=application%2Fx-subrip"
+    );
+    expect(init?.body).toBe(file);
+    expect(init?.method).toBe("POST");
   });
 });
 

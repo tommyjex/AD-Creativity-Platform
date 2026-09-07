@@ -3,6 +3,26 @@ import pytest
 from backend.app.core.config import ConfigurationError, Settings
 
 
+def test_video_face_blur_limits_have_isolated_defaults() -> None:
+    settings = Settings()
+
+    assert settings.aigc_video_face_blur_concurrency == 1
+    assert settings.mediakit_face_blur_poll_interval_seconds == 3
+    assert settings.mediakit_face_blur_timeout_seconds == 1800
+    assert settings.mediakit_face_blur_transfer_timeout_seconds == 600
+    assert settings.mediakit_face_blur_transfer_max_bytes == 2 * 1024 * 1024 * 1024
+
+
+def test_multitrack_limits_have_isolated_defaults() -> None:
+    settings = Settings()
+
+    assert settings.aigc_multitrack_concurrency == 1
+    assert settings.mediakit_multitrack_poll_interval_seconds == 3
+    assert settings.mediakit_multitrack_timeout_seconds == 1800
+    assert settings.mediakit_multitrack_transfer_timeout_seconds == 600
+    assert settings.mediakit_multitrack_transfer_max_bytes == 2 * 1024 * 1024 * 1024
+
+
 def test_settings_reads_database_and_tos_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     env_values = {
         "DB_HOST": "db.internal",
@@ -63,6 +83,33 @@ def test_settings_reads_modelark_alias_and_download_limits(
     monkeypatch.setenv("ARK_VIDEO_POLL_INTERVAL_SECONDS", "5")
     monkeypatch.setenv("AIGC_VIDEO_CONCURRENCY", "2")
     monkeypatch.setenv("AIGC_VIDEO_TIMEOUT_SECONDS", "1200")
+    monkeypatch.setenv("AIGC_VIDEO_ENHANCEMENT_CONCURRENCY", "3")
+    monkeypatch.setenv(
+        "MEDIAKIT_VIDEO_ENHANCEMENT_POLL_INTERVAL_SECONDS",
+        "7",
+    )
+    monkeypatch.setenv("MEDIAKIT_VIDEO_ENHANCEMENT_TIMEOUT_SECONDS", "2400")
+    monkeypatch.setenv(
+        "MEDIAKIT_VIDEO_ENHANCEMENT_TRANSFER_TIMEOUT_SECONDS",
+        "800",
+    )
+    monkeypatch.setenv(
+        "MEDIAKIT_VIDEO_ENHANCEMENT_TRANSFER_MAX_BYTES",
+        "2147483648",
+    )
+    monkeypatch.setenv("AIGC_VIDEO_FACE_BLUR_CONCURRENCY", "4")
+    monkeypatch.setenv("MEDIAKIT_FACE_BLUR_POLL_INTERVAL_SECONDS", "8")
+    monkeypatch.setenv("MEDIAKIT_FACE_BLUR_TIMEOUT_SECONDS", "2500")
+    monkeypatch.setenv("MEDIAKIT_FACE_BLUR_TRANSFER_TIMEOUT_SECONDS", "900")
+    monkeypatch.setenv(
+        "MEDIAKIT_FACE_BLUR_TRANSFER_MAX_BYTES",
+        "2147483647",
+    )
+    monkeypatch.setenv("AIGC_MULTITRACK_CONCURRENCY", "5")
+    monkeypatch.setenv("MEDIAKIT_MULTITRACK_POLL_INTERVAL_SECONDS", "9")
+    monkeypatch.setenv("MEDIAKIT_MULTITRACK_TIMEOUT_SECONDS", "2600")
+    monkeypatch.setenv("MEDIAKIT_MULTITRACK_TRANSFER_TIMEOUT_SECONDS", "1000")
+    monkeypatch.setenv("MEDIAKIT_MULTITRACK_TRANSFER_MAX_BYTES", "2147483646")
 
     settings = Settings.from_env()
 
@@ -77,6 +124,21 @@ def test_settings_reads_modelark_alias_and_download_limits(
     assert settings.ark_video_poll_interval_seconds == 5
     assert settings.aigc_video_concurrency == 2
     assert settings.aigc_video_timeout_seconds == 1200
+    assert settings.aigc_video_enhancement_concurrency == 3
+    assert settings.mediakit_video_enhancement_poll_interval_seconds == 7
+    assert settings.mediakit_video_enhancement_timeout_seconds == 2400
+    assert settings.mediakit_video_enhancement_transfer_timeout_seconds == 800
+    assert settings.mediakit_video_enhancement_transfer_max_bytes == 2147483648
+    assert settings.aigc_video_face_blur_concurrency == 4
+    assert settings.mediakit_face_blur_poll_interval_seconds == 8
+    assert settings.mediakit_face_blur_timeout_seconds == 2500
+    assert settings.mediakit_face_blur_transfer_timeout_seconds == 900
+    assert settings.mediakit_face_blur_transfer_max_bytes == 2147483647
+    assert settings.aigc_multitrack_concurrency == 5
+    assert settings.mediakit_multitrack_poll_interval_seconds == 9
+    assert settings.mediakit_multitrack_timeout_seconds == 2600
+    assert settings.mediakit_multitrack_transfer_timeout_seconds == 1000
+    assert settings.mediakit_multitrack_transfer_max_bytes == 2147483646
     assert settings.asset_download_timeout_seconds == 45
     assert settings.asset_download_max_bytes == 1048576
 
@@ -164,6 +226,21 @@ def test_invalid_port_errors_do_not_expose_environment_values(
     [
         ("ASSET_DOWNLOAD_TIMEOUT_SECONDS", "0"),
         ("ASSET_DOWNLOAD_MAX_BYTES", "not-a-size"),
+        ("AIGC_VIDEO_ENHANCEMENT_CONCURRENCY", "0"),
+        ("MEDIAKIT_VIDEO_ENHANCEMENT_POLL_INTERVAL_SECONDS", "0"),
+        ("MEDIAKIT_VIDEO_ENHANCEMENT_TIMEOUT_SECONDS", "invalid"),
+        ("MEDIAKIT_VIDEO_ENHANCEMENT_TRANSFER_TIMEOUT_SECONDS", "-1"),
+        ("MEDIAKIT_VIDEO_ENHANCEMENT_TRANSFER_MAX_BYTES", "0"),
+        ("AIGC_VIDEO_FACE_BLUR_CONCURRENCY", "0"),
+        ("MEDIAKIT_FACE_BLUR_POLL_INTERVAL_SECONDS", "0"),
+        ("MEDIAKIT_FACE_BLUR_TIMEOUT_SECONDS", "invalid"),
+        ("MEDIAKIT_FACE_BLUR_TRANSFER_TIMEOUT_SECONDS", "-1"),
+        ("MEDIAKIT_FACE_BLUR_TRANSFER_MAX_BYTES", "0"),
+        ("AIGC_MULTITRACK_CONCURRENCY", "0"),
+        ("MEDIAKIT_MULTITRACK_POLL_INTERVAL_SECONDS", "0"),
+        ("MEDIAKIT_MULTITRACK_TIMEOUT_SECONDS", "invalid"),
+        ("MEDIAKIT_MULTITRACK_TRANSFER_TIMEOUT_SECONDS", "-1"),
+        ("MEDIAKIT_MULTITRACK_TRANSFER_MAX_BYTES", "0"),
     ],
 )
 def test_invalid_download_limits_are_rejected_without_echoing_values(

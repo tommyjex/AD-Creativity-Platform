@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
 
 import httpx
 import pytest
+from PIL import Image
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.api.dependencies import get_asset_storage_service
@@ -24,10 +26,12 @@ from backend.app.schemas import (
 from backend.app.services.assets import (
     AssetStorageService,
     DownloadedAsset,
+    GeneratedImageValidationError,
     HttpRemoteAssetDownloader,
     StoredAssetInput,
     TosObjectStorageClient,
 )
+from backend.app.services.aigc_asset_naming import AigcAssetNamingContext
 
 
 class FakeObjectStorageClient:
@@ -71,6 +75,34 @@ class FakeRemoteAssetDownloader:
             content=f"bytes:{url}".encode(),
             mime_type=expected_mime_type or "image/png",
         )
+
+
+def image_bytes(size: tuple[int, int], image_format: str) -> bytes:
+    output = BytesIO()
+    Image.new("RGB", size, (255, 0, 0)).save(output, format=image_format)
+    return output.getvalue()
+
+
+def _aigc_naming_context() -> AigcAssetNamingContext:
+    return AigcAssetNamingContext(
+        pipeline_name="商品画布",
+        definition_snapshot={
+            "schemaVersion": 2,
+            "nodes": [
+                {
+                    "id": "image-model",
+                    "type": "text_to_image",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 280, "height": 200},
+                    "config": {},
+                }
+            ],
+            "edges": [],
+            "viewport": {"x": 0, "y": 0, "zoom": 1},
+        },
+        node_id="image-model",
+        output_ordinal=1,
+    )
 
 
 def test_tos_get_object_closes_nested_sdk_response() -> None:
@@ -229,6 +261,35 @@ def test_asset_content_download_adds_attachment_disposition(
         named_response.headers["content-disposition"]
         == "attachment; filename=\"1.png\"; "
         "filename*=UTF-8''%E5%9B%BE%E7%89%87%E7%BB%93%E6%9E%9C-1.png"
+    )
+
+    repository.update_asset(
+        asset.id,
+        metadata={
+            "name": "商品画布-文生图-图片1",
+            "name_scheme": "aigc_canvas_node_v1",
+        },
+    )
+    aigc_response = client.get(f"/api/assets/{asset.id}/content?download=1")
+    assert aigc_response.status_code == 200
+    assert aigc_response.headers["content-disposition"] == (
+        'attachment; filename="1.png"; '
+        "filename*=UTF-8''%E5%95%86%E5%93%81%E7%94%BB%E5%B8%83-"
+        "%E6%96%87%E7%94%9F%E5%9B%BE-%E5%9B%BE%E7%89%871.png"
+    )
+
+    repository.update_asset(
+        asset.id,
+        metadata={
+            "name": "用户命名",
+            "name_scheme": "user_defined_v1",
+        },
+    )
+    user_named_response = client.get(f"/api/assets/{asset.id}/content?download=1")
+    assert user_named_response.status_code == 200
+    assert user_named_response.headers["content-disposition"] == (
+        'attachment; filename="download.png"; '
+        "filename*=UTF-8''%E7%94%A8%E6%88%B7%E5%91%BD%E5%90%8D.png"
     )
 
 
@@ -708,6 +769,79 @@ def test_asset_storage_uploads_character_batch_before_persisting() -> None:
     assert all(asset.object_key and asset.object_key.endswith(".png") for asset in assets)
 
 
+def test_asset_storage_names_aigc_output_from_final_mime_without_changing_key() -> None:
+    repository = InMemoryRepository()
+    client = FakeObjectStorageClient()
+    service = AssetStorageService(
+        bucket="ad-assets",
+        public_endpoint="https://assets.example.com",
+        client=client,
+        downloader=FakeRemoteAssetDownloader(),
+    )
+
+    asset = asyncio.run(
+        service.upload_assets_from_sources(
+            repository,
+            [
+                StoredAssetInput(
+                    type=AssetType.GENERATED_IMAGE,
+                    tool_asset_role=ToolAssetRole.OUTPUT,
+                    source_url="https://model.example/generated.webp",
+                    mime_type="image/webp",
+                    metadata={
+                        "origin": "aigc",
+                        "pipeline_id": "pipeline-1",
+                        "run_id": "run-1",
+                        "node_id": "image-model",
+                        "task_id": "task-1",
+                    },
+                    naming_context=_aigc_naming_context(),
+                )
+            ],
+        )
+    )[0]
+
+    assert asset.metadata["name"] == "商品画布-文生图-图片2.webp"
+    assert asset.metadata["name_scheme"] == "aigc_canvas_node_v1"
+    assert asset.metadata["pipeline_id"] == "pipeline-1"
+    assert asset.metadata["run_id"] == "run-1"
+    assert asset.metadata["node_id"] == "image-model"
+    assert asset.metadata["task_id"] == "task-1"
+    assert asset.object_key == f"tools/library/generated_image/{asset.id}.webp"
+
+
+def test_asset_storage_rejects_unmapped_aigc_output_mime_before_upload() -> None:
+    repository = InMemoryRepository()
+    client = FakeObjectStorageClient()
+    service = AssetStorageService(
+        bucket="ad-assets",
+        public_endpoint="https://assets.example.com",
+        client=client,
+        downloader=FakeRemoteAssetDownloader(),
+    )
+
+    with pytest.raises(ValueError, match="unsupported AIGC output MIME type"):
+        asyncio.run(
+            service.upload_assets_from_sources(
+                repository,
+                [
+                    StoredAssetInput(
+                        type=AssetType.GENERATED_IMAGE,
+                        tool_asset_role=ToolAssetRole.OUTPUT,
+                        source_url="https://model.example/generated.gif",
+                        mime_type="image/gif",
+                        metadata={"origin": "aigc"},
+                        naming_context=_aigc_naming_context(),
+                    )
+                ],
+            )
+        )
+
+    assert repository.list_assets(asset_role=None) == []
+    assert client.puts == []
+    assert client.deletes == []
+
+
 def test_asset_storage_rolls_back_uploaded_objects_when_batch_fails() -> None:
     repository = InMemoryRepository()
     project_id = _create_project(repository)
@@ -738,6 +872,207 @@ def test_asset_storage_rolls_back_uploaded_objects_when_batch_fails() -> None:
         )
 
     assert repository.list_project_assets(project_id) == []
+    assert client.deletes == [client.puts[0]["key"]]
+
+
+@pytest.mark.parametrize(
+    ("mime_type", "image_format"),
+    [
+        ("image/png", "PNG"),
+        ("image/jpeg", "JPEG"),
+    ],
+)
+def test_asset_storage_validates_and_records_expected_image_dimensions(
+    mime_type: str,
+    image_format: str,
+) -> None:
+    repository = InMemoryRepository()
+    client = FakeObjectStorageClient()
+
+    class ImageDownloader:
+        async def fetch(self, *_args, **_kwargs) -> DownloadedAsset:
+            return DownloadedAsset(
+                image_bytes((2048, 1024), image_format),
+                mime_type,
+            )
+
+    service = AssetStorageService(
+        bucket="ad-assets",
+        public_endpoint="https://assets.example.com",
+        client=client,
+        downloader=ImageDownloader(),
+    )
+
+    assets = asyncio.run(
+        service.upload_assets_from_sources(
+            repository,
+            [
+                StoredAssetInput(
+                    type=AssetType.GENERATED_IMAGE,
+                    tool_asset_role=ToolAssetRole.OUTPUT,
+                    source_url="https://model.example/generated",
+                    mime_type=mime_type,
+                    validate_image_content=True,
+                    expected_image_dimensions=(2048, 1024),
+                )
+            ],
+        )
+    )
+
+    assert assets[0].metadata["width"] == 2048
+    assert assets[0].metadata["height"] == 1024
+    assert len(client.puts) == 1
+
+
+def test_asset_storage_rejects_mismatched_image_dimensions_before_upload() -> None:
+    repository = InMemoryRepository()
+    client = FakeObjectStorageClient()
+
+    class ImageDownloader:
+        async def fetch(self, *_args, **_kwargs) -> DownloadedAsset:
+            return DownloadedAsset(image_bytes((1024, 1024), "PNG"), "image/png")
+
+    service = AssetStorageService(
+        bucket="ad-assets",
+        public_endpoint="https://assets.example.com",
+        client=client,
+        downloader=ImageDownloader(),
+    )
+
+    with pytest.raises(
+        GeneratedImageValidationError,
+        match="1024x1024.*2048x1024",
+    ) as error:
+        asyncio.run(
+            service.upload_assets_from_sources(
+                repository,
+                [
+                    StoredAssetInput(
+                        type=AssetType.GENERATED_IMAGE,
+                        tool_asset_role=ToolAssetRole.OUTPUT,
+                        source_url="https://model.example/generated.png",
+                        mime_type="image/png",
+                        validate_image_content=True,
+                        expected_image_dimensions=(2048, 1024),
+                    )
+                ],
+            )
+        )
+
+    assert error.value.code == "output_dimensions_mismatch"
+    assert client.puts == []
+    assert repository.list_assets() == []
+
+
+def test_asset_storage_rejects_undecodable_image_before_upload() -> None:
+    repository = InMemoryRepository()
+    client = FakeObjectStorageClient()
+
+    class BrokenImageDownloader:
+        async def fetch(self, *_args, **_kwargs) -> DownloadedAsset:
+            return DownloadedAsset(b"not-a-decodable-image", "image/png")
+
+    service = AssetStorageService(
+        bucket="ad-assets",
+        public_endpoint="https://assets.example.com",
+        client=client,
+        downloader=BrokenImageDownloader(),
+    )
+
+    with pytest.raises(GeneratedImageValidationError) as error:
+        asyncio.run(
+            service.upload_assets_from_sources(
+                repository,
+                [
+                    StoredAssetInput(
+                        type=AssetType.GENERATED_IMAGE,
+                        tool_asset_role=ToolAssetRole.OUTPUT,
+                        source_url="https://model.example/generated.png",
+                        mime_type="image/png",
+                        validate_image_content=True,
+                        expected_image_dimensions=(2048, 1024),
+                    )
+                ],
+            )
+        )
+
+    assert error.value.code == "output_image_decode_failed"
+    assert client.puts == []
+    assert repository.list_assets() == []
+
+
+def test_asset_storage_custom_image_upload_failure_leaves_no_asset() -> None:
+    repository = InMemoryRepository()
+    client = FakeObjectStorageClient(fail_on_put=1)
+
+    class ImageDownloader:
+        async def fetch(self, *_args, **_kwargs) -> DownloadedAsset:
+            return DownloadedAsset(image_bytes((2048, 1024), "PNG"), "image/png")
+
+    service = AssetStorageService(
+        bucket="ad-assets",
+        public_endpoint="https://assets.example.com",
+        client=client,
+        downloader=ImageDownloader(),
+    )
+
+    with pytest.raises(RuntimeError, match="TOS upload failed"):
+        asyncio.run(
+            service.upload_assets_from_sources(
+                repository,
+                [
+                    StoredAssetInput(
+                        type=AssetType.GENERATED_IMAGE,
+                        tool_asset_role=ToolAssetRole.OUTPUT,
+                        source_url="https://model.example/generated.png",
+                        mime_type="image/png",
+                        expected_image_dimensions=(2048, 1024),
+                    )
+                ],
+            )
+        )
+
+    assert client.puts == []
+    assert repository.list_assets() == []
+
+
+def test_asset_storage_rolls_back_object_and_partial_asset_on_db_failure() -> None:
+    class PartiallyFailingRepository(InMemoryRepository):
+        def create_assets(self, items):
+            super().create_assets(items)
+            raise RuntimeError("simulated DB failure")
+
+    repository = PartiallyFailingRepository()
+    client = FakeObjectStorageClient()
+
+    class ImageDownloader:
+        async def fetch(self, *_args, **_kwargs) -> DownloadedAsset:
+            return DownloadedAsset(image_bytes((2048, 1024), "PNG"), "image/png")
+
+    service = AssetStorageService(
+        bucket="ad-assets",
+        public_endpoint="https://assets.example.com",
+        client=client,
+        downloader=ImageDownloader(),
+    )
+
+    with pytest.raises(RuntimeError, match="simulated DB failure"):
+        asyncio.run(
+            service.upload_assets_from_sources(
+                repository,
+                [
+                    StoredAssetInput(
+                        type=AssetType.GENERATED_IMAGE,
+                        tool_asset_role=ToolAssetRole.OUTPUT,
+                        source_url="https://model.example/generated.png",
+                        mime_type="image/png",
+                        expected_image_dimensions=(2048, 1024),
+                    )
+                ],
+            )
+        )
+
+    assert repository.list_assets() == []
     assert client.deletes == [client.puts[0]["key"]]
 
 

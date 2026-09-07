@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 import hashlib
 import io
 import json
+import math
 import re
 import time
 import urllib.request
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
@@ -41,12 +44,21 @@ from backend.app.schemas import (
     ImageGenerationSize,
     ImageLayerDecompositionSize,
     ImageOutputFormat,
+    MultiTrackEditConfig,
     Stage,
     Status,
     ToolAssetRole,
     ReferenceAssetKind,
+    VideoEnhancementConfig,
+    VideoFaceBlurConfig,
+    validate_multi_track_edit_config,
 )
 from backend.app.schemas.common import SchemaModel
+from backend.app.schemas.image_dimensions import (
+    SeedreamImageSize,
+    is_seedream_image_preset_size,
+    parse_seedream_custom_image_size,
+)
 from backend.app.schemas.seedance import (
     SEEDANCE_DEFAULT_ASPECT_RATIO,
     SEEDANCE_DEFAULT_DURATION_SECONDS,
@@ -60,9 +72,27 @@ from backend.app.schemas.seedance import (
     SeedanceTaskType,
 )
 from backend.app.services.assets import (
+    AigcMultiTrackAssetInput,
+    AigcVideoFaceBlurAssetInput,
+    AigcVideoEnhancementAssetInput,
     AssetStorageService,
     DownloadedAsset,
+    GeneratedImageValidationError,
     StoredAssetInput,
+)
+from backend.app.services.aigc_asset_naming import (
+    AigcAssetNamingContext,
+    aigc_output_name_metadata,
+)
+from backend.app.services.mediakit_face_blur import (
+    FaceBlurTaskStatus,
+    FaceBlurVideoClient,
+    FaceBlurVideoTask,
+    MediaKitFaceBlurError,
+)
+from backend.app.services.mediakit_video_enhancement import (
+    MediaKitVideoEnhancementClient,
+    MediaKitVideoEnhancementError,
 )
 from backend.app.services.generation import ModelArkGenerationService
 from backend.app.services.image_layers import (
@@ -84,14 +114,30 @@ from backend.app.services.modelark import (
     ModelArkProviderError,
     SeedanceVideoGenerationRequest,
 )
+from backend.app.services.mediakit_multitrack import (
+    MediaKitMultiTrackClient,
+    MediaKitMultiTrackError,
+)
 
 AIGC_LLM_EXECUTOR_VERSION = "aigc-llm-v1"
 AIGC_IMAGE_EXECUTOR_VERSION = "aigc-image-v3"
 AIGC_VIDEO_EXECUTOR_VERSION = "aigc-video-v2"
+AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION = "aigc-video-enhancement-v1"
+AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION = "aigc-video-face-blur-v1"
+AIGC_MULTITRACK_EXECUTOR_VERSION = "aigc-multitrack-v1"
 AIGC_LAYER_EXECUTOR_VERSION = "aigc-layer-v1"
 AIGC_LLM_TIMEOUT_SECONDS = 120
 AIGC_IMAGE_TIMEOUT_SECONDS = 300
 AIGC_VIDEO_TIMEOUT_SECONDS = 1800
+VIDEO_ENHANCEMENT_MIN_SHORT_EDGE = 360
+VIDEO_ENHANCEMENT_MAX_SHORT_EDGE = 1440
+VIDEO_ENHANCEMENT_MIN_LONG_EDGE = 360
+VIDEO_ENHANCEMENT_MAX_LONG_EDGE = 2560
+VIDEO_FACE_BLUR_MAX_DURATION_SECONDS = 600
+VIDEO_FACE_BLUR_MIN_FPS = 25
+VIDEO_FACE_BLUR_MAX_FPS = 60
+VIDEO_FACE_BLUR_MAX_LONG_EDGE = 4096
+VIDEO_FACE_BLUR_MAX_SHORT_EDGE = 2160
 
 
 # #region debug-point A-E:reporter
@@ -152,7 +198,7 @@ class AigcImageExecutionParams(SchemaModel):
     model: str = AIGC_DEFAULT_IMAGE_MODEL
     prompt: str = Field(..., min_length=1, max_length=20000)
     aspect_ratio: str = Field(default="1:1", pattern=r"^(1:1|16:9|9:16|4:3|3:4)$")
-    size: ImageGenerationSize = ImageGenerationSize.TWO_K
+    size: SeedreamImageSize = "2K"
     format: ImageOutputFormat = ImageOutputFormat.PNG
     reference_asset_ids: list[str] = Field(default_factory=list, max_length=10)
     source_asset_id: str | None = None
@@ -286,11 +332,38 @@ class AigcVideoExecutionParams(SchemaModel):
         return normalized
 
 
+class AigcVideoEnhancementExecutionParams(VideoEnhancementConfig):
+    input_asset_id: str = Field(..., min_length=1)
+
+    @field_validator("input_asset_id")
+    @classmethod
+    def strip_input_asset_id(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("input_asset_id must not be blank")
+        return stripped
+
+
+class AigcVideoFaceBlurExecutionParams(VideoFaceBlurConfig):
+    input_asset_id: str = Field(..., min_length=1)
+
+    @field_validator("input_asset_id")
+    @classmethod
+    def strip_input_asset_id(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("input_asset_id must not be blank")
+        return stripped
+
+
 @dataclass(frozen=True)
 class AigcGatewayExecution:
     result: AigcTaskResult
     metrics: AigcTaskMetrics
     executor_version: str
+    provider_output_url: str | None = None
+    provider_task_id: str | None = None
+    provider_request_id: str | None = None
 
 
 class AigcGatewayError(RuntimeError):
@@ -309,6 +382,21 @@ class AigcModelGateway:
         *,
         media_inspector: MediaInspector | None = None,
         video_timeout_seconds: float = AIGC_VIDEO_TIMEOUT_SECONDS,
+        video_enhancement_client_factory: (
+            Callable[[], MediaKitVideoEnhancementClient] | None
+        ) = None,
+        video_enhancement_poll_interval_seconds: float = 3,
+        video_enhancement_timeout_seconds: float = AIGC_VIDEO_TIMEOUT_SECONDS,
+        face_blur_client_factory: (
+            Callable[[], FaceBlurVideoClient] | None
+        ) = None,
+        face_blur_poll_interval_seconds: float = 3,
+        face_blur_timeout_seconds: float = AIGC_VIDEO_TIMEOUT_SECONDS,
+        multitrack_client_factory: (
+            Callable[[], MediaKitMultiTrackClient] | None
+        ) = None,
+        multitrack_poll_interval_seconds: float = 3,
+        multitrack_timeout_seconds: float = AIGC_VIDEO_TIMEOUT_SECONDS,
     ) -> None:
         self.repository = repository
         self.generation = generation
@@ -317,12 +405,66 @@ class AigcModelGateway:
         if video_timeout_seconds <= 0:
             raise ValueError("video_timeout_seconds must be positive")
         self.video_timeout_seconds = video_timeout_seconds
+        if video_enhancement_poll_interval_seconds <= 0:
+            raise ValueError(
+                "video_enhancement_poll_interval_seconds must be positive"
+            )
+        if video_enhancement_timeout_seconds <= 0:
+            raise ValueError("video_enhancement_timeout_seconds must be positive")
+        self.video_enhancement_client_factory = (
+            video_enhancement_client_factory or MediaKitVideoEnhancementClient
+        )
+        self.video_enhancement_poll_interval_seconds = (
+            video_enhancement_poll_interval_seconds
+        )
+        self.video_enhancement_timeout_seconds = video_enhancement_timeout_seconds
+        if face_blur_poll_interval_seconds <= 0:
+            raise ValueError("face_blur_poll_interval_seconds must be positive")
+        if face_blur_timeout_seconds <= 0:
+            raise ValueError("face_blur_timeout_seconds must be positive")
+        self.face_blur_client_factory = (
+            face_blur_client_factory or FaceBlurVideoClient
+        )
+        self.face_blur_poll_interval_seconds = face_blur_poll_interval_seconds
+        self.face_blur_timeout_seconds = face_blur_timeout_seconds
+        if multitrack_poll_interval_seconds <= 0:
+            raise ValueError("multitrack_poll_interval_seconds must be positive")
+        if multitrack_timeout_seconds <= 0:
+            raise ValueError("multitrack_timeout_seconds must be positive")
+        self.multitrack_client_factory = (
+            multitrack_client_factory or MediaKitMultiTrackClient
+        )
+        self.multitrack_poll_interval_seconds = multitrack_poll_interval_seconds
+        self.multitrack_timeout_seconds = multitrack_timeout_seconds
+
+    def _asset_naming_context(
+        self,
+        task: AigcPipelineTaskAttempt,
+        *,
+        output_ordinal: int = 0,
+    ) -> AigcAssetNamingContext:
+        pipeline = self.repository.get_aigc_pipeline(task.pipeline_id)
+        run = self.repository.get_aigc_run(task.run_id).run
+        if run.pipeline_id != task.pipeline_id:
+            raise ValueError("AIGC task run does not belong to its pipeline")
+        return AigcAssetNamingContext(
+            pipeline_name=pipeline.name,
+            definition_snapshot=run.definition_snapshot.model_dump(
+                mode="json",
+                by_alias=True,
+            ),
+            node_id=task.node_id,
+            output_ordinal=output_ordinal,
+        )
 
     async def execute(
         self,
         task: AigcPipelineTaskAttempt,
     ) -> AigcGatewayExecution:
         started = perf_counter()
+        provider_output_url = None
+        provider_task_id = None
+        provider_request_id = None
         try:
             if task.type == AigcTaskType.LLM:
                 async with asyncio.timeout(AIGC_LLM_TIMEOUT_SECONDS):
@@ -351,6 +493,15 @@ class AigcModelGateway:
                 async with asyncio.timeout(self.video_timeout_seconds):
                     result = await self._execute_video(task)
                 executor_version = AIGC_VIDEO_EXECUTOR_VERSION
+            elif task.type == AigcTaskType.VIDEO_ENHANCEMENT:
+                result = await self._execute_video_enhancement(task)
+                executor_version = AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION
+            elif task.type == AigcTaskType.VIDEO_FACE_BLUR:
+                result = await self._execute_video_face_blur(task)
+                executor_version = AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION
+            elif task.type == AigcTaskType.MULTI_TRACK_EDIT:
+                result = await self._execute_multi_track(task)
+                executor_version = AIGC_MULTITRACK_EXECUTOR_VERSION
             else:
                 raise AigcGatewayError(
                     AigcTaskError(
@@ -394,6 +545,47 @@ class AigcModelGateway:
                 ),
                 retryable=retryable,
             ) from exc
+        except MediaKitVideoEnhancementError as exc:
+            code = (
+                "timeout"
+                if exc.code in {"poll_timeout", "request_timeout"}
+                else exc.code
+            )
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code=code,
+                    message=str(exc)[:500],
+                    request_id=exc.request_id or exc.task_id,
+                    stage=exc.phase,
+                ),
+                retryable=_is_retryable_mediakit_error(exc),
+            ) from exc
+        except MediaKitMultiTrackError as exc:
+            code = (
+                "timeout"
+                if exc.code in {"poll_timeout", "request_timeout"}
+                else exc.code
+            )
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code=code,
+                    message=str(exc)[:500],
+                    request_id=exc.request_id or exc.task_id,
+                    stage=exc.phase,
+                ),
+                retryable=_is_retryable_mediakit_error(exc),
+            ) from exc
+        except MediaKitFaceBlurError as exc:
+            fields = _face_blur_error_fields(exc)
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="provider_error",
+                    message=str(exc)[:500],
+                    request_id=fields.get("request_id") or fields.get("task_id"),
+                    stage=fields.get("phase") or "provider_call",
+                ),
+                retryable=_is_retryable_face_blur_error(fields),
+            ) from exc
         except AigcGatewayError:
             raise
         except MediaInspectionError as exc:
@@ -419,6 +611,9 @@ class AigcModelGateway:
                 duration_ms=max(0, round((perf_counter() - started) * 1000))
             ),
             executor_version=executor_version,
+            provider_output_url=provider_output_url,
+            provider_task_id=provider_task_id,
+            provider_request_id=provider_request_id,
         )
 
     async def _execute_llm(
@@ -490,40 +685,97 @@ class AigcModelGateway:
             if task.type == AigcTaskType.IMAGE_TO_IMAGE
             else ImageGenerationOperation.TEXT_TO_IMAGE
         )
+        custom_dimensions = (
+            None
+            if is_seedream_image_preset_size(params.size)
+            else parse_seedream_custom_image_size(params.size)
+        )
+        final_prompt = params.prompt
+        if custom_dimensions is None:
+            final_prompt = (
+                f"{params.prompt}\n画幅比例：{params.aspect_ratio}"
+            )
         generated = await self.generation.generate_aigc_image(
             pipeline_id=task.pipeline_id,
             model=params.model,
             operation=operation,
-            prompt=f"{params.prompt}\n画幅比例：{params.aspect_ratio}",
+            prompt=final_prompt,
             size=params.size,
             output_format=params.format,
             source_image_url=source_url,
             reference_image_urls=reference_urls,
         )
-        assets = await self.asset_storage.upload_assets_from_sources(
-            self.repository,
-            [
-                StoredAssetInput(
-                    type=generated.type,
-                    tool_asset_role=ToolAssetRole.OUTPUT,
-                    status=Status.SUCCEEDED,
-                    source_url=generated.url,
-                    mime_type=generated.mime_type,
-                    metadata={
-                        **generated.metadata,
-                        "origin": "aigc",
-                        "aigc_role": "output",
-                        "pipeline_id": task.pipeline_id,
-                        "run_id": task.run_id,
-                        "task_id": task.task_id,
-                        "node_id": task.node_id,
-                        "aspect_ratio": params.aspect_ratio,
-                        "executor_version": AIGC_IMAGE_EXECUTOR_VERSION,
-                    },
-                    validate_image_content=True,
+        try:
+            assets = await self.asset_storage.upload_assets_from_sources(
+                self.repository,
+                [
+                    StoredAssetInput(
+                        type=generated.type,
+                        tool_asset_role=ToolAssetRole.OUTPUT,
+                        status=Status.SUCCEEDED,
+                        source_url=generated.url,
+                        mime_type=generated.mime_type,
+                        metadata={
+                            **generated.metadata,
+                            "origin": "aigc",
+                            "aigc_role": "output",
+                            "pipeline_id": task.pipeline_id,
+                            "run_id": task.run_id,
+                            "task_id": task.task_id,
+                            "node_id": task.node_id,
+                            "size": params.size,
+                            **(
+                                {
+                                    "aspect_ratio": params.aspect_ratio,
+                                }
+                                if custom_dimensions is None
+                                else {
+                                    "target_width": custom_dimensions.width,
+                                    "target_height": custom_dimensions.height,
+                                }
+                            ),
+                            "executor_version": AIGC_IMAGE_EXECUTOR_VERSION,
+                        },
+                        validate_image_content=True,
+                        expected_image_dimensions=(
+                            None
+                            if custom_dimensions is None
+                            else (
+                                custom_dimensions.width,
+                                custom_dimensions.height,
+                            )
+                        ),
+                        naming_context=self._asset_naming_context(task),
+                    )
+                ],
+            )
+        except GeneratedImageValidationError as exc:
+            try:
+                self.repository.remove_aigc_task_assets(task.task_id)
+            except Exception:
+                pass
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code=exc.code,
+                    message=str(exc),
+                    stage="output_validation",
                 )
-            ],
-        )
+            ) from exc
+        except Exception as exc:
+            if custom_dimensions is None:
+                raise
+            try:
+                self.repository.remove_aigc_task_assets(task.task_id)
+            except Exception:
+                pass
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="asset_persistence_failed",
+                    message="Generated image could not be stored",
+                    stage="asset_persistence",
+                ),
+                retryable=True,
+            ) from exc
         asset = assets[0]
         try:
             self.repository.add_aigc_task_assets(
@@ -540,6 +792,11 @@ class AigcModelGateway:
         except Exception:
             self.asset_storage.delete_asset_objects(asset)
             self.repository.delete_tool_asset(asset.id)
+            if custom_dimensions is not None:
+                try:
+                    self.repository.remove_aigc_task_assets(task.task_id)
+                except Exception:
+                    pass
             raise
         visible = self.asset_storage.with_access_url(asset)
         return AigcTaskResult(
@@ -626,6 +883,7 @@ class AigcModelGateway:
                         "executor_version": AIGC_IMAGE_EXECUTOR_VERSION,
                     },
                     validate_image_content=True,
+                    naming_context=self._asset_naming_context(task),
                 )
             ],
         )
@@ -1008,16 +1266,27 @@ class AigcModelGateway:
             },
         )
         # #endregion
-        if (base_info.width, base_info.height) != (
-            source_info.width,
-            source_info.height,
+        source_aspect_ratio = source_info.width / source_info.height
+        base_aspect_ratio = base_info.width / base_info.height
+        if (
+            abs(base_aspect_ratio - source_aspect_ratio)
+            / source_aspect_ratio
+            > 0.01
         ):
             raise ValueError(
-                "layer decomposition base dimensions do not match the source"
+                "layer decomposition base aspect ratio does not match the source"
             )
 
         downloads: list[tuple[DecomposedImageLayer, DownloadedAsset]] = []
         for layer in result.layers:
+            x1, y1, x2, y2 = layer.bbox_absolute
+            if not (
+                0 <= x1 < x2 <= base_info.width
+                and 0 <= y1 < y2 <= base_info.height
+            ):
+                raise ValueError(
+                    "layer decomposition bbox exceeds the provider canvas"
+                )
             downloaded = await self.asset_storage.downloader.fetch(
                 layer.url,
                 expected_mime_type="image/png",
@@ -1056,7 +1325,6 @@ class AigcModelGateway:
                 },
             )
             # #endregion
-            x1, y1, x2, y2 = layer.bbox_absolute
             expected_size = (x2 - x1, y2 - y1)
             if (info.width, info.height) != expected_size:
                 downloaded = normalize_layer_image_content(
@@ -1118,14 +1386,14 @@ class AigcModelGateway:
             parent_layer_set_id=None,
             source_asset_id=source_asset_id,
             base_asset_id=base_asset.id,
-            canvas_width=source_info.width,
-            canvas_height=source_info.height,
+            canvas_width=base_info.width,
+            canvas_height=base_info.height,
             version=0,
             digest=_layer_set_digest(
                 source_asset_id=source_asset_id,
                 base_asset_id=base_asset.id,
-                canvas_width=source_info.width,
-                canvas_height=source_info.height,
+                canvas_width=base_info.width,
+                canvas_height=base_info.height,
                 layers=layer_models,
             ),
             layers=tuple(layer_models),
@@ -1361,6 +1629,7 @@ class AigcModelGateway:
                 task=task,
                 layer_set=derived,
                 content=composition.content,
+                naming_context=self._asset_naming_context(task),
             )
             if self.asset_storage.client is None or output_asset.object_key is None:
                 raise ValueError("object storage is unavailable for layer composition")
@@ -1598,6 +1867,7 @@ class AigcModelGateway:
                             ).hexdigest(),
                             "executor_version": AIGC_VIDEO_EXECUTOR_VERSION,
                         },
+                        naming_context=self._asset_naming_context(task),
                     )
                 ],
             )
@@ -1649,6 +1919,570 @@ class AigcModelGateway:
                 )
             ],
         )
+
+    async def _execute_multi_track(
+        self,
+        task: AigcPipelineTaskAttempt,
+    ) -> AigcTaskResult:
+        raw_project = task.params.get("project")
+        raw_sources = task.params.get("resolved_sources")
+        if not isinstance(raw_project, Mapping) or not isinstance(
+            raw_sources,
+            Mapping,
+        ):
+            raise ValueError("multi-track task snapshot is invalid")
+        project = MultiTrackEditConfig.model_validate(raw_project)
+        project_issues = validate_multi_track_edit_config(project)
+        if project_issues:
+            issue = project_issues[0]
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code=issue.code,
+                    message=f"{issue.message} at {issue.path}",
+                    stage="validate",
+                )
+            )
+        resolved_sources = {
+            str(element_id): value
+            for element_id, value in raw_sources.items()
+            if isinstance(value, Mapping)
+        }
+
+        allowed_types = {
+            "video": {
+                AssetType.UPLOADED_VIDEO,
+                AssetType.STORYBOARD_VIDEO,
+                AssetType.FINAL_VIDEO,
+            },
+            "image": {
+                AssetType.UPLOADED_IMAGE,
+                AssetType.GENERATED_IMAGE,
+            },
+            "audio": {AssetType.UPLOADED_AUDIO},
+            "subtitle": {AssetType.SUBTITLE},
+        }
+        input_asset_ids: dict[str, list[str]] = {
+            "video": [],
+            "image": [],
+            "audio": [],
+            "subtitle": [],
+        }
+        resolved_assets = {}
+        for track in project.tracks:
+            for element in track.elements:
+                source = resolved_sources.get(element.id)
+                if source is None or source.get("type") != element.type:
+                    raise ValueError(
+                        f"multi-track element '{element.id}' source is invalid"
+                    )
+                if element.type == "text":
+                    text = source.get("text")
+                    if not isinstance(text, str) or not text.strip():
+                        raise ValueError(
+                            f"multi-track element '{element.id}' text is invalid"
+                        )
+                    continue
+                asset_id = source.get("asset_id")
+                if not isinstance(asset_id, str) or not asset_id:
+                    raise ValueError(
+                        f"multi-track element '{element.id}' asset is invalid"
+                    )
+                asset = self.repository.get_asset(asset_id)
+                if (
+                    asset.asset_role != AssetRole.PUBLIC
+                    or asset.status != Status.SUCCEEDED
+                    or asset.type not in allowed_types[element.type]
+                ):
+                    raise ValueError(
+                        f"multi-track element '{element.id}' asset is unavailable"
+                    )
+                if element.type in {"video", "audio"} and element.source_trim:
+                    source_duration_ms = _asset_duration_ms(asset)
+                    if (
+                        source_duration_ms is not None
+                        and element.source_trim.end_ms > source_duration_ms
+                    ):
+                        raise ValueError(
+                            f"multi-track element '{element.id}' source trim "
+                            "exceeds asset duration"
+                        )
+                resolved_assets[element.id] = asset
+                if asset.id not in input_asset_ids[element.type]:
+                    input_asset_ids[element.type].append(asset.id)
+
+        provider_tracks: list[list[dict[str, object]]] = []
+        for track in project.tracks:
+            if track.hidden:
+                continue
+            provider_elements: list[dict[str, object]] = []
+            for element in track.elements:
+                source = resolved_sources.get(element.id)
+                if source is None or source.get("type") != element.type:
+                    raise ValueError(
+                        f"multi-track element '{element.id}' source is invalid"
+                    )
+                rendered = deepcopy(
+                    element.model_dump(
+                        mode="json",
+                        exclude_none=True,
+                        exclude={"id", "source", "inline_text", "asset_id"},
+                    )
+                )
+                if element.type == "text":
+                    rendered["text"] = source["text"]
+                else:
+                    asset = resolved_assets[element.id]
+                    access_url = self.asset_storage.signed_access_url(asset)
+                    parsed = urlsplit(access_url or "")
+                    if (
+                        parsed.scheme not in {"http", "https"}
+                        or not parsed.netloc
+                    ):
+                        raise ValueError(
+                            f"multi-track element '{element.id}' has no accessible asset"
+                        )
+                    rendered["url"] = access_url
+                if track.muted and "volume" in rendered:
+                    rendered["volume"] = 0
+                provider_elements.append(rendered)
+            if provider_elements:
+                provider_tracks.append(provider_elements)
+
+        if not provider_tracks:
+            raise ValueError("multi-track project has no visible elements")
+
+        client = self.multitrack_client_factory()
+        submitted = await client.submit(
+            project={
+                "canvas": project.canvas.model_dump(mode="json"),
+                "track": provider_tracks,
+                "output": project.output.model_dump(mode="json"),
+            },
+            idempotency_key=task.task_id,
+        )
+        completed = await client.poll(
+            task_id=submitted.task_id,
+            timeout_seconds=self.multitrack_timeout_seconds,
+            poll_interval_seconds=self.multitrack_poll_interval_seconds,
+        )
+        if completed.output_video_url is None:
+            raise ValueError("multi-track provider output is missing")
+
+        visible_tracks = [track for track in project.tracks if not track.hidden]
+        duration_ms = max(
+            element.target_time.end_ms
+            for track in visible_tracks
+            for element in track.elements
+        )
+        transforms = [
+            element.transform
+            for track in visible_tracks
+            for element in track.elements
+            if hasattr(element, "transform")
+        ]
+        width = project.canvas.width or max(
+            (
+                math.ceil(transform.x + transform.width)
+                for transform in transforms
+            ),
+            default=1920,
+        )
+        height = project.canvas.height or max(
+            (
+                math.ceil(transform.y + transform.height)
+                for transform in transforms
+            ),
+            default=1080,
+        )
+        try:
+            output = await self.asset_storage.store_aigc_multitrack_video(
+                self.repository,
+                AigcMultiTrackAssetInput(
+                    source_url=completed.output_video_url,
+                    pipeline_id=task.pipeline_id,
+                    run_id=task.run_id,
+                    node_id=task.node_id,
+                    task_id=task.task_id,
+                    input_asset_ids={
+                        slot: tuple(asset_ids)
+                        for slot, asset_ids in input_asset_ids.items()
+                    },
+                    provider_task_id=completed.task_id,
+                    provider_request_id=(
+                        completed.request_id or submitted.request_id
+                    ),
+                    canvas=project.canvas.model_dump(mode="json"),
+                    tracks=[
+                        track.model_dump(mode="json")
+                        for track in project.tracks
+                    ],
+                    duration_ms=duration_ms,
+                    width=width,
+                    height=height,
+                    fps=project.output.fps,
+                    executor_version=AIGC_MULTITRACK_EXECUTOR_VERSION,
+                    naming_context=self._asset_naming_context(task),
+                ),
+            )
+        except Exception as exc:
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="asset_transfer_failed",
+                    message="Multi-track video could not be stored",
+                    request_id=completed.request_id or completed.task_id,
+                    stage="asset_transfer",
+                ),
+                retryable=True,
+            ) from exc
+
+        visible = self.asset_storage.with_access_url(output)
+        return AigcTaskResult(
+            kind=AigcResultKind.ASSETS,
+            assets=[
+                AigcResultAsset(
+                    asset_id=output.id,
+                    ordinal=0,
+                    mime_type=output.mime_type,
+                    download_url=visible.url,
+                    available=True,
+                    metadata={
+                        key: output.metadata[key]
+                        for key in (
+                            "provider",
+                            "operation",
+                            "provider_task_id",
+                            "provider_request_id",
+                            "track_count",
+                            "element_count",
+                            "duration_ms",
+                            "width",
+                            "height",
+                            "fps",
+                            "executor_version",
+                        )
+                        if key in output.metadata
+                    },
+                )
+            ],
+        )
+
+    async def _execute_video_enhancement(
+        self,
+        task: AigcPipelineTaskAttempt,
+    ) -> AigcTaskResult:
+        params = AigcVideoEnhancementExecutionParams.model_validate(task.params)
+        asset = self.repository.get_asset(params.input_asset_id)
+        if (
+            asset.asset_role != AssetRole.PUBLIC
+            or asset.status != Status.SUCCEEDED
+            or asset.type
+            not in {
+                AssetType.UPLOADED_VIDEO,
+                AssetType.STORYBOARD_VIDEO,
+                AssetType.FINAL_VIDEO,
+            }
+            or not asset.mime_type
+            or not asset.mime_type.lower().startswith("video/")
+        ):
+            raise ValueError(
+                "video enhancement input is not an available public video"
+            )
+        access_url = self.asset_storage.signed_access_url(asset)
+        parsed_url = urlsplit(access_url or "")
+        if (
+            parsed_url.scheme not in {"http", "https"}
+            or not parsed_url.netloc
+        ):
+            raise ValueError("video enhancement input has no accessible object")
+
+        inspection = await self._ensure_media_inspection(
+            asset,
+            ReferenceAssetKind.VIDEO,
+        )
+        if inspection is None:
+            raise MediaInspectionError(
+                "video enhancement input could not be inspected"
+            )
+        _validate_video_enhancement_inspection(inspection)
+        if inspection.duration_seconds is None:
+            raise MediaInspectionError(
+                "video enhancement input duration is unavailable"
+            )
+        try:
+            params.validate_input_duration(inspection.duration_seconds)
+        except ValueError as exc:
+            raise MediaInspectionError(str(exc)) from exc
+
+        try:
+            self.repository.add_aigc_task_assets(
+                [
+                    AigcPipelineTaskAssetReference(
+                        task_id=task.task_id,
+                        direction=AigcAssetDirection.INPUT,
+                        slot="video",
+                        ordinal=0,
+                        asset_id=asset.id,
+                    )
+                ]
+            )
+        except Exception as exc:
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="input_recording_failed",
+                    message="AIGC input references could not be recorded",
+                    stage="input_recording",
+                ),
+                retryable=True,
+            ) from exc
+
+        client = self.video_enhancement_client_factory()
+        submitted = await client.submit(
+            video_url=access_url,
+            idempotency_key=f"{task.pipeline_id}:{task.run_id}:{task.node_id}",
+            tool_version=params.tool_version,
+            scene=params.scene,
+            enhance_style=params.enhance_style,
+            resolution=params.resolution,
+            resolution_limit=params.resolution_limit,
+            fps=params.fps,
+            bitrate_level=params.bitrate_level,
+            bitrate=params.bitrate,
+            bit_depth=params.bit_depth,
+        )
+        completed = await client.poll(
+            task_id=submitted.task_id,
+            timeout_seconds=self.video_enhancement_timeout_seconds,
+            poll_interval_seconds=self.video_enhancement_poll_interval_seconds,
+        )
+        assert completed.output_video_url is not None
+        try:
+            output = await self.asset_storage.store_aigc_video_enhancement(
+                self.repository,
+                AigcVideoEnhancementAssetInput(
+                    source_url=completed.output_video_url,
+                    pipeline_id=task.pipeline_id,
+                    run_id=task.run_id,
+                    node_id=task.node_id,
+                    task_id=task.task_id,
+                    input_asset_id=asset.id,
+                    provider_task_id=completed.task_id,
+                    provider_request_id=(
+                        completed.request_id or submitted.request_id
+                    ),
+                    tool_version=completed.tool_version or params.tool_version,
+                    scene=params.scene,
+                    enhance_style=params.enhance_style,
+                    resolution_mode=params.resolution_mode,
+                    resolution=completed.resolution or params.resolution,
+                    resolution_limit=params.resolution_limit,
+                    fps=completed.fps if completed.fps is not None else params.fps,
+                    bitrate_mode=params.bitrate_mode,
+                    bitrate_level=params.bitrate_level,
+                    bitrate=params.bitrate,
+                    bit_depth=params.bit_depth,
+                    duration_seconds=completed.duration_seconds,
+                    executor_version=AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION,
+                    naming_context=self._asset_naming_context(task),
+                ),
+            )
+        except Exception as exc:
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="asset_transfer_failed",
+                    message="Enhanced video could not be stored",
+                    request_id=completed.request_id or completed.task_id,
+                    stage="asset_transfer",
+                ),
+                retryable=True,
+            ) from exc
+
+        visible = self.asset_storage.with_access_url(output)
+        return AigcTaskResult(
+            kind=AigcResultKind.ASSETS,
+            assets=[
+                AigcResultAsset(
+                    asset_id=output.id,
+                    ordinal=0,
+                    mime_type=output.mime_type,
+                    download_url=visible.url,
+                    available=True,
+                    metadata={
+                        key: output.metadata[key]
+                        for key in (
+                            "resolution",
+                            "fps",
+                            "duration_seconds",
+                            "tool_version",
+                            "bit_depth",
+                        )
+                        if key in output.metadata
+                    },
+                )
+            ],
+        )
+
+    async def _execute_video_face_blur(
+        self,
+        task: AigcPipelineTaskAttempt,
+    ) -> AigcTaskResult:
+        params = AigcVideoFaceBlurExecutionParams.model_validate(task.params)
+        asset = self.repository.get_asset(params.input_asset_id)
+        if (
+            asset.asset_role != AssetRole.PUBLIC
+            or asset.status != Status.SUCCEEDED
+            or asset.type
+            not in {
+                AssetType.UPLOADED_VIDEO,
+                AssetType.STORYBOARD_VIDEO,
+                AssetType.FINAL_VIDEO,
+            }
+            or not asset.mime_type
+            or not asset.mime_type.lower().startswith("video/")
+        ):
+            raise ValueError(
+                "video face blur input is not an available public video"
+            )
+        access_url = self.asset_storage.signed_access_url(asset)
+        parsed_url = urlsplit(access_url or "")
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise ValueError("video face blur input has no accessible object")
+
+        inspection = await self._ensure_media_inspection(
+            asset,
+            ReferenceAssetKind.VIDEO,
+        )
+        if inspection is None:
+            raise MediaInspectionError(
+                "video face blur input could not be inspected"
+            )
+        _validate_video_face_blur_inspection(inspection)
+
+        try:
+            self.repository.add_aigc_task_assets(
+                [
+                    AigcPipelineTaskAssetReference(
+                        task_id=task.task_id,
+                        direction=AigcAssetDirection.INPUT,
+                        slot="video",
+                        ordinal=0,
+                        asset_id=asset.id,
+                    )
+                ]
+            )
+        except Exception as exc:
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="input_recording_failed",
+                    message="AIGC input references could not be recorded",
+                    stage="input_recording",
+                ),
+                retryable=True,
+            ) from exc
+
+        client = self.face_blur_client_factory()
+        submitted = await client.submit(
+            video_url=access_url,
+            mask_mode=params.mask_mode,
+            mask_strength=params.mask_strength,
+            client_token=_face_blur_client_token(task),
+        )
+        self.repository.update_aigc_task_attempt(task.task_id, progress=10)
+        completed = await self._poll_face_blur(client, task, submitted)
+        assert completed.output_video_url is not None
+        try:
+            output = await self.asset_storage.store_aigc_video_face_blur(
+                self.repository,
+                AigcVideoFaceBlurAssetInput(
+                    source_url=completed.output_video_url,
+                    pipeline_id=task.pipeline_id,
+                    run_id=task.run_id,
+                    node_id=task.node_id,
+                    task_id=task.task_id,
+                    input_asset_id=asset.id,
+                    provider_task_id=completed.task_id,
+                    provider_request_id=(
+                        completed.request_id or submitted.request_id
+                    ),
+                    mask_mode=params.mask_mode,
+                    mask_strength=params.mask_strength,
+                    duration_seconds=completed.duration_seconds,
+                    executor_version=AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION,
+                    naming_context=self._asset_naming_context(task),
+                ),
+            )
+        except Exception as exc:
+            try:
+                self.repository.remove_aigc_task_assets(task.task_id)
+            except Exception:
+                pass
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="asset_transfer_failed",
+                    message="Face-blurred video could not be stored",
+                    request_id=completed.request_id or completed.task_id,
+                    stage="asset_transfer",
+                ),
+                retryable=True,
+            ) from exc
+
+        visible = self.asset_storage.with_access_url(output)
+        return AigcTaskResult(
+            kind=AigcResultKind.ASSETS,
+            assets=[
+                AigcResultAsset(
+                    asset_id=output.id,
+                    ordinal=0,
+                    mime_type=output.mime_type,
+                    download_url=visible.url,
+                    available=True,
+                    metadata={
+                        key: output.metadata[key]
+                        for key in (
+                            "provider_task_id",
+                            "provider_request_id",
+                            "duration_seconds",
+                            "mask_mode",
+                            "mask_strength",
+                        )
+                        if key in output.metadata
+                    },
+                )
+            ],
+        )
+
+    async def _poll_face_blur(
+        self,
+        client: FaceBlurVideoClient,
+        task: AigcPipelineTaskAttempt,
+        submitted: FaceBlurVideoTask,
+    ) -> FaceBlurVideoTask:
+        if submitted.status is FaceBlurTaskStatus.SUCCEEDED:
+            return submitted
+        try:
+            async with asyncio.timeout(self.face_blur_timeout_seconds):
+                while True:
+                    await asyncio.sleep(self.face_blur_poll_interval_seconds)
+                    remote = await client.get_task(task_id=submitted.task_id)
+                    if remote.status is FaceBlurTaskStatus.SUCCEEDED:
+                        return remote
+                    self.repository.update_aigc_task_attempt(
+                        task.task_id,
+                        progress=(
+                            25
+                            if remote.status is FaceBlurTaskStatus.QUEUED
+                            else 50
+                        ),
+                    )
+        except TimeoutError as exc:
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="timeout",
+                    message="MediaKit face blur polling timed out.",
+                    request_id=submitted.request_id or submitted.task_id,
+                    stage="poll",
+                ),
+                retryable=True,
+            ) from exc
 
     async def _ensure_media_inspection(
         self,
@@ -1741,6 +2575,7 @@ def _aigc_layer_composite_asset(
     task: AigcPipelineTaskAttempt,
     layer_set: AigcLayerSet,
     content: bytes,
+    naming_context: AigcAssetNamingContext,
 ) -> AssetCreate:
     asset = AssetCreate(
         tool_asset_role=ToolAssetRole.OUTPUT,
@@ -1769,6 +2604,10 @@ def _aigc_layer_composite_asset(
             "format": "png",
             "model": f"Pillow {Image.__version__}",
             "executor_version": AIGC_LAYER_EXECUTOR_VERSION,
+            **aigc_output_name_metadata(
+                naming_context,
+                mime_type="image/png",
+            ),
             "storage_provider": "tos",
         },
     )
@@ -2061,6 +2900,144 @@ def _is_retryable_provider_code(code: str) -> bool:
             "serviceunavailable",
         }
         or normalized.startswith("5")
+    )
+
+
+def _is_retryable_mediakit_error(
+    error: MediaKitVideoEnhancementError | MediaKitMultiTrackError,
+) -> bool:
+    return (
+        error.code
+        in {
+            "network_error",
+            "request_timeout",
+            "poll_timeout",
+        }
+        or error.status_code in {408, 409, 425, 429}
+        or (
+            error.status_code is not None
+            and 500 <= error.status_code <= 599
+        )
+        or (
+            error.provider_code is not None
+            and _is_retryable_provider_code(error.provider_code)
+        )
+    )
+
+
+def _asset_duration_ms(asset: Asset) -> int | None:
+    duration_ms = asset.metadata.get("duration_ms")
+    if (
+        isinstance(duration_ms, (int, float))
+        and not isinstance(duration_ms, bool)
+        and math.isfinite(duration_ms)
+        and duration_ms >= 0
+    ):
+        return round(duration_ms)
+    for key in ("duration_seconds", "duration"):
+        duration_seconds = asset.metadata.get(key)
+        if (
+            isinstance(duration_seconds, (int, float))
+            and not isinstance(duration_seconds, bool)
+            and math.isfinite(duration_seconds)
+            and duration_seconds >= 0
+        ):
+            return round(duration_seconds * 1000)
+    return None
+
+
+def _validate_video_enhancement_inspection(
+    inspection: MediaInspection,
+) -> None:
+    if inspection.width is None or inspection.height is None:
+        raise MediaInspectionError(
+            "video enhancement input dimensions are unavailable"
+        )
+    short_edge = min(inspection.width, inspection.height)
+    long_edge = max(inspection.width, inspection.height)
+    if not (
+        VIDEO_ENHANCEMENT_MIN_SHORT_EDGE
+        <= short_edge
+        <= VIDEO_ENHANCEMENT_MAX_SHORT_EDGE
+    ):
+        raise MediaInspectionError(
+            "video enhancement input short edge must be between 360 and 1440 px"
+        )
+    if not (
+        VIDEO_ENHANCEMENT_MIN_LONG_EDGE
+        <= long_edge
+        <= VIDEO_ENHANCEMENT_MAX_LONG_EDGE
+    ):
+        raise MediaInspectionError(
+            "video enhancement input long edge must be between 360 and 2560 px"
+        )
+
+
+def _validate_video_face_blur_inspection(
+    inspection: MediaInspection,
+) -> None:
+    if inspection.width is None or inspection.height is None:
+        raise MediaInspectionError(
+            "video face blur input dimensions are unavailable"
+        )
+    if inspection.duration_seconds is None:
+        raise MediaInspectionError(
+            "video face blur input duration is unavailable"
+        )
+    if inspection.duration_seconds > VIDEO_FACE_BLUR_MAX_DURATION_SECONDS:
+        raise MediaInspectionError(
+            "video face blur input duration must not exceed 600 seconds"
+        )
+    if inspection.fps is None:
+        raise MediaInspectionError("video face blur input FPS is unavailable")
+    if not VIDEO_FACE_BLUR_MIN_FPS <= inspection.fps <= VIDEO_FACE_BLUR_MAX_FPS:
+        raise MediaInspectionError(
+            "video face blur input FPS must be between 25 and 60"
+        )
+    long_edge = max(inspection.width, inspection.height)
+    short_edge = min(inspection.width, inspection.height)
+    if long_edge > VIDEO_FACE_BLUR_MAX_LONG_EDGE:
+        raise MediaInspectionError(
+            "video face blur input long edge must not exceed 4096 px"
+        )
+    if short_edge > VIDEO_FACE_BLUR_MAX_SHORT_EDGE:
+        raise MediaInspectionError(
+            "video face blur input short edge must not exceed 2160 px"
+        )
+
+
+def _face_blur_client_token(task: AigcPipelineTaskAttempt) -> str:
+    identity = (
+        f"{task.pipeline_id}:{task.run_id}:{task.node_id}:attempt:{task.attempt}"
+    )
+    return f"aigc-face-blur-{hashlib.sha256(identity.encode()).hexdigest()[:40]}"
+
+
+def _face_blur_error_fields(
+    error: MediaKitFaceBlurError,
+) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for part in (error.detail or "").split(";"):
+        key, separator, value = part.strip().partition("=")
+        if (
+            separator
+            and key in {"phase", "reason", "status", "status_code", "code",
+                        "request_id", "task_id"}
+            and re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", value)
+        ):
+            fields[key] = value
+    return fields
+
+
+def _is_retryable_face_blur_error(fields: dict[str, str]) -> bool:
+    status_code = fields.get("status_code")
+    code = fields.get("code", "").replace("-", "_").casefold()
+    return (
+        fields.get("reason") == "transport_error"
+        or status_code in {"408", "409", "425", "429"}
+        or (status_code is not None and status_code.startswith("5"))
+        or code in {"internalerror", "serviceunavailable"}
+        or _is_retryable_provider_code(code)
     )
 
 

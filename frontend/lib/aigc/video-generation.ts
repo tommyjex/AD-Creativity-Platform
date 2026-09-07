@@ -3,6 +3,8 @@ import type {
   AigcEdge,
   AigcNode,
   AigcPipelineDefinition,
+  AigcPipelineDefinitionV2,
+  AigcV2Node,
   AigcPortDefinition,
   AigcVideoGenerationMode
 } from "@/lib/aigc/types";
@@ -71,7 +73,7 @@ export function videoInputCount(
 
 export function isVideoEdgeIncompatible(
   edge: AigcEdge,
-  nodes: readonly AigcNode[]
+  nodes: readonly (AigcNode | AigcV2Node)[]
 ): boolean {
   const target = nodes.find((node) => node.id === edge.targetNodeId);
   if (target?.type !== "video_generation") return false;
@@ -84,7 +86,9 @@ export function isVideoEdgeIncompatible(
 }
 
 export function validateVideoGenerationDefinition(
-  definition: Pick<AigcPipelineDefinition, "nodes" | "edges">
+  definition:
+    | Pick<AigcPipelineDefinition, "nodes" | "edges">
+    | Pick<AigcPipelineDefinitionV2, "nodes" | "edges">
 ): AigcVideoValidationIssue[] {
   return definition.nodes.flatMap((node) =>
     node.type === "video_generation"
@@ -94,7 +98,9 @@ export function validateVideoGenerationDefinition(
 }
 
 export function validateVideoGenerationAssets(
-  definition: Pick<AigcPipelineDefinition, "nodes" | "edges">,
+  definition:
+    | Pick<AigcPipelineDefinition, "nodes" | "edges">
+    | Pick<AigcPipelineDefinitionV2, "nodes" | "edges">,
   nodeId: string,
   assets: readonly Asset[]
 ): AigcVideoValidationIssue[] {
@@ -114,9 +120,9 @@ export function validateVideoGenerationAssets(
       )
       .flatMap((source) =>
         source &&
-        (source.type === "video_input" ||
-          source.type === "audio_input" ||
-          source.type === "image_input") &&
+        (source.type === "video" ||
+          source.type === "audio" ||
+          source.type === "image") &&
         source.config.asset_id
           ? [assetById.get(source.config.asset_id)]
           : []

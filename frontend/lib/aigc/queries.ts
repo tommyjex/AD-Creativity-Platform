@@ -2,9 +2,11 @@
 
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { apiClient } from "@/lib/api-client";
 import type {
   AigcPage,
@@ -14,6 +16,19 @@ import type {
 } from "@/lib/aigc/types";
 
 const ACTIVE_RUN_STATUSES = new Set(["queued", "running"]);
+const RUN_PAGE_SIZE = 100;
+
+export type AigcRunDetailQueryState = "error" | "loading" | "success";
+
+export interface AigcRunDetailsResult {
+  details: ReadonlyMap<string, AigcPipelineRunDetail>;
+  states: ReadonlyMap<string, AigcRunDetailQueryState>;
+}
+
+interface CombinedAigcRunDetails {
+  details: ReadonlyMap<string, AigcPipelineRunDetail>;
+  states: readonly AigcRunDetailQueryState[];
+}
 
 export const aigcQueryKeys = {
   all: ["aigc"] as const,
@@ -29,11 +44,14 @@ export function useAigcRuns(
   initialData?: AigcPage<AigcPipelineRun>,
   enabled = true
 ) {
+  const completeInitialData =
+    initialData && initialData.items.length >= initialData.total
+      ? initialData
+      : undefined;
   return useQuery({
     enabled,
-    initialData,
-    queryFn: () =>
-      apiClient.listAigcRuns(pipelineId, { page: 1, pageSize: 20 }),
+    initialData: completeInitialData,
+    queryFn: () => fetchAllAigcRuns(pipelineId),
     queryKey: aigcQueryKeys.runs(pipelineId),
     refetchInterval: (query) =>
       query.state.data?.items.some((run) =>
@@ -42,6 +60,86 @@ export function useAigcRuns(
         ? 2_000
         : false
   });
+}
+
+export async function fetchAllAigcRuns(
+  pipelineId: string
+): Promise<AigcPage<AigcPipelineRun>> {
+  const items: AigcPipelineRun[] = [];
+  let total = 0;
+  for (let page = 1; ; page += 1) {
+    const response = await apiClient.listAigcRuns(pipelineId, {
+      page,
+      pageSize: RUN_PAGE_SIZE
+    });
+    items.push(...response.items);
+    total = response.total;
+    if (
+      response.items.length === 0 ||
+      items.length >= response.total
+    ) {
+      break;
+    }
+  }
+  return {
+    items,
+    page: 1,
+    page_size: RUN_PAGE_SIZE,
+    total
+  };
+}
+
+export function useAigcRunDetails(
+  runs: readonly AigcPipelineRun[]
+): AigcRunDetailsResult {
+  const queries = useMemo(
+    () =>
+      runs.map((run) => ({
+        queryFn: () => apiClient.getAigcRun(run.id),
+        queryKey: aigcQueryKeys.run(run.id),
+        refetchInterval: (query: {
+          state: { data?: AigcPipelineRunDetail };
+        }) => aigcRunDetailPollingInterval(run, query.state.data),
+        retry: false
+      })),
+    [runs]
+  );
+  const combined = useQueries({
+    queries,
+    combine: combineAigcRunDetails
+  });
+  return useMemo(
+    () => ({
+      details: combined.details,
+      states: new Map(
+        runs.map(
+          (run, index) =>
+            [run.id, combined.states[index] ?? "loading"] as const
+        )
+      )
+    }),
+    [combined, runs]
+  );
+}
+
+function combineAigcRunDetails(
+  results: readonly {
+    data?: AigcPipelineRunDetail;
+    isError: boolean;
+  }[]
+): CombinedAigcRunDetails {
+  const details = new Map<string, AigcPipelineRunDetail>();
+  const states: AigcRunDetailQueryState[] = [];
+  results.forEach((result) => {
+    const detail = result.data;
+    if (detail) {
+      details.set(detail.run.id, detail);
+      states.push(result.isError ? "error" : "success");
+      return;
+    }
+    states.push(result.isError ? "error" : "loading");
+  });
+  return { details, states };
 }
 
 export function useAigcRun(runId: string | null) {
@@ -138,4 +236,12 @@ export function aigcRunPollingInterval(
   detail: AigcPipelineRunDetail | undefined
 ): 2000 | false {
   return detail && ACTIVE_RUN_STATUSES.has(detail.run.status) ? 2_000 : false;
+}
+
+export function aigcRunDetailPollingInterval(
+  summary: AigcPipelineRun,
+  detail: AigcPipelineRunDetail | undefined
+): 2000 | false {
+  if (detail) return aigcRunPollingInterval(detail);
+  return ACTIVE_RUN_STATUSES.has(summary.status) ? 2_000 : false;
 }

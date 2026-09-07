@@ -25,21 +25,27 @@ interface WebkitFullscreenVideo extends HTMLVideoElement {
 
 export function AigcVideoPlayer({
   audioState = null,
+  bitDepth = null,
   className,
+  fps = null,
   initialMetadata,
   mimeType,
   name,
   resolutionLabel = null,
+  toolVersion = null,
   unavailableText = "视频结果不可用",
   url,
   variant = "node"
 }: {
   audioState?: boolean | null;
+  bitDepth?: number | null;
   className?: string;
+  fps?: number | null;
   initialMetadata: AigcVideoMetadata;
   mimeType: string | null;
   name: string;
   resolutionLabel?: string | null;
+  toolVersion?: "professional" | "standard" | null;
   unavailableText?: string;
   url: string | null;
   variant?: "node" | "panel";
@@ -59,9 +65,12 @@ export function AigcVideoPlayer({
     loadedMetadata?.source === url ? loadedMetadata : initialMetadata;
   const details = videoDetails({
     audioState,
+    bitDepth,
+    fps,
     metadata,
     mimeType,
-    resolutionLabel
+    resolutionLabel,
+    toolVersion
   });
 
   useEffect(() => {
@@ -244,14 +253,20 @@ export function formatVideoDuration(seconds: number): string {
 
 function videoDetails({
   audioState,
+  bitDepth,
+  fps,
   metadata,
   mimeType,
-  resolutionLabel
+  resolutionLabel,
+  toolVersion
 }: {
   audioState: boolean | null;
+  bitDepth: number | null;
+  fps: number | null;
   metadata: AigcVideoMetadata;
   mimeType: string | null;
   resolutionLabel: string | null;
+  toolVersion: "professional" | "standard" | null;
 }): string {
   const values: string[] = [];
   if (metadata.width && metadata.height) {
@@ -262,6 +277,11 @@ function videoDetails({
   if (metadata.duration !== null) {
     values.push(formatVideoDuration(metadata.duration));
   }
+  if (fps !== null) values.push(`${fps} fps`);
+  if (toolVersion !== null) {
+    values.push(toolVersion === "professional" ? "专业版" : "标准版");
+  }
+  if (bitDepth !== null) values.push(`${bitDepth}-bit`);
   if (audioState !== null) {
     values.push(audioState ? "有音频" : "无音频");
   }

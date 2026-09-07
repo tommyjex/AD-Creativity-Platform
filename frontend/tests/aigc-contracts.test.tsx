@@ -11,7 +11,7 @@ import {
 } from "@/lib/aigc/node-registry";
 import { createAigcEditorStore } from "@/lib/aigc/editor-store";
 import {
-  AIGC_NODE_TYPES,
+  AIGC_V2_NODE_TYPES,
   type AigcPipelineDefinition,
   aigcNodeRunKey,
   cloneAigcTaskSnapshot
@@ -33,9 +33,9 @@ function QueryClientProbe() {
 }
 
 describe("AIGC contracts", () => {
-  it("registers all schema-version-one node types", () => {
+  it("registers all schema-version-two node types", () => {
     expect(AIGC_NODE_REGISTRY.map((item) => item.type)).toEqual(
-      AIGC_NODE_TYPES
+      AIGC_V2_NODE_TYPES
     );
     expect(AIGC_NODE_REGISTRY.find((item) => item.type === "llm")).toMatchObject(
       {
@@ -108,6 +108,33 @@ describe("AIGC contracts", () => {
         { id: "image", type: "image_asset" },
         { id: "layers", type: "layer_set" }
       ]
+    });
+    expect(
+      AIGC_NODE_REGISTRY.find((item) => item.type === "json_parser")
+    ).toMatchObject({
+      label: "JSON 解析器",
+      category: "control",
+      executable: true,
+      inputs: [
+        {
+          id: "text",
+          type: "text",
+          required: true,
+          multiple: false,
+          max_connections: 1
+        }
+      ],
+      outputs: [
+        {
+          id: "items",
+          type: "text",
+          required: false,
+          multiple: true,
+          max_connections: 20,
+          system_only: true
+        }
+      ],
+      models: []
     });
     expect(
       AIGC_NODE_REGISTRY.flatMap((item) => [

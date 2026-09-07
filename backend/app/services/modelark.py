@@ -7,13 +7,14 @@ import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from time import monotonic
-from typing import Any, Literal, Optional, Protocol, Union
+from typing import Any, Literal, Optional, Protocol, TypeAlias, Union
 
 import httpx
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 from ..core.config import Settings, get_settings
 from ..schemas import (
+    AigcPromptOptimizeRequest,
     AssetType,
     Brief,
     CharacterAssetIterationOperation,
@@ -29,6 +30,10 @@ from ..schemas import (
     validate_visible_selling_copy,
 )
 from ..schemas.common import SchemaModel
+from ..schemas.image_dimensions import (
+    SeedreamCustomImageSize,
+    parse_seedream_custom_image_size,
+)
 from ..schemas.seedance import (
     SEEDANCE_DEFAULT_TASK_TYPE,
     SeedanceAspectRatio,
@@ -53,6 +58,7 @@ from .text_streaming import IncrementalJsonStringExtractor
 
 TEXT_GENERATION_STAGES = {Stage.STORY, Stage.SCRIPT, Stage.STORYBOARD}
 SEED_THINKING_DISABLED = {"type": "disabled"}
+AIGC_PROMPT_OPTIMIZATION_TIMEOUT_SECONDS = 120
 SEEDREAM_5_PRO_MODEL = "doubao-seedream-5-0-pro-260628"
 _SAFE_PROVIDER_VALUE = re.compile(r"^[A-Za-z0-9._:/-]{1,200}$")
 _REQUEST_ID_PATTERN = re.compile(
@@ -219,12 +225,17 @@ class ImagePromptGenerationRequest(SchemaModel):
     current_prompt: str | None = Field(default=None, max_length=12000)
 
 
+SeedreamGenerationSize: TypeAlias = (
+    ImageGenerationSize | SeedreamCustomImageSize
+)
+
+
 class ProjectImageGenerationRequest(SchemaModel):
     project_id: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
     operation: ImageGenerationOperation
     prompt: str = Field(..., min_length=1)
-    size: ImageGenerationSize = ImageGenerationSize.TWO_K
+    size: SeedreamGenerationSize = ImageGenerationSize.TWO_K
     output_format: ImageOutputFormat = ImageOutputFormat.PNG
     source_image_url: str | None = Field(default=None, min_length=1)
     reference_image_urls: list[str] = Field(default_factory=list, max_length=10)
@@ -267,6 +278,23 @@ class DecomposedImageLayer(SchemaModel):
 class LayerDecompositionResult(SchemaModel):
     base_url: str = Field(..., min_length=1)
     layers: list[DecomposedImageLayer] = Field(..., min_length=1, max_length=16)
+
+
+def _seedream_size_metadata(
+    size: SeedreamGenerationSize,
+) -> dict[str, str | int]:
+    is_preset = isinstance(size, ImageGenerationSize)
+    value = size.value if is_preset else size
+    metadata: dict[str, str | int] = {"size": value}
+    if not is_preset:
+        dimensions = parse_seedream_custom_image_size(size)
+        metadata.update(
+            {
+                "target_width": dimensions.width,
+                "target_height": dimensions.height,
+            }
+        )
+    return metadata
 
 
 class CharacterGenerationRequest(SchemaModel):
@@ -726,6 +754,12 @@ class ModelArkAdapter(Protocol):
     ) -> AigcImagePromptOptimizationResult:
         """Optimize one structured AIGC image prompt without persisting it."""
 
+    async def optimize_aigc_prompt(
+        self,
+        request: AigcPromptOptimizeRequest,
+    ) -> AigcImagePromptOptimizationResult:
+        """Optimize one target-aware AIGC prompt without persisting it."""
+
     def stream_video_prompt_optimization(
         self,
         request: VideoPromptOptimizationRequest,
@@ -1115,6 +1149,180 @@ class BytePlusModelArkAdapter:
                 "AIGC image prompt optimization failed"
             ) from exc
 
+    async def optimize_aigc_prompt(
+        self,
+        request: AigcPromptOptimizeRequest,
+    ) -> AigcImagePromptOptimizationResult:
+        system_prompt, user_prompt = (
+            MockModelArkAdapter.build_aigc_prompt_optimization_messages(request)
+        )
+        # #region debug-point A-D:prompt-optimization-request
+        try:
+            import time
+            import urllib.request
+
+            urllib.request.urlopen(
+                urllib.request.Request(
+                    "http://127.0.0.1:7781/event",
+                    data=json.dumps(
+                        {
+                            "sessionId": "prompt-optimization-unavailable",
+                            "runId": "post-fix",
+                            "hypothesisId": "A-D",
+                            "location": (
+                                "modelark.py:"
+                                "BytePlusModelArkAdapter.optimize_aigc_prompt"
+                            ),
+                            "msg": "[DEBUG] Calling prompt optimization",
+                            "data": {
+                                "model": self.settings.ark_text_model,
+                                "textLength": len(request.text),
+                                "referenceCount": len(
+                                    request.reference_instructions
+                                ),
+                                "systemPromptLength": len(system_prompt),
+                                "userPromptLength": len(user_prompt),
+                            },
+                            "traceId": request.target_node_id,
+                            "ts": int(time.time() * 1000),
+                        }
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                ),
+                timeout=0.2,
+            ).read()
+        except Exception:
+            pass
+        # #endregion
+        try:
+            response = await asyncio.to_thread(
+                self.client.responses.with_raw_response.create,
+                model=self.settings.ark_text_model,
+                input=[
+                    {
+                        "role": "system",
+                        "content": [
+                            {"type": "input_text", "text": system_prompt}
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": user_prompt}
+                        ],
+                    },
+                ],
+                text={"format": {"type": "json_object"}},
+                thinking=SEED_THINKING_DISABLED,
+                temperature=0.1,
+                max_output_tokens=4096,
+                timeout=AIGC_PROMPT_OPTIMIZATION_TIMEOUT_SECONDS,
+            )
+            response_payload = response.json()
+            return self._parse_aigc_image_prompt_optimization_payload(
+                self._response_output_text(response_payload)
+            )
+        except (ModelArkProviderError, ModelArkTextParseError) as exc:
+            # #region debug-point A-D:prompt-optimization-wrapped-error
+            try:
+                import time
+                import urllib.request
+
+                urllib.request.urlopen(
+                    urllib.request.Request(
+                        "http://127.0.0.1:7781/event",
+                        data=json.dumps(
+                            {
+                                "sessionId": "prompt-optimization-unavailable",
+                                "runId": "post-fix",
+                                "hypothesisId": "A-D",
+                                "location": (
+                                    "modelark.py:"
+                                    "BytePlusModelArkAdapter.optimize_aigc_prompt"
+                                ),
+                                "msg": (
+                                    "[DEBUG] Wrapped prompt optimization error"
+                                ),
+                                "data": {
+                                    "exceptionType": type(exc).__name__,
+                                    "exceptionMessage": str(exc)[:1000],
+                                    "safeFields": exc.safe_log_fields(),
+                                    "causeType": (
+                                        type(exc.__cause__).__name__
+                                        if exc.__cause__
+                                        else None
+                                    ),
+                                    "causeMessage": (
+                                        str(exc.__cause__)[:1000]
+                                        if exc.__cause__
+                                        else None
+                                    ),
+                                },
+                                "traceId": request.target_node_id,
+                                "ts": int(time.time() * 1000),
+                            }
+                        ).encode(),
+                        headers={"Content-Type": "application/json"},
+                    ),
+                    timeout=0.2,
+                ).read()
+            except Exception:
+                pass
+            # #endregion
+            raise
+        except ValidationError as exc:
+            raise ModelArkTextParseError(
+                "AIGC prompt optimization response could not be parsed"
+            ) from exc
+        except Exception as exc:
+            # #region debug-point A-D:prompt-optimization-error
+            try:
+                import time
+                import urllib.request
+
+                urllib.request.urlopen(
+                    urllib.request.Request(
+                        "http://127.0.0.1:7781/event",
+                        data=json.dumps(
+                            {
+                                "sessionId": "prompt-optimization-unavailable",
+                                "runId": "post-fix",
+                                "hypothesisId": "A-D",
+                                "location": (
+                                    "modelark.py:"
+                                    "BytePlusModelArkAdapter.optimize_aigc_prompt"
+                                ),
+                                "msg": "[DEBUG] Prompt optimization failed",
+                                "data": {
+                                    "exceptionType": type(exc).__name__,
+                                    "exceptionMessage": str(exc)[:1000],
+                                    "statusCode": getattr(
+                                        exc, "status_code", None
+                                    ),
+                                    "causeType": (
+                                        type(exc.__cause__).__name__
+                                        if exc.__cause__
+                                        else None
+                                    ),
+                                    "causeMessage": (
+                                        str(exc.__cause__)[:1000]
+                                        if exc.__cause__
+                                        else None
+                                    ),
+                                },
+                                "traceId": request.target_node_id,
+                                "ts": int(time.time() * 1000),
+                            }
+                        ).encode(),
+                        headers={"Content-Type": "application/json"},
+                    ),
+                    timeout=0.2,
+                ).read()
+            except Exception:
+                pass
+            # #endregion
+            raise ModelArkProviderError("AIGC prompt optimization failed") from exc
+
     async def stream_video_prompt_optimization(
         self,
         request: VideoPromptOptimizationRequest,
@@ -1169,10 +1377,11 @@ class BytePlusModelArkAdapter:
         self,
         request: ProjectImageGenerationRequest,
     ) -> GeneratedAssetResult:
+        size_metadata = _seedream_size_metadata(request.size)
         kwargs: dict[str, object] = {
             "model": request.model,
             "prompt": request.prompt,
-            "size": request.size.value,
+            "size": size_metadata["size"],
             "output_format": request.output_format.value,
             "response_format": "url",
             "watermark": False,
@@ -1214,7 +1423,7 @@ class BytePlusModelArkAdapter:
                 "model": request.model,
                 "provider": "byteplus-modelark",
                 "operation": request.operation.value,
-                "size": request.size.value,
+                **size_metadata,
                 "format": request.output_format.value,
                 "status": Status.SUCCEEDED.value,
             },
@@ -1239,12 +1448,118 @@ class BytePlusModelArkAdapter:
                 self.client.images.generate,
                 **kwargs,
             )
-            return self._parse_layer_decomposition_response(
-                response,
-                width=request.canvas_width,
-                height=request.canvas_height,
-            )
-        except ModelArkProviderError:
+            # #region debug-point A-B-C:layer-response-shape
+            debug_data = self._value(response, "data")
+            try:
+                await asyncio.to_thread(
+                    httpx.post,
+                    "http://127.0.0.1:7777/event",
+                    json={
+                        "sessionId": "layer-decomposition-parse",
+                        "runId": "post-fix",
+                        "hypothesisId": "A-B-C",
+                        "location": "backend/app/services/modelark.py:decompose_image_layers",
+                        "msg": "[DEBUG] Layer decomposition response shape",
+                        "data": {
+                            "response_type": type(response).__name__,
+                            "data_type": type(debug_data).__name__,
+                            "item_count": (
+                                len(debug_data)
+                                if isinstance(debug_data, (list, tuple))
+                                else None
+                            ),
+                            "items": [
+                                {
+                                    "item_type": type(item).__name__,
+                                    "keys": (
+                                        sorted(str(key) for key in item)
+                                        if isinstance(item, dict)
+                                        else None
+                                    ),
+                                    "z_index": self._value(item, "z_index"),
+                                    "z_index_type": type(
+                                        self._value(item, "z_index")
+                                    ).__name__,
+                                    "url_type": type(
+                                        self._value(item, "url")
+                                    ).__name__,
+                                    "url_is_http": (
+                                        isinstance(self._value(item, "url"), str)
+                                        and str(self._value(item, "url")).startswith(
+                                            ("http://", "https://")
+                                        )
+                                    ),
+                                    "bbox_type": type(
+                                        self._value(item, "bounding_box")
+                                    ).__name__,
+                                    "name_type": type(
+                                        self._value(item, "name")
+                                    ).__name__,
+                                    "name_length": (
+                                        len(self._value(item, "name"))
+                                        if isinstance(
+                                            self._value(item, "name"),
+                                            str,
+                                        )
+                                        else None
+                                    ),
+                                    "description_type": type(
+                                        self._value(item, "description")
+                                    ).__name__,
+                                    "description_length": (
+                                        len(self._value(item, "description"))
+                                        if isinstance(
+                                            self._value(item, "description"),
+                                            str,
+                                        )
+                                        else None
+                                    ),
+                                    "bbox_absolute": self._value(
+                                        self._value(item, "bounding_box"),
+                                        "absolute",
+                                    ),
+                                    "bbox_normalized": self._value(
+                                        self._value(item, "bounding_box"),
+                                        "normalized",
+                                    ),
+                                }
+                                for item in (
+                                    debug_data
+                                    if isinstance(debug_data, (list, tuple))
+                                    else []
+                                )
+                            ],
+                        },
+                    },
+                    timeout=1,
+                )
+            except Exception:
+                pass
+            # #endregion
+            return self._parse_layer_decomposition_response(response)
+        except ModelArkProviderError as exc:
+            # #region debug-point D-E:layer-parse-error
+            try:
+                await asyncio.to_thread(
+                    httpx.post,
+                    "http://127.0.0.1:7777/event",
+                    json={
+                        "sessionId": "layer-decomposition-parse",
+                        "runId": "post-fix",
+                        "hypothesisId": "D-E",
+                        "location": "backend/app/services/modelark.py:decompose_image_layers",
+                        "msg": "[DEBUG] Layer decomposition provider error",
+                        "data": {
+                            "error_type": type(exc).__name__,
+                            "message": str(exc),
+                            **exc.safe_fields(),
+                        },
+                    },
+                    timeout=1,
+                )
+            except Exception:
+                pass
+            # #endregion
             raise
         except Exception as exc:
             raise _provider_error_from_exception(
@@ -1678,9 +1993,6 @@ class BytePlusModelArkAdapter:
     def _parse_layer_decomposition_response(
         cls,
         response: Any,
-        *,
-        width: int,
-        height: int,
     ) -> LayerDecompositionResult:
         data = cls._value(response, "data")
         if not isinstance(data, (list, tuple)) or not data:
@@ -1716,8 +2028,8 @@ class BytePlusModelArkAdapter:
                     description=description,
                     bbox_absolute=cls._validate_response_bbox(
                         absolute,
-                        maximum_x=width,
-                        maximum_y=height,
+                        maximum_x=None,
+                        maximum_y=None,
                         label="absolute",
                     ),
                     bbox_normalized=cls._validate_response_bbox(
@@ -1765,8 +2077,8 @@ class BytePlusModelArkAdapter:
     def _validate_response_bbox(
         value: object,
         *,
-        maximum_x: int,
-        maximum_y: int,
+        maximum_x: int | None,
+        maximum_y: int | None,
         label: str,
     ) -> tuple[int, int, int, int]:
         if (
@@ -1779,7 +2091,13 @@ class BytePlusModelArkAdapter:
                 phase="layer_decomposition_parse",
             )
         x1, y1, x2, y2 = value
-        if not (0 <= x1 < x2 <= maximum_x and 0 <= y1 < y2 <= maximum_y):
+        within_x = 0 <= x1 < x2 and (
+            maximum_x is None or x2 <= maximum_x
+        )
+        within_y = 0 <= y1 < y2 and (
+            maximum_y is None or y2 <= maximum_y
+        )
+        if not (within_x and within_y):
             raise ModelArkProviderError(
                 f"layer decomposition {label} bbox is out of bounds",
                 phase="layer_decomposition_parse",
@@ -1805,14 +2123,16 @@ class BytePlusModelArkAdapter:
 
     @staticmethod
     def _response_output_text(response: Any) -> str:
-        output = getattr(response, "output", None)
+        output = BytePlusModelArkAdapter._value(response, "output")
         if not output:
             raise ModelArkTextParseError("text generation returned no output")
 
         parts: list[str] = []
         for item in output:
-            for content in getattr(item, "content", []) or []:
-                text = getattr(content, "text", None)
+            for content in (
+                BytePlusModelArkAdapter._value(item, "content") or []
+            ):
+                text = BytePlusModelArkAdapter._value(content, "text")
                 if isinstance(text, str) and text.strip():
                     parts.append(text.strip())
 
@@ -1899,6 +2219,13 @@ class BytePlusModelArkAdapter:
         if not isinstance(raw, dict):
             raise ModelArkTextParseError(
                 "AIGC image prompt optimization response must be a JSON object"
+            )
+        if (
+            "optimized_reference_instructions" not in raw
+            and "optim_reference_instructions" in raw
+        ):
+            raw["optimized_reference_instructions"] = raw.pop(
+                "optim_reference_instructions"
             )
         try:
             return AigcImagePromptOptimizationResult.model_validate(raw)
@@ -2138,6 +2465,34 @@ class MockModelArkAdapter:
             ],
         )
 
+    async def optimize_aigc_prompt(
+        self,
+        request: AigcPromptOptimizeRequest,
+    ) -> AigcImagePromptOptimizationResult:
+        suffix = {
+            "llm": "\n\n## 任务要求\n明确上下文、执行约束和输出格式。",
+            "text_to_image": "，主体、环境、构图与光影明确，保持原有硬约束",
+            "image_to_image": "，明确编辑对象与动作，未指定内容保持不变",
+            "video_generation": "，按目标时长组织连续镜头、动作、运镜与声音",
+        }[request.target_type]
+        if request.optimization_direction:
+            suffix += f"\n优化方向：{request.optimization_direction}"
+        optimized_text = f"{request.text}{suffix}"[:20000]
+        references = (
+            [
+                f"{value}，明确该区域的对象、用途与需保持特征"[:4000]
+                if value
+                else ""
+                for value in request.reference_instructions
+            ]
+            if request.target_type in {"text_to_image", "image_to_image"}
+            else []
+        )
+        return AigcImagePromptOptimizationResult(
+            optimized_text=optimized_text,
+            optimized_reference_instructions=references,
+        )
+
     async def stream_video_prompt_optimization(
         self,
         request: VideoPromptOptimizationRequest,
@@ -2176,6 +2531,7 @@ class MockModelArkAdapter:
         self,
         request: ProjectImageGenerationRequest,
     ) -> GeneratedAssetResult:
+        size_metadata = _seedream_size_metadata(request.size)
         digest = hashlib.sha256(
             json.dumps(
                 request.model_dump(mode="json"),
@@ -2201,7 +2557,7 @@ class MockModelArkAdapter:
                 "model": request.model,
                 "provider": "mock-modelark",
                 "operation": request.operation.value,
-                "size": request.size.value,
+                **size_metadata,
                 "format": request.output_format.value,
                 "status": Status.SUCCEEDED.value,
             },
@@ -3126,6 +3482,72 @@ class MockModelArkAdapter:
         )
         return system_prompt, user_prompt
 
+    @staticmethod
+    def build_aigc_prompt_optimization_messages(
+        request: AigcPromptOptimizeRequest,
+    ) -> tuple[str, str]:
+        common = [
+            "只输出一个 JSON 对象，且只能包含 optimized_text 和 "
+            "optimized_reference_instructions 两个字段。",
+            "不得输出 Markdown 代码围栏、解释、评分、分析过程或多个候选。",
+            "保留原文语言、事实、变量、代码、URL、品牌、产品、待渲染文字、"
+            "数量、颜色、画幅、时长、否定条件和所有结构化引用 token。",
+            "优化方向只是软偏好，与原文硬约束冲突时必须忽略。",
+            "optimized_text 不得超过 20000 字符。",
+        ]
+        if request.target_type == "llm":
+            strategy = [
+                "你是 LLM 提示词工程优化器。",
+                "按任务复杂度明确角色、上下文、具体任务、约束、步骤、输出格式"
+                "和完成标准；不要要求输出隐藏思维过程。",
+                "仅在原文已有示例或用户明确要求时组织示例，不得编造业务事实。",
+                "optimized_reference_instructions 必须为空数组。",
+            ]
+        elif request.target_type in {"text_to_image", "image_to_image"}:
+            strategy = [
+                "你是 Seedream 4.0-5.0 生图提示词优化器。",
+                "使用简洁自然语言明确主体、行为、环境、用途与必要美学元素，"
+                "避免形容词堆叠和模糊代词。",
+                "图片编辑或参考图任务必须明确编辑对象、动作、保持不变内容，"
+                "以及每张参考图的对象、用途和关系。",
+                "optimized_reference_instructions 必须与输入数组长度、顺序完全一致，"
+                "不得合并、拆分或重排；每项不超过 4000 字符。",
+                "不得新增 <bbox>、<point> 或固定图N标签。",
+            ]
+        else:
+            strategy = [
+                "你是 Seedance 生视频提示词优化器。",
+                "先概述主体、地点、事件和题材，再按目标时长组织连续镜头或时间轴；"
+                "明确关键动作、表情、景别、机位、运镜和转场触发点。",
+                "严格按 references 中的顺序、角色和编号描述素材用途，"
+                "不得引用不存在的素材。",
+                "根据 generate_audio 描述对白、环境音、音效、BGM 或无声要求，"
+                "避免动作堆叠和不连续时间区间。",
+                "optimized_reference_instructions 必须为空数组。",
+            ]
+        context = {
+            "target_node_id": request.target_node_id,
+            "target_type": request.target_type,
+            "target_config": request.target_config.model_dump(mode="json"),
+            "optimization_direction": request.optimization_direction,
+            "current_text": request.text,
+            "reference_instructions": request.reference_instructions,
+        }
+        return (
+            "\n".join([*strategy, *common]),
+            "\n".join(
+                [
+                    "请在不改变原意和硬约束的前提下优化以下提示词。",
+                    json.dumps(
+                        context,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                ]
+            ),
+        )
+
     @classmethod
     def build_character_extraction_prompt(
         cls,
@@ -3689,6 +4111,12 @@ class HybridModelArkAdapter:
         request: AigcImagePromptOptimizationRequest,
     ) -> AigcImagePromptOptimizationResult:
         return await self.character_adapter.optimize_aigc_image_prompt(request)
+
+    async def optimize_aigc_prompt(
+        self,
+        request: AigcPromptOptimizeRequest,
+    ) -> AigcImagePromptOptimizationResult:
+        return await self.character_adapter.optimize_aigc_prompt(request)
 
     async def stream_video_prompt_optimization(
         self,

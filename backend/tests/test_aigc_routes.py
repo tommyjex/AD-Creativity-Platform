@@ -11,6 +11,7 @@ from backend.app.schemas import (
     AigcLayer,
     AigcLayerSet,
     AigcPipelineRun,
+    AigcPipelineDefinition,
     AigcPipelineRunNode,
     AigcPipelineRunStatus,
     AigcPipelineTaskAssetReference,
@@ -183,27 +184,125 @@ def upload_image(client: TestClient) -> dict:
     return response.json()
 
 
-def test_node_registry_exposes_all_schema_version_one_nodes(
+def test_node_registry_exposes_only_schema_version_two_nodes(
     aigc_client: TestClient,
 ) -> None:
     response = aigc_client.get("/api/aigc/node-registry")
 
     assert response.status_code == 200
+    assert response.json()["schema_version"] == 2
     assert [item["type"] for item in response.json()["nodes"]] == [
-        "text_input",
-        "image_input",
-        "video_input",
-        "audio_input",
+        "text",
+        "image",
+        "video",
+        "audio",
         "llm",
         "text_to_image",
         "image_to_image",
         "video_generation",
+        "video_enhancement",
+        "video_face_blur",
         "layer_canvas",
         "layer_composite",
-        "text_output",
-        "image_output",
-        "video_output",
+        "multi_track_edit",
+        "json_parser",
     ]
+
+
+def test_pipeline_api_round_trip_and_defaults_are_canonical_v2(
+    aigc_client: TestClient,
+) -> None:
+    created = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={"name": "空白 v2 画布"},
+    )
+
+    assert created.status_code == 201
+    pipeline = created.json()
+    assert pipeline["definition"] == {
+        "schemaVersion": 2,
+        "nodes": [],
+        "edges": [],
+        "viewport": {"x": 0.0, "y": 0.0, "zoom": 1.0},
+    }
+    readback = aigc_client.get(f"/api/aigc/pipelines/{pipeline['id']}")
+    assert readback.status_code == 200
+    assert readback.json()["definition"] == pipeline["definition"]
+
+
+def test_v1_pipeline_save_upgrades_and_template_instance_remains_v2(
+    aigc_client: TestClient,
+) -> None:
+    created = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={"name": "旧画布升级", "definition": definition()},
+    )
+
+    assert created.status_code == 201
+    pipeline = created.json()
+    assert pipeline["definition"]["schemaVersion"] == 2
+    assert [node["type"] for node in pipeline["definition"]["nodes"]] == [
+        "text",
+        "text_to_image",
+    ]
+
+    saved_template = aigc_client.post(
+        f"/api/aigc/pipelines/{pipeline['id']}/templates",
+        json={"name": "升级模板"},
+    )
+    assert saved_template.status_code == 201
+    template = saved_template.json()
+    assert template["definition"]["schemaVersion"] == 2
+
+    instantiated = aigc_client.post(
+        f"/api/aigc/templates/{template['id']}/instantiate",
+        json={},
+    )
+    assert instantiated.status_code == 201
+    assert instantiated.json()["definition"] == template["definition"]
+
+
+def test_historical_v1_run_snapshot_is_returned_without_rewrite(
+    aigc_client_and_repository: tuple[
+        TestClient,
+        InMemoryRepository | MySQLRepository,
+    ],
+) -> None:
+    aigc_client, repository = aigc_client_and_repository
+    pipeline = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={"name": "历史快照", "definition": definition()},
+    ).json()
+    legacy_snapshot = AigcPipelineDefinition.model_validate(definition())
+    run = repository.create_aigc_run(
+        AigcPipelineRun(
+            pipeline_id=pipeline["id"],
+            run_number=1,
+            pipeline_revision=0,
+            mode="full",
+            definition_snapshot=legacy_snapshot,
+        ),
+        idempotency_key="historical-v1-snapshot",
+        nodes=[
+            AigcPipelineRunNode(
+                node_id=node.id,
+                included_in_plan=False,
+            )
+            for node in legacy_snapshot.nodes
+        ],
+    )
+
+    response = aigc_client.get(f"/api/aigc/runs/{run.run.id}")
+
+    assert response.status_code == 200
+    snapshot = response.json()["run"]["definition_snapshot"]
+    assert snapshot["schemaVersion"] == 1
+    assert [node["type"] for node in snapshot["nodes"]] == [
+        "text_input",
+        "text_to_image",
+    ]
+    persisted = repository.get_aigc_run(run.run.id)
+    assert persisted.run.definition_snapshot == legacy_snapshot
 
 
 @pytest.mark.parametrize(
@@ -406,16 +505,24 @@ def test_prompt_optimization_preserves_reference_cardinality(
     response = aigc_client.post(
         "/api/aigc/prompts/optimize",
         json={
+            "target_node_id": "image-model",
+            "target_type": "image_to_image",
+            "target_config": {
+                "model": "doubao-seedream-5-0-pro-260628",
+                "operation": "image_to_image",
+                "aspect_ratio": "1:1",
+                "size": "2K",
+                "reference_image_count": 2,
+            },
+            "optimization_direction": "",
             "text": "红色包装产品主图",
             "reference_instructions": ["保留商标位置", "使用背景色调"],
-            "generation_modes": ["image_to_image"],
-            "reference_image_count": 2,
         },
     )
 
     assert response.status_code == 200
     payload = response.json()
-    assert "主体明确" in payload["optimized_text"]
+    assert "明确编辑对象" in payload["optimized_text"]
     assert len(payload["optimized_reference_instructions"]) == 2
     assert all(
         "<bbox>" not in value
@@ -426,16 +533,56 @@ def test_prompt_optimization_preserves_reference_cardinality(
     )
 
 
+def test_prompt_optimization_supports_llm_and_rejects_legacy_payload(
+    aigc_client: TestClient,
+) -> None:
+    response = aigc_client.post(
+        "/api/aigc/prompts/optimize",
+        json={
+            "target_node_id": "llm-model",
+            "target_type": "llm",
+            "target_config": {
+                "model": "doubao-seed-evolving",
+                "system_prompt": "只输出 JSON",
+            },
+            "optimization_direction": "强化输出结构",
+            "text": "分析广告素材",
+            "reference_instructions": [],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["optimized_reference_instructions"] == []
+    assert "任务要求" in response.json()["optimized_text"]
+
+    legacy = aigc_client.post(
+        "/api/aigc/prompts/optimize",
+        json={
+            "text": "产品图",
+            "reference_instructions": [],
+            "generation_modes": ["text_to_image"],
+            "reference_image_count": 0,
+        },
+    )
+    assert legacy.status_code == 422
+
+
 def test_prompt_optimization_rejects_empty_content(
     aigc_client: TestClient,
 ) -> None:
     response = aigc_client.post(
         "/api/aigc/prompts/optimize",
         json={
+            "target_node_id": "image-model",
+            "target_type": "text_to_image",
+            "target_config": {
+                "model": "doubao-seedream-5-0-pro-260628",
+                "aspect_ratio": "1:1",
+                "size": "2K",
+                "reference_image_count": 0,
+            },
             "text": " ",
             "reference_instructions": [""],
-            "generation_modes": ["text_to_image"],
-            "reference_image_count": 0,
         },
     )
 
@@ -470,14 +617,15 @@ def test_template_instance_is_isolated_and_template_assets_are_scrubbed(
     )
     assert create_response.status_code == 201
     template = create_response.json()
+    assert template["definition"]["schemaVersion"] == 2
     image_node = next(
-        node for node in template["definition"]["nodes"] if node["type"] == "image_input"
+        node for node in template["definition"]["nodes"] if node["type"] == "image"
     )
     assert image_node["config"]["asset_id"] is None
     assert image_node["config"]["bbox"] is None
     assert image_node["config"]["bbox_asset_id"] is None
     prompt_node = next(
-        node for node in template["definition"]["nodes"] if node["type"] == "text_input"
+        node for node in template["definition"]["nodes"] if node["type"] == "text"
     )
     assert prompt_node["config"]["bbox_references"] == []
 
@@ -489,6 +637,7 @@ def test_template_instance_is_isolated_and_template_assets_are_scrubbed(
     pipeline = instantiate_response.json()
     assert pipeline["source_template_id"] == template["id"]
     assert pipeline["source_template_revision"] == 0
+    assert pipeline["definition"]["schemaVersion"] == 2
 
     updated_definition = definition(text="模板已更新")
     update_response = aigc_client.put(
@@ -507,7 +656,7 @@ def test_template_instance_is_isolated_and_template_assets_are_scrubbed(
     prompt_node = next(
         node
         for node in saved_pipeline["definition"]["nodes"]
-        if node["type"] == "text_input"
+        if node["type"] == "text"
     )
     assert prompt_node["config"]["text"] == "初始提示词"
 
@@ -1021,6 +1170,34 @@ def test_aigc_video_and_audio_upload_validate_type_and_mark_origin(
     assert mismatch.status_code == 422
 
 
+def test_aigc_subtitle_upload_validates_srt_and_marks_origin(
+    aigc_client: TestClient,
+) -> None:
+    response = aigc_client.post(
+        "/api/aigc/assets/subtitles",
+        params={"filename": "captions.srt", "mime_type": "application/x-subrip"},
+        content=(
+            b"1\n00:00:00,000 --> 00:00:02,000\n"
+            b"Launch day\n"
+        ),
+        headers={"content-type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["type"] == "subtitle"
+    assert response.json()["mime_type"] == "application/x-subrip"
+    assert response.json()["metadata"]["origin"] == "aigc"
+    assert response.json()["metadata"]["aigc_role"] == "input"
+
+    invalid = aigc_client.post(
+        "/api/aigc/assets/subtitles",
+        params={"filename": "captions.srt", "mime_type": "text/plain"},
+        content=b"not an srt",
+        headers={"content-type": "application/octet-stream"},
+    )
+    assert invalid.status_code == 422
+
+
 def test_template_canonicalization_scrubs_all_media_input_assets(
     aigc_client: TestClient,
 ) -> None:
@@ -1041,15 +1218,15 @@ def test_template_canonicalization_scrubs_all_media_input_assets(
     media_nodes = {
         node["type"]: node
         for node in template["definition"]["nodes"]
-        if node["type"] in {"image_input", "video_input", "audio_input"}
+        if node["type"] in {"image", "video", "audio"}
     }
     assert {
         node_type: node["config"]["asset_id"]
         for node_type, node in media_nodes.items()
     } == {
-        "image_input": None,
-        "video_input": None,
-        "audio_input": None,
+        "image": None,
+        "video": None,
+        "audio": None,
     }
 
     updated = aigc_client.put(
@@ -1067,7 +1244,7 @@ def test_template_canonicalization_scrubs_all_media_input_assets(
     assert all(
         node["config"]["asset_id"] is None
         for node in updated.json()["definition"]["nodes"]
-        if node["type"] in {"video_input", "audio_input"}
+        if node["type"] in {"video", "audio"}
     )
 
     instantiated = aigc_client.post(
@@ -1078,7 +1255,7 @@ def test_template_canonicalization_scrubs_all_media_input_assets(
     assert all(
         node["config"]["asset_id"] is None
         for node in instantiated.json()["definition"]["nodes"]
-        if node["type"] in {"video_input", "audio_input"}
+        if node["type"] in {"video", "audio"}
     )
 
 

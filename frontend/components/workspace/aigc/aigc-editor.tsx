@@ -14,6 +14,7 @@ import {
 } from "@xyflow/react";
 import type { Route } from "next";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   AudioLines,
@@ -26,14 +27,12 @@ import {
   LoaderCircle,
   PanelLeft,
   PanelRight,
+  PanelRightClose,
   Play,
-  Redo2,
   RotateCcw,
-  Save,
   Settings2,
   Sparkles,
   Type,
-  Undo2,
   Video,
   Upload
 } from "lucide-react";
@@ -42,7 +41,9 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useSyncExternalStore,
   useState
 } from "react";
@@ -50,14 +51,18 @@ import {
   AigcFlowNodeCard,
   type AigcFlowNode
 } from "@/components/workspace/aigc/aigc-flow-node";
+import { AigcImageDimensionsField } from "@/components/workspace/aigc/aigc-image-dimensions-field";
 import { AigcMediaAssetDialog } from "@/components/workspace/aigc/aigc-media-asset-dialog";
 import { AigcPromptEditor } from "@/components/workspace/aigc/aigc-prompt-editor";
 import {
-  AigcLayerPreviewRunProvider,
   AigcRunActionsProvider,
   AigcRunProvider
 } from "@/components/workspace/aigc/aigc-run-context";
-import { AigcVideoPlayer } from "@/components/workspace/aigc/aigc-video-player";
+import {
+  AigcVideoPlayer,
+  formatVideoDuration
+} from "@/components/workspace/aigc/aigc-video-player";
+import { AigcAudioPlayer } from "@/components/workspace/aigc/aigc-audio-player";
 import {
   AigcEditorStoreProvider,
   useAigcEditorStore,
@@ -82,10 +87,38 @@ import {
   getUserFacingErrorMessage,
   isApiError
 } from "@/lib/api-client";
-import { AIGC_NODE_REGISTRY, AIGC_NODE_REGISTRY_BY_TYPE } from "@/lib/aigc/node-registry";
-import type { AigcEditorStore } from "@/lib/aigc/editor-store";
-import { connectionBreaksBboxReferences } from "@/lib/aigc/bbox-references";
 import {
+  AutosaveCoordinator,
+  type AutosaveState
+} from "@/lib/aigc/autosave-coordinator";
+import {
+  AIGC_EDITOR_NODE_REGISTRY,
+  AIGC_NODE_REGISTRY_BY_TYPE,
+  isAigcExecutionNodeType
+} from "@/lib/aigc/node-registry";
+import {
+  mergeAigcServerRevision,
+  serializeAigcEditorDefinition,
+  type AigcEditorSnapshot,
+  type AigcEditorStore
+} from "@/lib/aigc/editor-store";
+import {
+  connectionValidationFeedback,
+  getAigcConnectionValidationError
+} from "@/lib/aigc/connection-validation";
+import {
+  jsonParserErrorMessage,
+  jsonParserItemCount,
+  jsonPathInputFeedback,
+  managedTextSource
+} from "@/lib/aigc/json-parser-ui";
+export {
+  connectionValidationFeedback,
+  getAigcConnectionValidationError,
+  isValidAigcConnection
+} from "@/lib/aigc/connection-validation";
+import {
+  getAigcAudioDownload,
   getAigcImageDownload,
   getAigcVideoDownload
 } from "@/lib/aigc/download";
@@ -99,42 +132,69 @@ import {
 } from "@/lib/aigc/media-validation";
 import { getAigcModalityColors } from "@/lib/aigc/modality-colors";
 import {
+  aigcNodeBaseDisplayName,
+  deriveAigcNodeDisplayNames
+} from "@/lib/aigc/node-display-name";
+import {
   isAigcVideoResult,
+  projectAigcEffectiveText,
   projectAigcLayerCompositeResult,
+  projectAigcModalityRunResult,
   projectAigcVideoResult
 } from "@/lib/aigc/result-projection";
 import {
   isSeedreamImageEdgeIncompatible,
-  isSeedreamImageInputActive,
-  isSeedreamImageOutputActive,
-  seedreamImageInputLimit,
-  seedreamImageTitle,
   validateLayerDecompositionAssets,
   validateSeedreamImageDefinition
 } from "@/lib/aigc/seedream-image";
 import {
   isVideoEdgeIncompatible,
-  isVideoPortActive,
   seedancePromptLengthWarning,
   validateVideoGenerationAssets,
   validateVideoGenerationDefinition,
-  videoInputLimit
 } from "@/lib/aigc/video-generation";
 import {
+  normalizeVideoEnhancementConfig,
+  VIDEO_ENHANCEMENT_BIT_DEPTHS,
+  VIDEO_ENHANCEMENT_BITRATE_LEVELS,
+  VIDEO_ENHANCEMENT_BITRATE_RANGE,
+  VIDEO_ENHANCEMENT_FPS_RANGE,
+  VIDEO_ENHANCEMENT_RESOLUTIONS,
+  VIDEO_ENHANCEMENT_RESOLUTION_LIMIT_RANGE,
+  VIDEO_ENHANCEMENT_SCENES,
+  VIDEO_ENHANCEMENT_STYLES,
+  VIDEO_ENHANCEMENT_TOOL_VERSIONS,
+  type VideoEnhancementConfigCandidate
+} from "@/lib/aigc/video-enhancement";
+import {
+  validateVideoFaceBlurDefinition,
+  VIDEO_FACE_BLUR_MASK_MODES,
+  VIDEO_FACE_BLUR_MASK_STRENGTHS,
+  videoFaceBlurModeLabel,
+  videoFaceBlurStrengthLabel
+} from "@/lib/aigc/video-face-blur";
+import {
+  aigcQueryKeys,
+  type AigcRunDetailQueryState,
   isAigcRunActive,
-  layerPreviewFallbackRunId,
-  newestActiveOrRecentRun,
-  useAigcRun,
+  useAigcRunDetails,
   useAigcRuns,
   useCancelAigcRun,
   useCreateAigcRun,
   useRetryAigcNode
 } from "@/lib/aigc/queries";
 import {
+  createAigcRunProjection,
+  getConnectedAigcNodeIds,
+  selectAigcProjectionRunIds
+} from "@/lib/aigc/run-scope";
+import {
   formatAigcDuration,
   formatAigcEndTime,
   formatAigcLogTime,
+  getAigcCacheReuse,
   getAigcNodeLogError,
+  getAigcProviderTrace,
   getAigcRunLogError,
   latestRelevantAttempt,
   type AigcLogError
@@ -142,13 +202,19 @@ import {
 import type {
   AigcEdge,
   AigcImageOperation,
-  AigcNode,
-  AigcNodeType,
+  AigcV2NodeType,
   AigcPipeline,
+  AigcPipelineDefinition,
+  AigcPipelineDefinitionV2,
   AigcPipelineRun,
   AigcPipelineRunDetail,
   AigcPipelineTemplate,
-  AigcVideoGenerationMode
+  AigcResultAsset,
+  AigcV2Node,
+  AigcVideoGenerationMode,
+  ImageModelConfig,
+  VideoEnhancementConfig,
+  VideoFaceBlurConfig
 } from "@/lib/aigc/types";
 import type { Asset, ReferenceAssetKind } from "@/lib/api-types";
 import { getSafeAssetContentUrl } from "@/lib/asset-display";
@@ -167,11 +233,18 @@ import {
 import { cn } from "@/lib/utils";
 
 const AIGC_NODE_TYPES = Object.fromEntries(
-  AIGC_NODE_REGISTRY.map((item) => [item.type, AigcFlowNodeCard])
+  AIGC_EDITOR_NODE_REGISTRY.map((item) => [item.type, AigcFlowNodeCard])
 ) as NodeTypes;
 
 type EditorEntity = AigcPipeline | AigcPipelineTemplate;
 type InspectorTab = "config" | "result" | "run";
+type EditorPanel = "nodes" | "inspector" | null;
+const FULL_RUN_PENDING = "__full__";
+interface AigcEditorDraft {
+  definition: AigcPipelineDefinitionV2;
+  description: string;
+  name: string;
+}
 
 export function AigcEditor({
   allowExecution = true,
@@ -217,17 +290,16 @@ function AigcEditorContent({
   entity: EditorEntity;
   mode: "pipeline" | "template";
 }) {
+  const router = useRouter();
   const editorStore = useAigcEditorStoreApi();
+  const queryClient = useQueryClient();
   const definition = useAigcEditorStore((state) => state.definition);
-  const name = useAigcEditorStore((state) => state.name);
-  const description = useAigcEditorStore((state) => state.description);
-  const revision = useAigcEditorStore((state) => state.revision);
-  const dirty = useAigcEditorStore((state) => state.dirty);
-  const past = useAigcEditorStore((state) => state.past);
-  const future = useAigcEditorStore((state) => state.future);
   const selectedNodeId = useAigcEditorStore((state) => state.selectedNodeId);
   const addNode = useAigcEditorStore((state) => state.addNode);
   const connect = useAigcEditorStore((state) => state.connect);
+  const applyServerRevision = useAigcEditorStore(
+    (state) => state.applyServerRevision
+  );
   const markSaved = useAigcEditorStore((state) => state.markSaved);
   const moveNode = useAigcEditorStore((state) => state.moveNode);
   const removeEdge = useAigcEditorStore((state) => state.removeEdge);
@@ -236,94 +308,338 @@ function AigcEditorContent({
   const setDescription = useAigcEditorStore((state) => state.setDescription);
   const setName = useAigcEditorStore((state) => state.setName);
   const setViewport = useAigcEditorStore((state) => state.setViewport);
-  const undo = useAigcEditorStore((state) => state.undo);
-  const redo = useAigcEditorStore((state) => state.redo);
   const [nodes, setNodes] = useState<AigcFlowNode[]>(() =>
-    entity.definition.nodes.map(toFlowNode)
+    editorStore.getState().definition.nodes.map(toFlowNode)
   );
-  const [edges, setEdges] = useState<Edge[]>(() =>
-    entity.definition.edges.map((edge) =>
-      toFlowEdge(edge, entity.definition.nodes, entity.definition.edges)
-    )
+  const [edges, setEdges] = useState<Edge[]>(() => {
+    const initialDefinition = editorStore.getState().definition;
+    return initialDefinition.edges.map((edge) =>
+      toFlowEdge(edge, initialDefinition.nodes, initialDefinition.edges)
+    );
+  });
+  const [autosaveCoordinator] = useState(
+    () =>
+      new AutosaveCoordinator<AigcEditorDraft>({
+        initialSnapshot: editorStore.getState().dirty
+          ? editorDraftFromEntity(entity)
+          : editorDraftFromState(editorStore.getState()),
+        initialRevision: entity.revision,
+        equals: editorDraftsEqual,
+        getErrorMessage: autosaveErrorMessage,
+        save: async ({ expectedRevision, snapshot }) => {
+          const saved =
+            mode === "template"
+              ? await apiClient.updateAigcTemplate(entity.id, {
+                  expected_revision: expectedRevision,
+                  name: snapshot.name.trim(),
+                  description: snapshot.description.trim(),
+                  definition: serializeAigcEditorDefinition(snapshot.definition)
+                })
+              : await apiClient.updateAigcPipeline(entity.id, {
+                  expected_revision: expectedRevision,
+                  name: snapshot.name.trim(),
+                  description: snapshot.description.trim(),
+                  definition: serializeAigcEditorDefinition(snapshot.definition)
+                });
+          return { revision: saved.revision };
+        },
+        validate: validateEditorDraft
+      })
+  );
+  const subscribeToAutosave = useCallback(
+    (listener: () => void) => autosaveCoordinator.subscribe(listener),
+    [autosaveCoordinator]
+  );
+  const getAutosaveState = useCallback(
+    () => autosaveCoordinator.getState(),
+    [autosaveCoordinator]
+  );
+  const autosaveState = useSyncExternalStore(
+    subscribeToAutosave,
+    getAutosaveState,
+    getAutosaveState
   );
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("config");
-  const [isSaving, setIsSaving] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState(entity.name);
   const [templateError, setTemplateError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [mobilePanel, setMobilePanel] = useState<"nodes" | "inspector" | null>(
-    null
+  const [pendingRunStarts, setPendingRunStarts] = useState<Set<string>>(
+    () => new Set()
   );
+  const pendingRunStartsRef = useRef(pendingRunStarts);
+  const [openPanel, setOpenPanel] = useState<EditorPanel>(null);
   const isDesktop = useDesktopLayout();
   const runsQuery = useAigcRuns(entity.id, undefined, mode === "pipeline");
+  const pipelineQuery = useQuery({
+    enabled: mode === "pipeline",
+    initialData: mode === "pipeline" ? (entity as AigcPipeline) : undefined,
+    queryFn: () => apiClient.getAigcPipeline(entity.id),
+    queryKey: aigcQueryKeys.pipeline(entity.id),
+    staleTime: Number.POSITIVE_INFINITY
+  });
   const validationAssets = useQuery({
     enabled: mode === "pipeline",
     queryKey: ["aigc", "media-validation-assets"],
     queryFn: loadAigcMediaAssets
   });
-  const preferredRun = newestActiveOrRecentRun(runsQuery.data?.items ?? []);
-  const visibleRunId = selectedRunId ?? preferredRun?.id ?? null;
-  const runQuery = useAigcRun(mode === "pipeline" ? visibleRunId : null);
+  const runs = useMemo(
+    () => runsQuery.data?.items ?? [],
+    [runsQuery.data?.items]
+  );
+  const projectionRunIds = useMemo(
+    () =>
+      mode === "pipeline"
+        ? selectAigcProjectionRunIds(definition, runs, selectedRunId)
+        : [],
+    [definition, mode, runs, selectedRunId]
+  );
+  const projectionRunSummaries = useMemo(() => {
+    const runsById = new Map(runs.map((run) => [run.id, run]));
+    return projectionRunIds.flatMap((runId) => {
+      const run = runsById.get(runId);
+      return run ? [run] : [];
+    });
+  }, [projectionRunIds, runs]);
+  const runDetailQueries = useAigcRunDetails(projectionRunSummaries);
+  const runDetails = runDetailQueries.details;
+  const projectionRuns = useMemo(() => {
+    const byId = new Map(
+      runs.map((run) => [run.id, runDetails.get(run.id)?.run ?? run])
+    );
+    for (const detail of runDetails.values()) {
+      if (!byId.has(detail.run.id)) byId.set(detail.run.id, detail.run);
+    }
+    return [...byId.values()];
+  }, [runDetails, runs]);
+  const runProjection = useMemo(
+    () =>
+      createAigcRunProjection(
+        definition,
+        projectionRuns,
+        runDetails,
+        selectedRunId
+      ),
+    [definition, projectionRuns, runDetails, selectedRunId]
+  );
+  const selectedPanelRunId = selectedRunId ?? runs[0]?.id ?? null;
+  const selectedRunDetail =
+    selectedPanelRunId === null
+      ? undefined
+      : runDetails.get(selectedPanelRunId);
+  const selectedRunDetailState =
+    selectedPanelRunId === null
+      ? undefined
+      : runDetailQueries.states.get(selectedPanelRunId);
   const createRun = useCreateAigcRun(entity.id);
   const retryNode = useRetryAigcNode(entity.id);
   const cancelRun = useCancelAigcRun(entity.id);
-  const runDetail = runQuery.data;
-  const previewFallbackRunId = layerPreviewFallbackRunId(
-    runsQuery.data?.items ?? [],
-    runDetail
-  );
-  const previewRunQuery = useAigcRun(
-    mode === "pipeline" ? previewFallbackRunId : null
-  );
+  const refreshedParserRunsRef = useRef(new Set<string>());
 
-  useEffect(
-    () =>
-      editorStore.subscribe((state, previous) => {
-        if (state.definition.nodes !== previous.definition.nodes) {
-          setNodes(state.definition.nodes.map(toFlowNode));
-          setEdges(
-            state.definition.edges.map((edge) =>
-              toFlowEdge(edge, state.definition.nodes, state.definition.edges)
-            )
-          );
-        }
-        if (state.definition.edges !== previous.definition.edges) {
-          setEdges(
-            state.definition.edges.map((edge) =>
-              toFlowEdge(edge, state.definition.nodes, state.definition.edges)
-            )
-          );
-        }
-      }),
-    [editorStore]
-  );
+  useEffect(() => {
+    autosaveCoordinator.activate();
+    autosaveCoordinator.update(editorDraftFromState(editorStore.getState()));
+    return editorStore.subscribe((state, previous) => {
+      if (state.definition.nodes !== previous.definition.nodes) {
+        setNodes(state.definition.nodes.map(toFlowNode));
+        setEdges(
+          state.definition.edges.map((edge) =>
+            toFlowEdge(edge, state.definition.nodes, state.definition.edges)
+          )
+        );
+      }
+      if (state.definition.edges !== previous.definition.edges) {
+        setEdges(
+          state.definition.edges.map((edge) =>
+            toFlowEdge(edge, state.definition.nodes, state.definition.edges)
+          )
+        );
+      }
+      autosaveCoordinator.update(editorDraftFromState(state));
+    });
+  }, [autosaveCoordinator, editorStore]);
+
+  useEffect(() => {
+    if (mode !== "pipeline") return;
+    const parserNodeIds = new Set(
+      definition.nodes.flatMap((node) =>
+        node.type === "json_parser" ? [node.id] : []
+      )
+    );
+    const completedParserRunIds = [...runDetails.values()].flatMap((detail) =>
+      detail.nodes.some(
+        (node) =>
+          parserNodeIds.has(node.node_id) &&
+          (node.status === "succeeded" || node.status === "reused")
+      )
+        ? [detail.run.id]
+        : []
+    );
+    const unseen = completedParserRunIds.filter(
+      (runId) => !refreshedParserRunsRef.current.has(runId)
+    );
+    if (unseen.length === 0) return;
+    unseen.forEach((runId) => refreshedParserRunsRef.current.add(runId));
+    void queryClient.invalidateQueries({
+      queryKey: aigcQueryKeys.pipeline(entity.id)
+    });
+  }, [definition.nodes, entity.id, mode, queryClient, runDetails]);
+
+  useEffect(() => {
+    const server = pipelineQuery.data;
+    if (mode !== "pipeline" || !server) return;
+    void autosaveCoordinator
+      .rebase({
+        merge: mergeAigcServerRevision,
+        revision: server.revision,
+        snapshot: editorDraftFromEntity(server)
+      })
+      .then((result) => {
+        if (!result.applied) return;
+        applyServerRevision(
+          {
+            definition: serializeAigcEditorDefinition(server.definition),
+            description: server.description,
+            name: server.name,
+            revision: result.revision
+          },
+          {
+            draft: structuredClone(
+              result.snapshot
+            ) as AigcEditorSnapshot,
+            dirty: result.dirty
+          }
+        );
+      })
+      .catch((error: unknown) => {
+        setFeedback(
+          `Pipeline 刷新失败：${getUserFacingErrorMessage(error)}`
+        );
+      });
+  }, [
+    applyServerRevision,
+    autosaveCoordinator,
+    mode,
+    pipelineQuery.data
+  ]);
+
+  useEffect(() => {
+    if (
+      !autosaveState.dirty &&
+      editorStore.getState().revision !== autosaveState.revision
+    ) {
+      markSaved(autosaveState.revision);
+    }
+  }, [autosaveState.dirty, autosaveState.revision, editorStore, markSaved]);
+
+  useEffect(() => {
+    autosaveCoordinator.activate();
+    return () => autosaveCoordinator.dispose();
+  }, [autosaveCoordinator]);
 
   useEffect(() => {
     function warnBeforeUnload(event: BeforeUnloadEvent) {
-      if (!editorStore.getState().dirty) return;
+      if (!autosaveCoordinator.getState().dirty) return;
       event.preventDefault();
       event.returnValue = "";
     }
     window.addEventListener("beforeunload", warnBeforeUnload);
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
-  }, [editorStore]);
+  }, [autosaveCoordinator]);
 
   const selectedNode = definition.nodes.find(
     (node) => node.id === selectedNodeId
   ) ?? null;
+  const selectedNodeRunDetail = selectedNode
+    ? runProjection.displayRunForNode(selectedNode.id) ?? undefined
+    : selectedRunDetail;
+  const selectedNodeIsActive = selectedNode
+    ? runProjection.isNodeActive(selectedNode.id)
+    : false;
+  const runListUnavailable =
+    mode === "pipeline" && !runsQuery.isSuccess;
+
+  const submissionPendingForNode = useCallback(
+    (
+      nodeId: string,
+      pendingStarts: ReadonlySet<string> = pendingRunStarts
+    ): boolean => {
+      if (pendingStarts.has(FULL_RUN_PENDING)) return true;
+      const nodeScope = getConnectedAigcNodeIds(definition, nodeId);
+      return [...pendingStarts].some((startNodeId) =>
+        nodeScope.has(startNodeId)
+      );
+    },
+    [definition, pendingRunStarts]
+  );
+
+  const pendingForNode = useCallback(
+    (nodeId: string): boolean =>
+      runListUnavailable ||
+      runProjection.isNodeActive(nodeId) ||
+      submissionPendingForNode(nodeId),
+    [runListUnavailable, runProjection, submissionPendingForNode]
+  );
+
+  function updatePendingRunStart(key: string, pending: boolean) {
+    const next = new Set(pendingRunStartsRef.current);
+    if (pending) next.add(key);
+    else next.delete(key);
+    pendingRunStartsRef.current = next;
+    setPendingRunStarts(next);
+  }
+
+  const hasPendingRun = pendingRunStarts.size > 0;
+  const fullExecutionInProgress =
+    runProjection.hasAnyActiveRun || hasPendingRun;
+  const fullExecutionBlocked =
+    runListUnavailable || fullExecutionInProgress;
+  const selectedNodePending = selectedNode
+    ? runListUnavailable || submissionPendingForNode(selectedNode.id)
+    : false;
+
+  const openInspector = useCallback((tab: InspectorTab) => {
+    setInspectorTab(tab);
+    setOpenPanel("inspector");
+  }, [setInspectorTab, setOpenPanel]);
+
+  const selectNodeAndInspect = useCallback(
+    (nodeId: string) => {
+      selectNode(nodeId);
+      openInspector("config");
+    },
+    [openInspector, selectNode]
+  );
+
+  const dismissInspectorFromPane = useCallback(() => {
+    selectNode(null);
+    setOpenPanel(null);
+  }, [selectNode, setOpenPanel]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    function clearNarrowNodePanel(event: MediaQueryListEvent) {
+      if (event.matches) {
+        setOpenPanel((current) => (current === "nodes" ? null : current));
+      }
+    }
+    media.addEventListener("change", clearNarrowNodePanel);
+    return () => media.removeEventListener("change", clearNarrowNodePanel);
+  }, []);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<AigcFlowNode>[]) => {
       for (const change of changes) {
         if (change.type === "remove") removeNode(change.id);
-        if (change.type === "select" && change.selected) selectNode(change.id);
+        if (change.type === "select" && change.selected) {
+          selectNodeAndInspect(change.id);
+        }
       }
       setNodes((current) => applyNodeChanges(changes, current));
     },
-    [removeNode, selectNode]
+    [removeNode, selectNodeAndInspect]
   );
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
@@ -375,7 +691,8 @@ function AigcEditorContent({
         validationError === "bbox_reference_conflict" ||
         validationError === "input_not_allowed_for_mode" ||
         validationError === "output_not_allowed_for_mode" ||
-        validationError === "port_type_mismatch"
+        validationError === "port_type_mismatch" ||
+        validationError === "system_only_output"
       ) {
         setFeedback(
           connectionValidationFeedback(
@@ -390,44 +707,27 @@ function AigcEditorContent({
     [definition.edges, definition.nodes]
   );
 
-  async function save(): Promise<boolean> {
-    const state = editorStore.getState();
-    if (!state.name.trim()) return false;
-    const validationIssue = definitionValidationIssue(state.definition);
-    if (validationIssue) {
-      setFeedback(validationIssue);
-      return false;
+  async function flushLatestDraft(startNodeId?: string) {
+    const result = await autosaveCoordinator.flush(
+      startNodeId
+        ? {
+            validate: (draft) =>
+              validateEditorDraft(draft, startNodeId)
+          }
+        : undefined
+    );
+    if (!result.ok) {
+      setFeedback(result.message);
+      return result;
     }
-    setIsSaving(true);
     setFeedback(null);
-    try {
-      const saved =
-        mode === "template"
-          ? await apiClient.updateAigcTemplate(entity.id, {
-              expected_revision: state.revision,
-              name: state.name.trim(),
-              description: state.description.trim(),
-              definition: structuredClone(state.definition)
-            })
-          : await apiClient.updateAigcPipeline(entity.id, {
-              expected_revision: state.revision,
-              name: state.name.trim(),
-              description: state.description.trim(),
-              definition: structuredClone(state.definition)
-            });
-      markSaved(saved.revision);
-      setFeedback(`已保存 Revision ${saved.revision}`);
-      return true;
-    } catch (error) {
-      setFeedback(
-        isApiError(error) && error.status === 409
-          ? "保存冲突：服务端已有更新，请刷新后重新编辑。"
-          : getUserFacingErrorMessage(error)
-      );
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
+    return result;
+  }
+
+  async function navigateAfterFlush(href: Route) {
+    const result = await flushLatestDraft();
+    if (!result.ok) return;
+    router.push(href);
   }
 
   async function saveAsTemplate() {
@@ -438,8 +738,9 @@ function AigcEditorContent({
       return;
     }
     setTemplateError(null);
-    if (editorStore.getState().dirty && !(await save())) {
-      setTemplateError("画布保存失败，请解决保存问题后重试。");
+    const flushResult = await flushLatestDraft();
+    if (!flushResult.ok) {
+      setTemplateError(flushResult.message);
       return;
     }
     setIsSavingTemplate(true);
@@ -458,93 +759,111 @@ function AigcEditorContent({
     }
   }
 
-  async function execute(
-    startNodeId?: string,
-    options: { saveDirty?: boolean } = {}
-  ) {
-    if (
-      !allowExecution ||
-      mode !== "pipeline" ||
-      isAigcRunActive(runDetail)
+  async function execute(startNodeId?: string) {
+    if (!allowExecution || mode !== "pipeline") return;
+    if (runListUnavailable) return;
+    if (startNodeId) {
+      if (
+        runProjection.isNodeActive(startNodeId) ||
+        submissionPendingForNode(
+          startNodeId,
+          pendingRunStartsRef.current
+        )
+      ) {
+        return;
+      }
+    } else if (
+      runProjection.hasAnyActiveRun ||
+      pendingRunStartsRef.current.size > 0
     ) {
       return;
     }
-    const validationIssue = definitionValidationIssue(
-      editorStore.getState().definition
-    );
-    if (validationIssue) {
-      setFeedback(validationIssue);
-      return;
-    }
-    const currentDefinition = editorStore.getState().definition;
-    let validationAssetData = validationAssets.data;
-    if (validationAssetData === undefined) {
-      const result = await validationAssets.refetch();
-      validationAssetData = result.data;
-      if (validationAssetData === undefined) {
-        setFeedback("媒体资产预检加载失败，请重试。");
+    const pendingKey = startNodeId ?? FULL_RUN_PENDING;
+    updatePendingRunStart(pendingKey, true);
+    try {
+      const currentDefinition = editorStore.getState().definition;
+      const validationDefinition = startNodeId
+        ? definitionForNodeScope(currentDefinition, startNodeId)
+        : currentDefinition;
+      const validationIssue = definitionValidationIssue(validationDefinition);
+      if (validationIssue) {
+        setFeedback(validationIssue);
         return;
       }
-    }
-    const assetValidationIssue = currentDefinition.nodes.flatMap<{
-      message: string;
-      nodeId: string;
-    }>((node) =>
-      node.type === "video_generation"
-        ? validateVideoGenerationAssets(
-            currentDefinition,
-            node.id,
-            validationAssetData
-          )
-        : node.type === "image_to_image"
-          ? validateLayerDecompositionAssets(
-              currentDefinition,
+      let validationAssetData = validationAssets.data;
+      if (validationAssetData === undefined) {
+        const result = await validationAssets.refetch();
+        validationAssetData = result.data;
+        if (validationAssetData === undefined) {
+          setFeedback("媒体资产预检加载失败，请重试。");
+          return;
+        }
+      }
+      const assetValidationIssue = validationDefinition.nodes.flatMap<{
+        message: string;
+        nodeId: string;
+      }>((node) =>
+        node.type === "video_generation"
+          ? validateVideoGenerationAssets(
+              validationDefinition,
               node.id,
               validationAssetData
             )
-          : []
-    )[0];
-    if (assetValidationIssue) {
-      setFeedback(
-        assetValidationIssue.nodeId &&
-          currentDefinition.nodes.find(
-            (node) =>
-              node.id === assetValidationIssue.nodeId &&
-              node.type === "image_to_image"
-          )
-          ? seedreamValidationFeedback(assetValidationIssue)
-          : videoValidationFeedback(assetValidationIssue)
-      );
-      return;
-    }
-    if (editorStore.getState().dirty) {
-      if (options.saveDirty === false) {
-        setFeedback("主画布有未保存修改，请先保存 Pipeline 后再从此节点继续。");
+          : node.type === "image_to_image"
+            ? validateLayerDecompositionAssets(
+                validationDefinition,
+                node.id,
+                validationAssetData
+              )
+            : []
+      )[0];
+      if (assetValidationIssue) {
+        setFeedback(
+          assetValidationIssue.nodeId &&
+            validationDefinition.nodes.find(
+              (node) =>
+                node.id === assetValidationIssue.nodeId &&
+                node.type === "image_to_image"
+            )
+            ? seedreamValidationFeedback(assetValidationIssue)
+            : videoValidationFeedback(assetValidationIssue)
+        );
         return;
       }
-      if (!(await save())) return;
-    }
-    setFeedback(null);
-    try {
+      const flushResult = await flushLatestDraft(startNodeId);
+      if (!flushResult.ok) return;
+      setFeedback(null);
       const detail = await createRun.mutateAsync({
-        expected_revision: editorStore.getState().revision,
+        expected_revision: flushResult.revision,
         mode: startNodeId ? "from_node" : "full",
         start_node_id: startNodeId ?? null
       });
       setSelectedRunId(detail.run.id);
-      setInspectorTab("run");
+      openInspector("run");
     } catch (error) {
       setFeedback(getUserFacingErrorMessage(error));
+    } finally {
+      updatePendingRunStart(pendingKey, false);
     }
   }
 
   async function retryFailedNode(runId: string, nodeId: string) {
+    if (
+      runListUnavailable ||
+      runProjection.isNodeActive(nodeId) ||
+      submissionPendingForNode(nodeId, pendingRunStartsRef.current)
+    ) {
+      return;
+    }
+    updatePendingRunStart(nodeId, true);
     try {
       const detail = await retryNode.mutateAsync({ nodeId, runId });
       setSelectedRunId(detail.run.id);
-      setInspectorTab("run");
+      openInspector("run");
     } catch (error) {
       setFeedback(getUserFacingErrorMessage(error));
+    } finally {
+      updatePendingRunStart(nodeId, false);
     }
   }
 
@@ -556,86 +875,94 @@ function AigcEditorContent({
     }
   }
 
+  const workspaceRoute = `/workspace/aigc?view=${
+    mode === "pipeline" ? "pipelines" : "templates"
+  }` as Route;
+
   function leave(event: MouseEvent<HTMLAnchorElement>) {
-    if (dirty && !window.confirm("存在未保存的画布修改，确定离开吗？")) {
-      event.preventDefault();
-    }
+    event.preventDefault();
+    void navigateAfterFlush(workspaceRoute);
   }
 
+  function toggleDetails() {
+    if (openPanel === "inspector" && inspectorTab === "config") {
+      setOpenPanel(null);
+      return;
+    }
+    openInspector("config");
+  }
+
+  const continueFromNode = useLatestCallback(
+    (nodeId: string) => void execute(nodeId)
+  );
+  const openLayerEditor = useLatestCallback(
+    (href: string) => void navigateAfterFlush(href as Route)
+  );
+  const runActions = useMemo(
+    () => ({
+      continueFromNode,
+      openLayerEditor,
+      pendingForNode
+    }),
+    [continueFromNode, openLayerEditor, pendingForNode]
+  );
+
   return (
-    <main className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-background">
+    <main
+      className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-[#101318] text-[#e8eaed] [--accent-foreground:210_17%_92%] [--accent:218_11%_18%] [--background:220_20%_8%] [--border:218_12%_20%] [--card:220_13%_11%] [--foreground:210_17%_92%] [--input:218_12%_24%] [--muted-foreground:218_9%_60%] [--muted:220_11%_16%] [--secondary-foreground:210_17%_88%] [--secondary:218_11%_16%]"
+      data-testid="aigc-editor-shell"
+    >
       <header
-        className="flex shrink-0 flex-col gap-1 border-b border-border bg-card px-3 py-1 sm:h-14 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-0"
+        className="flex h-12 shrink-0 flex-row items-center border-b border-[#30353d] bg-[#171a1f] px-3"
         data-testid="aigc-editor-header"
       >
         <div
-          className="flex h-9 w-full min-w-0 items-center gap-2 sm:h-auto sm:flex-1"
+          className="flex shrink-0 items-center"
           data-testid="aigc-editor-title-row"
         >
-          <Button asChild size="icon" title="返回 AIGC 工作台" variant="ghost">
-            <Link href={"/workspace/aigc" as Route} onClick={leave}>
+          <Button
+            asChild
+            className="text-zinc-400 hover:bg-[#252a31] hover:text-white"
+            size="icon"
+            title="返回 AIGC 工作台"
+            variant="ghost"
+          >
+            <Link aria-label="返回" href={workspaceRoute} onClick={leave}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h1
-                className="min-w-0 flex-1 truncate text-sm font-semibold"
-                data-testid="aigc-editor-title"
-              >
-                {name}
-              </h1>
-              <Badge
-                className="shrink-0"
-                variant={mode === "template" ? "info" : "secondary"}
-              >
-                {mode === "template" ? "模板编辑" : `Revision ${revision}`}
-              </Badge>
-              {dirty ? (
-                <Badge className="shrink-0" variant="warning">
-                  未保存
-                </Badge>
-              ) : null}
-            </div>
-            <p className="hidden truncate text-[11px] text-muted-foreground sm:block">
-              {description || "暂无描述"}
-            </p>
-          </div>
+          <span
+            aria-live="polite"
+            className="sr-only"
+            data-testid="aigc-autosave-status"
+          >
+            {autosaveStatusText(autosaveState)}
+          </span>
         </div>
         <div
-          className="flex w-full shrink-0 items-center justify-end gap-1 sm:w-auto"
+          className="ml-auto flex shrink-0 items-center justify-end gap-1"
           data-testid="aigc-editor-actions"
         >
           <Button
-            aria-label="撤销"
-            data-testid="aigc-command-undo"
-            disabled={past.length === 0}
-            onClick={undo}
+            aria-label="详情"
+            aria-pressed={openPanel === "inspector" && inspectorTab === "config"}
+            className="text-zinc-400 hover:bg-[#252a31] hover:text-white"
+            data-testid="aigc-command-inspector"
+            onClick={toggleDetails}
             size="icon"
-            title="撤销"
+            title="详情"
             type="button"
             variant="ghost"
           >
-            <Undo2 className="h-4 w-4" />
-          </Button>
-          <Button
-            aria-label="重做"
-            data-testid="aigc-command-redo"
-            disabled={future.length === 0}
-            onClick={redo}
-            size="icon"
-            title="重做"
-            type="button"
-            variant="ghost"
-          >
-            <Redo2 className="h-4 w-4" />
+            <PanelRight className="h-4 w-4" />
           </Button>
           {mode === "pipeline" ? (
             <>
               <Button
                 aria-label="另存为模板"
+                className="text-zinc-300 hover:bg-[#252a31] hover:text-white"
                 data-testid="aigc-command-save-template"
-                disabled={isSaving || isSavingTemplate}
+                disabled={isSavingTemplate}
                 onClick={() => {
                   setTemplateName(editorStore.getState().name);
                   setTemplateError(null);
@@ -651,68 +978,46 @@ function AigcEditorContent({
                 ) : (
                   <Files className="h-4 w-4" />
                 )}
-                <span className="hidden sm:inline">另存为模板</span>
+                <span className="hidden xl:inline">另存为模板</span>
               </Button>
               <Button
-                aria-label={isAigcRunActive(runDetail) ? "运行中" : "执行"}
+                aria-label={fullExecutionInProgress ? "运行中" : "执行"}
                 data-testid="aigc-command-execute"
                 disabled={
                   !allowExecution ||
-                  createRun.isPending ||
-                  isAigcRunActive(runDetail) ||
+                  fullExecutionBlocked ||
                   !definition.nodes.some((node) =>
-                    [
-                      "llm",
-                      "text_to_image",
-                      "image_to_image",
-                      "video_generation"
-                    ].includes(node.type)
+                    isAigcExecutionNodeType(node.type)
                   )
                 }
                 onClick={() => void execute()}
                 size="sm"
-                title={isAigcRunActive(runDetail) ? "运行中" : "执行"}
-                variant="outline"
+                title={fullExecutionInProgress ? "运行中" : "执行"}
+                className="bg-blue-600 text-white hover:bg-blue-500"
               >
-                {createRun.isPending ? (
+                {hasPendingRun ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" />
                 ) : (
                   <Play className="h-4 w-4" />
                 )}
-                <span className="hidden sm:inline">
-                  {isAigcRunActive(runDetail) ? "运行中" : "执行"}
+                <span className="hidden xl:inline">
+                  {fullExecutionInProgress ? "运行中" : "执行"}
                 </span>
               </Button>
             </>
           ) : null}
-          <Button
-            aria-label="保存"
-            data-testid="aigc-command-save"
-            disabled={!dirty || isSaving || !name.trim()}
-            onClick={() => void save()}
-            size="sm"
-            title="保存"
-            type="button"
-          >
-            {isSaving ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">保存</span>
-          </Button>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
         {isDesktop ? <NodePalette onAdd={addNode} /> : null}
         <section className="relative min-w-0 flex-1">
-          {!isDesktop ? (
-            <div className="absolute left-3 top-3 z-30 flex gap-1 border border-border bg-card p-1 shadow-md">
+          {!isDesktop && openPanel !== "inspector" ? (
+            <div className="absolute left-3 top-3 z-30 flex gap-1 border border-[#30353d] bg-[#181b20] p-1 shadow-lg shadow-black/30">
               <Button
                 aria-label="打开节点面板"
                 onClick={() =>
-                  setMobilePanel((current) =>
+                  setOpenPanel((current) =>
                     current === "nodes" ? null : "nodes"
                   )
                 }
@@ -724,11 +1029,7 @@ function AigcEditorContent({
               </Button>
               <Button
                 aria-label="打开检查器"
-                onClick={() =>
-                  setMobilePanel((current) =>
-                    current === "inspector" ? null : "inspector"
-                  )
-                }
+                onClick={() => openInspector("config")}
                 size="icon"
                 type="button"
                 variant="ghost"
@@ -737,19 +1038,22 @@ function AigcEditorContent({
               </Button>
             </div>
           ) : null}
-          <AigcRunActionsProvider
-            value={{
-              continueFromNode: (nodeId) =>
-                void execute(nodeId, { saveDirty: false }),
-              pending:
-                createRun.isPending || isAigcRunActive(runDetail)
-            }}
-          >
-            <AigcRunProvider value={runDetail ?? null}>
-              <AigcLayerPreviewRunProvider
-                value={previewRunQuery.data ?? null}
-              >
-                <NodeCanvas<AigcFlowNode>
+          <AigcRunActionsProvider value={runActions}>
+            <AigcRunProvider value={runProjection}>
+              <NodeCanvas<AigcFlowNode>
+                  backgroundProps={{
+                    color: "#39404a",
+                    gap: 20,
+                    size: 1
+                  }}
+                  className="bg-[#101318]"
+                  controlsProps={{
+                    className:
+                      "overflow-hidden rounded-md border border-[#343a43] bg-[#20242a] text-zinc-300 shadow-lg shadow-black/40 [&>button]:border-[#343a43] [&>button]:bg-[#20242a] [&>button]:fill-zinc-300 [&>button:hover]:bg-[#2a3038]",
+                    orientation: "horizontal",
+                    position: "bottom-center",
+                    showInteractive: true
+                  }}
                   edges={edges}
                   nodeTypes={AIGC_NODE_TYPES}
                   nodes={nodes}
@@ -771,13 +1075,12 @@ function AigcEditorContent({
                     onConnect,
                     onEdgesChange,
                     onMoveEnd: (_, viewport: Viewport) => setViewport(viewport),
-                    onNodeClick: (_, node) => selectNode(node.id),
-                    onPaneClick: () => selectNode(null),
+                    onNodeClick: (_, node) => selectNodeAndInspect(node.id),
+                    onPaneClick: dismissInspectorFromPane,
                     snapGrid: [16, 16],
                     snapToGrid: true
                   }}
-                />
-              </AigcLayerPreviewRunProvider>
+              />
             </AigcRunProvider>
           </AigcRunActionsProvider>
           {feedback ? (
@@ -788,18 +1091,18 @@ function AigcEditorContent({
               {feedback}
             </div>
           ) : null}
-          {!isDesktop && mobilePanel === "nodes" ? (
+          {!isDesktop && openPanel === "nodes" ? (
             <NodePalette
               className="absolute inset-y-0 left-0 z-20 w-60 shadow-xl"
               onAdd={(type) => {
                 addNode(type);
-                setMobilePanel(null);
+                setOpenPanel(null);
               }}
             />
           ) : null}
-          {!isDesktop && mobilePanel === "inspector" ? (
+          {!isDesktop && openPanel === "inspector" ? (
             <Inspector
-              className="absolute inset-y-0 right-0 z-20 w-72 shadow-xl"
+              className="absolute inset-y-0 right-0 z-20 w-[min(320px,100vw)] shadow-xl"
               allowExecution={allowExecution}
               mode={mode}
               node={selectedNode}
@@ -807,18 +1110,24 @@ function AigcEditorContent({
               onDescriptionChange={setDescription}
               onExecuteNode={(nodeId) => void execute(nodeId)}
               onNameChange={setName}
+              onClose={() => setOpenPanel(null)}
               onRetryNode={(runId, nodeId) =>
                 void retryFailedNode(runId, nodeId)
               }
               onSelectRun={setSelectedRunId}
               onTabChange={setInspectorTab}
-              runDetail={runDetail}
-              runs={runsQuery.data?.items ?? []}
+              nodeActive={selectedNodeIsActive}
+              nodePending={selectedNodePending}
+              nodeRunDetail={selectedNodeRunDetail}
+              runs={runs}
+              selectedRunId={selectedPanelRunId}
+              selectedRunDetail={selectedRunDetail}
+              selectedRunDetailState={selectedRunDetailState}
               tab={inspectorTab}
             />
           ) : null}
         </section>
-        {isDesktop ? (
+        {isDesktop && openPanel === "inspector" ? (
           <Inspector
             allowExecution={allowExecution}
             mode={mode}
@@ -827,13 +1136,19 @@ function AigcEditorContent({
             onDescriptionChange={setDescription}
             onExecuteNode={(nodeId) => void execute(nodeId)}
             onNameChange={setName}
+            onClose={() => setOpenPanel(null)}
             onRetryNode={(runId, nodeId) =>
               void retryFailedNode(runId, nodeId)
             }
             onSelectRun={setSelectedRunId}
             onTabChange={setInspectorTab}
-            runDetail={runDetail}
-            runs={runsQuery.data?.items ?? []}
+            nodeActive={selectedNodeIsActive}
+            nodePending={selectedNodePending}
+            nodeRunDetail={selectedNodeRunDetail}
+            runs={runs}
+            selectedRunId={selectedPanelRunId}
+            selectedRunDetail={selectedRunDetail}
+            selectedRunDetailState={selectedRunDetailState}
             tab={inspectorTab}
           />
         ) : null}
@@ -911,28 +1226,33 @@ function NodePalette({
   onAdd
 }: {
   className?: string;
-  onAdd: (type: AigcNodeType) => void;
+  onAdd: (type: AigcV2NodeType) => void;
 }) {
   return (
     <aside
       className={cn(
-        "w-60 shrink-0 overflow-y-auto border-r border-border bg-card p-3",
+        "w-[184px] shrink-0 overflow-y-auto border-r border-[#30353d] bg-[#181b20] px-2 py-3",
         className
       )}
+      data-testid="aigc-node-palette"
     >
       <h2 className="text-xs font-semibold text-foreground">节点</h2>
       <p className="mt-1 text-[11px] text-muted-foreground">点击添加到画布</p>
-      {(["input", "model", "control", "output"] as const).map((category) => (
+      {(["modality", "model", "control"] as const).map((category) => (
         <div className="mt-4" key={category}>
           <p className="mb-1.5 font-mono text-[10px] uppercase text-muted-foreground">
-            {category}
+            {category === "modality"
+              ? "模态"
+              : category === "model"
+                ? "模型"
+                : "控制"}
           </p>
           <div className="space-y-1">
-            {AIGC_NODE_REGISTRY.filter(
+            {AIGC_EDITOR_NODE_REGISTRY.filter(
               (item) => item.category === category
             ).map((item) => (
               <button
-                className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-xs font-medium text-foreground hover:bg-secondary"
+                className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-xs font-medium text-foreground hover:bg-[#252a31]"
                 key={item.type}
                 onClick={() => onAdd(item.type)}
                 type="button"
@@ -940,7 +1260,12 @@ function NodePalette({
                 {item.type.includes("image") ? (
                   <ImageIcon className="h-4 w-4 text-info" />
                 ) : item.type.includes("video") ? (
-                  <Video className="h-4 w-4 text-info" />
+                  <Video
+                    className="h-4 w-4"
+                    style={{
+                      color: getAigcModalityColors("video_asset").iconColor
+                    }}
+                  />
                 ) : item.type.includes("audio") ? (
                   <AudioLines className="h-4 w-4 text-info" />
                 ) : item.type.includes("text") ? (
@@ -967,26 +1292,38 @@ function Inspector({
   onDescriptionChange,
   onExecuteNode,
   onNameChange,
+  onClose,
   onRetryNode,
   onSelectRun,
   onTabChange,
-  runDetail,
+  nodeActive,
+  nodePending,
+  nodeRunDetail,
   runs,
+  selectedRunDetail,
+  selectedRunDetailState,
+  selectedRunId,
   tab
 }: {
   allowExecution: boolean;
   className?: string;
   mode: "pipeline" | "template";
-  node: AigcNode | null;
+  node: AigcV2Node | null;
   onCancelRun: (runId: string) => void;
   onDescriptionChange: (value: string) => void;
   onExecuteNode: (nodeId: string) => void;
   onNameChange: (value: string) => void;
+  onClose: () => void;
   onRetryNode: (runId: string, nodeId: string) => void;
   onSelectRun: (runId: string) => void;
   onTabChange: (tab: InspectorTab) => void;
-  runDetail: AigcPipelineRunDetail | undefined;
+  nodeActive: boolean;
+  nodePending: boolean;
+  nodeRunDetail: AigcPipelineRunDetail | undefined;
   runs: AigcPipelineRun[];
+  selectedRunDetail: AigcPipelineRunDetail | undefined;
+  selectedRunDetailState: AigcRunDetailQueryState | undefined;
+  selectedRunId: string | null;
   tab: InspectorTab;
 }) {
   const name = useAigcEditorStore((state) => state.name);
@@ -994,28 +1331,42 @@ function Inspector({
   return (
     <aside
       className={cn(
-        "w-72 shrink-0 overflow-y-auto border-l border-border bg-card",
+        "w-80 shrink-0 overflow-y-auto border-l border-[#30353d] bg-[#181b20]",
         className
       )}
+      data-testid="aigc-inspector"
     >
-      <div className="grid grid-cols-3 border-b border-border p-1">
-        {(["config", "result", "run"] as const).map((item) => (
-          <button
-            aria-selected={tab === item}
-            className={cn(
-              "h-8 rounded text-xs font-semibold",
-              tab === item
-                ? "bg-secondary text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            key={item}
-            onClick={() => onTabChange(item)}
-            role="tab"
-            type="button"
-          >
-            {item === "config" ? "配置" : item === "result" ? "结果" : "运行"}
-          </button>
-        ))}
+      <div className="flex items-center gap-1 border-b border-[#30353d] p-1">
+        <div className="grid min-w-0 flex-1 grid-cols-3">
+          {(["config", "result", "run"] as const).map((item) => (
+            <button
+              aria-selected={tab === item}
+              className={cn(
+                "h-8 rounded text-xs font-semibold",
+                tab === item
+                  ? "bg-[#252a31] text-blue-400"
+                  : "text-muted-foreground hover:bg-[#20242a] hover:text-foreground"
+              )}
+              key={item}
+              onClick={() => onTabChange(item)}
+              role="tab"
+              type="button"
+            >
+              {item === "config" ? "配置" : item === "result" ? "结果" : "运行"}
+            </button>
+          ))}
+        </div>
+        <Button
+          aria-label="关闭详情栏"
+          className="shrink-0"
+          onClick={onClose}
+          size="icon"
+          title="关闭详情栏"
+          type="button"
+          variant="ghost"
+        >
+          <PanelRightClose className="h-4 w-4" />
+        </Button>
       </div>
       <div className="p-4">
         {tab === "config" ? (
@@ -1041,20 +1392,23 @@ function Inspector({
               />
             </div>
             <div className="border-t border-border pt-4">
-              {node ? <NodeConfig mode={mode} node={node} /> : <InspectorEmpty />}
+              {node ? (
+                <NodeConfig
+                  mode={mode}
+                  node={node}
+                  runDetail={nodeRunDetail}
+                />
+              ) : (
+                <InspectorEmpty />
+              )}
             </div>
             {allowExecution &&
             mode === "pipeline" &&
             node &&
-            [
-              "llm",
-              "text_to_image",
-              "image_to_image",
-              "video_generation"
-            ].includes(node.type) ? (
+            isAigcExecutionNodeType(node.type) ? (
               <Button
                 className="w-full"
-                disabled={isAigcRunActive(runDetail)}
+                disabled={nodeActive || nodePending}
                 onClick={() => onExecuteNode(node.id)}
                 size="sm"
                 type="button"
@@ -1066,7 +1420,7 @@ function Inspector({
             ) : null}
           </div>
         ) : tab === "result" ? (
-          <ResultPanel nodeId={node?.id ?? null} runDetail={runDetail} />
+          <ResultPanel nodeId={node?.id ?? null} runDetail={nodeRunDetail} />
         ) : (
           mode === "template" ? (
             <InspectorPlaceholder
@@ -1078,8 +1432,10 @@ function Inspector({
               onCancel={onCancelRun}
               onRetry={onRetryNode}
               onSelectRun={onSelectRun}
-              runDetail={runDetail}
+              runDetail={selectedRunDetail}
+              runDetailState={selectedRunDetailState}
               runs={runs}
+              selectedRunId={selectedRunId}
             />
           )
         )}
@@ -1090,30 +1446,35 @@ function Inspector({
 
 function NodeConfig({
   mode,
-  node
+  node,
+  runDetail
 }: {
   mode: "pipeline" | "template";
-  node: AigcNode;
+  node: AigcV2Node;
+  runDetail: AigcPipelineRunDetail | undefined;
 }) {
   const update = useAigcEditorStore((state) => state.updateNodeConfig);
+  const definition = useAigcEditorStore((state) => state.definition);
   const registration = AIGC_NODE_REGISTRY_BY_TYPE.get(node.type);
+  const displayName =
+    deriveAigcNodeDisplayNames(definition.nodes).get(node.id)?.displayName ??
+    aigcNodeBaseDisplayName(node);
+  const modalityNode = asModalityNode(node);
 
-  if (node.type === "text_input") {
+  if (modalityNode) {
     return (
-      <ConfigGroup title={registration?.label ?? node.type}>
-        <AigcPromptEditor node={node} />
-      </ConfigGroup>
+      <ModalityNodeConfig
+        displayName={displayName}
+        mode={mode}
+        node={modalityNode}
+        runDetail={runDetail}
+      />
     );
   }
-  if (node.type === "image_input") {
-    return <MediaInputConfig mode={mode} node={node} />;
-  }
-  if (node.type === "video_input" || node.type === "audio_input") {
-    return <MediaInputConfig mode={mode} node={node} />;
-  }
+
   if (node.type === "llm") {
     return (
-      <ConfigGroup title={registration?.label ?? node.type}>
+      <ConfigGroup title={displayName}>
         <Label htmlFor="node-model">模型</Label>
         <select
           className="mt-1.5 h-10 w-full rounded-md border border-input bg-card px-2 text-xs"
@@ -1142,64 +1503,114 @@ function NodeConfig({
       </ConfigGroup>
     );
   }
-  if (
-    node.type === "text_output" ||
-    node.type === "image_output" ||
-    node.type === "video_output"
-  ) {
+  if (node.type === "video_generation") {
+    return <VideoGenerationConfig displayName={displayName} node={node} />;
+  }
+  if (node.type === "video_enhancement") {
+    return <VideoEnhancementConfig displayName={displayName} node={node} />;
+  }
+  if (node.type === "video_face_blur") {
+    return <VideoFaceBlurNodeConfig displayName={displayName} node={node} />;
+  }
+  if (node.type === "json_parser") {
     return (
-      <ConfigGroup title={registration?.label ?? node.type}>
-        <Label htmlFor="node-title">结果标题</Label>
-        <Input
-          className="mt-1.5"
-          id="node-title"
-          onChange={(event) => update(node.id, { title: event.target.value })}
-          value={node.config.title}
+      <JsonParserNodeConfig
+        displayName={displayName}
+        node={node}
+        runDetail={runDetail}
+      />
+    );
+  }
+  if (node.type === "image_to_image") {
+    return <SeedreamImageConfig displayName={displayName} node={node} />;
+  }
+  if (node.type === "text_to_image") {
+    return (
+      <ConfigGroup title={displayName}>
+        <AigcImageDimensionsField
+          config={node.config}
+          nodeId={node.id}
+          onChange={(config) => update(node.id, config)}
         />
       </ConfigGroup>
     );
   }
-  if (node.type === "video_generation") {
-    return <VideoGenerationConfig node={node} />;
-  }
-  if (node.type === "image_to_image") {
-    return <SeedreamImageConfig node={node} />;
-  }
   if (node.type === "layer_canvas" || node.type === "layer_composite") {
     return (
-      <ConfigGroup title={registration?.label ?? node.type}>
+      <ConfigGroup title={displayName}>
         <p className="text-xs leading-5 text-muted-foreground">
           图层配置将在对应的图层工作流中编辑。
         </p>
       </ConfigGroup>
     );
   }
+  return null;
+}
+
+function JsonParserNodeConfig({
+  displayName,
+  node,
+  runDetail
+}: {
+  displayName: string;
+  node: Extract<AigcV2Node, { type: "json_parser" }>;
+  runDetail: AigcPipelineRunDetail | undefined;
+}) {
+  const update = useAigcEditorStore((state) => state.updateNodeConfig);
+  const feedback = jsonPathInputFeedback(node.config.json_path);
+  const runNode = runDetail?.nodes.find((item) => item.node_id === node.id);
+  const error = runNode ? getAigcNodeLogError(runNode) : null;
+  const errorMessage = jsonParserErrorMessage(error);
+  const count = jsonParserItemCount(runNode);
+
   return (
-    <ConfigGroup title={registration?.label ?? node.type}>
-      <div className="grid grid-cols-2 gap-2">
-        <SelectField
-          label="画幅"
-          onChange={(value) =>
-            update(node.id, {
-              ...node.config,
-              aspect_ratio: value as typeof node.config.aspect_ratio
-            })
-          }
-          options={["1:1", "16:9", "9:16", "4:3", "3:4"]}
-          value={node.config.aspect_ratio}
-        />
-        <SelectField
-          label="尺寸"
-          onChange={(value) =>
-            update(node.id, {
-              ...node.config,
-              size: value as typeof node.config.size
-            })
-          }
-          options={["1K", "1.5K", "2K"]}
-          value={node.config.size}
-        />
-      </div>
+    <ConfigGroup title={displayName}>
+      <Label htmlFor={`json-path-${node.id}`}>JSONPath</Label>
+      <Input
+        aria-describedby={`json-path-feedback-${node.id}`}
+        aria-invalid={feedback.kind === "error"}
+        className="mt-1.5 font-mono text-xs"
+        id={`json-path-${node.id}`}
+        maxLength={500}
+        onChange={(event) =>
+          update(node.id, {
+            ...node.config,
+            json_path: event.target.value
+          })
+        }
+        placeholder="$.items"
+        spellCheck={false}
+        value={node.config.json_path}
+      />
+      <p
+        className={cn(
+          "mt-1.5 break-words text-[10px] leading-4",
+          feedback.kind === "error"
+            ? "text-destructive"
+            : "text-muted-foreground"
+        )}
+        id={`json-path-feedback-${node.id}`}
+        role={feedback.kind === "error" ? "alert" : undefined}
+      >
+        {feedback.message}
+      </p>
+      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded border border-border bg-muted/20 p-2 text-[10px]">
+        <dt className="text-muted-foreground">状态</dt>
+        <dd>{runNode ? nodeStatusLabel(runNode.status) : "未运行"}</dd>
+        <dt className="text-muted-foreground">Item 数量</dt>
+        <dd>{count === null ? "-" : `${count} 项`}</dd>
+      </dl>
+      {error ? (
+        <div className="mt-3 border-l-2 border-destructive pl-2 text-[10px]">
+          <p className="break-all font-mono text-destructive">
+            {error.code ?? "json_parser_failed"}
+          </p>
+          <p className="mt-1 break-words text-destructive">{errorMessage}</p>
+        </div>
+      ) : null}
+      <p className="mt-3 text-[10px] leading-4 text-muted-foreground">
+        items 输出由系统自动连接，最多生成 20 个文本节点。
+      </p>
     </ConfigGroup>
   );
 }
@@ -1214,9 +1625,11 @@ const SEEDREAM_IMAGE_OPERATION_OPTIONS: {
 ];
 
 function SeedreamImageConfig({
+  displayName,
   node
 }: {
-  node: Extract<AigcNode, { type: "image_to_image" }>;
+  displayName: string;
+  node: Extract<AigcV2Node, { type: "image_to_image" }>;
 }) {
   const update = useAigcEditorStore((state) => state.updateNodeConfig);
   const definition = useAigcEditorStore((state) => state.definition);
@@ -1236,7 +1649,7 @@ function SeedreamImageConfig({
   const issue = definitionIssue ?? assetIssue;
 
   return (
-    <ConfigGroup title={seedreamImageTitle(node)}>
+    <ConfigGroup title={displayName}>
       <div className="space-y-3">
         <div>
           <Label>操作模式</Label>
@@ -1258,13 +1671,7 @@ function SeedreamImageConfig({
                 onClick={() =>
                   update(node.id, {
                     ...node.config,
-                    operation: option.value,
-                    size:
-                      option.value === "layer_decomposition"
-                        ? "auto"
-                        : node.config.size === "auto"
-                          ? "2K"
-                          : node.config.size
+                    operation: option.value
                   })
                 }
                 type="button"
@@ -1306,6 +1713,14 @@ function SeedreamImageConfig({
               输入比例 1:16-16:1，总像素 262,144-36,000,000，文件小于 30 MB。
             </p>
           </>
+        ) : operation === "image_to_image" ? (
+          <AigcImageDimensionsField
+            config={node.config as ImageModelConfig}
+            nodeId={node.id}
+            onChange={(config) =>
+              update(node.id, { ...node.config, ...config })
+            }
+          />
         ) : (
           <>
             <div className="grid grid-cols-2 gap-2">
@@ -1381,9 +1796,11 @@ const VIDEO_TASK_TYPE_OPTIONS: {
 ];
 
 function VideoGenerationConfig({
+  displayName,
   node
 }: {
-  node: Extract<AigcNode, { type: "video_generation" }>;
+  displayName: string;
+  node: Extract<AigcV2Node, { type: "video_generation" }>;
 }) {
   const update = useAigcEditorStore((state) => state.updateNodeConfig);
   const definition = useAigcEditorStore((state) => state.definition);
@@ -1408,7 +1825,7 @@ function VideoGenerationConfig({
     (candidate) => candidate.id === promptEdge?.sourceNodeId
   );
   const promptWarning = seedancePromptLengthWarning(
-    promptNode?.type === "text_input" ? promptNode.config.text : ""
+    promptNode?.type === "text" ? promptNode.config.text : ""
   );
   const supportedLanguages = capabilities.promptLanguages.join("、");
   const inputDurationMaximum = seedanceInputDurationLimit(node.config.model);
@@ -1428,7 +1845,7 @@ function VideoGenerationConfig({
   }
 
   return (
-    <ConfigGroup title="生视频">
+    <ConfigGroup title={displayName}>
       <div className="space-y-3">
         <SelectField
           label="模型"
@@ -1559,27 +1976,516 @@ function VideoGenerationConfig({
   );
 }
 
+const VIDEO_ENHANCEMENT_LABELS = {
+  toolVersion: {
+    standard: "标准版",
+    professional: "专业版"
+  },
+  style: {
+    hd: "高清",
+    natural: "自然"
+  },
+  scene: {
+    common: "通用",
+    ugc: "UGC",
+    short_series: "短剧",
+    aigc: "AIGC",
+    old_film: "老片修复"
+  },
+  bitrateLevel: {
+    low: "低",
+    medium: "中",
+    high: "高"
+  }
+} as const;
+
+function VideoEnhancementConfig({
+  displayName,
+  node
+}: {
+  displayName: string;
+  node: Extract<AigcV2Node, { type: "video_enhancement" }>;
+}) {
+  const updateNodeConfig = useAigcEditorStore(
+    (state) => state.updateNodeConfig
+  );
+  const config = node.config;
+  const highCost = [
+    config.tool_version === "professional" ? "专业版" : null,
+    config.resolution_mode === "preset" &&
+    (config.resolution === "4k" || config.resolution === "8k")
+      ? config.resolution.toUpperCase()
+      : null,
+    config.bit_depth >= 12 ? `${config.bit_depth}-bit` : null
+  ].filter(Boolean);
+
+  function update(patch: Partial<VideoEnhancementConfigCandidate>) {
+    updateNodeConfig(
+      node.id,
+      normalizeVideoEnhancementConfig({
+        ...config,
+        ...patch
+      } as VideoEnhancementConfigCandidate)
+    );
+  }
+
+  return (
+    <ConfigGroup title={displayName}>
+      <div className="space-y-3">
+        <ConfigSection title="版本与风格">
+          <SelectField
+            label="版本"
+            onChange={(value) =>
+              update({
+                tool_version:
+                  value as VideoEnhancementConfig["tool_version"]
+              })
+            }
+            options={VIDEO_ENHANCEMENT_TOOL_VERSIONS.map((value) => ({
+              label: VIDEO_ENHANCEMENT_LABELS.toolVersion[value],
+              value
+            }))}
+            value={config.tool_version}
+          />
+          <SelectField
+            label="增强风格"
+            onChange={(value) =>
+              update({
+                enhance_style:
+                  value as VideoEnhancementConfig["enhance_style"]
+              })
+            }
+            options={VIDEO_ENHANCEMENT_STYLES.map((value) => ({
+              label: VIDEO_ENHANCEMENT_LABELS.style[value],
+              value
+            }))}
+            value={config.enhance_style}
+          />
+        </ConfigSection>
+
+        {config.tool_version === "standard" ? (
+          <SelectField
+            label="场景"
+            onChange={(value) =>
+              update({
+                scene: value as NonNullable<VideoEnhancementConfig["scene"]>
+              })
+            }
+            options={VIDEO_ENHANCEMENT_SCENES.map((value) => ({
+              label: VIDEO_ENHANCEMENT_LABELS.scene[value],
+              value
+            }))}
+            value={config.scene}
+          />
+        ) : null}
+
+        <ConfigSection title="目标尺寸">
+          <SelectField
+            label="尺寸模式"
+            onChange={(value) =>
+              update({
+                resolution_mode: value as
+                  | "preset"
+                  | "short_edge"
+              })
+            }
+            options={[
+              { label: "预设分辨率", value: "preset" },
+              { label: "短边像素", value: "short_edge" }
+            ]}
+            value={config.resolution_mode}
+          />
+          {config.resolution_mode === "preset" ? (
+            <SelectField
+              label="分辨率"
+              onChange={(value) =>
+                update({
+                  resolution:
+                    value as NonNullable<VideoEnhancementConfig["resolution"]>
+                })
+              }
+              options={VIDEO_ENHANCEMENT_RESOLUTIONS.map((value) => ({
+                label: value.toUpperCase(),
+                value
+              }))}
+              value={config.resolution}
+            />
+          ) : (
+            <NumberField
+              label="短边像素"
+              max={VIDEO_ENHANCEMENT_RESOLUTION_LIMIT_RANGE.maximum}
+              min={VIDEO_ENHANCEMENT_RESOLUTION_LIMIT_RANGE.minimum}
+              onChange={(value) => update({ resolution_limit: value })}
+              value={config.resolution_limit}
+            />
+          )}
+        </ConfigSection>
+
+        <ConfigSection title="帧率与码率">
+          <SelectField
+            label="帧率"
+            onChange={(value) =>
+              update({
+                fps:
+                  value === "source"
+                    ? null
+                    : config.fps ?? 30
+              })
+            }
+            options={[
+              { label: "保持原帧率", value: "source" },
+              { label: "指定帧率", value: "custom" }
+            ]}
+            value={config.fps === null ? "source" : "custom"}
+          />
+          {config.fps === null ? (
+            <div aria-hidden="true" className="hidden sm:block" />
+          ) : (
+            <NumberField
+              label="目标 FPS"
+              max={VIDEO_ENHANCEMENT_FPS_RANGE.maximum}
+              min={VIDEO_ENHANCEMENT_FPS_RANGE.minimum}
+              onChange={(value) => update({ fps: value })}
+              value={config.fps}
+            />
+          )}
+          {config.bit_depth !== 16 ? (
+            <>
+              <SelectField
+                label="码率模式"
+                onChange={(value) =>
+                  update({
+                    bitrate_mode: value as "level" | "custom"
+                  })
+                }
+                options={[
+                  { label: "档位", value: "level" },
+                  { label: "精确码率", value: "custom" }
+                ]}
+                value={config.bitrate_mode}
+              />
+              {config.bitrate_mode === "level" ? (
+                <SelectField
+                  label="码率档位"
+                  onChange={(value) =>
+                    update({
+                      bitrate_level:
+                        value as NonNullable<
+                          VideoEnhancementConfig["bitrate_level"]
+                        >
+                    })
+                  }
+                  options={VIDEO_ENHANCEMENT_BITRATE_LEVELS.map((value) => ({
+                    label: VIDEO_ENHANCEMENT_LABELS.bitrateLevel[value],
+                    value
+                  }))}
+                  value={config.bitrate_level}
+                />
+              ) : (
+                <NumberField
+                  label="码率 (kbps)"
+                  max={VIDEO_ENHANCEMENT_BITRATE_RANGE.maximum}
+                  min={VIDEO_ENHANCEMENT_BITRATE_RANGE.minimum}
+                  onChange={(value) => update({ bitrate: value })}
+                  value={config.bitrate}
+                />
+              )}
+            </>
+          ) : null}
+        </ConfigSection>
+
+        <SelectField
+          disabled={config.tool_version === "standard"}
+          label="色深"
+          onChange={(value) =>
+            update({
+              bit_depth: Number(value) as VideoEnhancementConfig["bit_depth"]
+            })
+          }
+          options={VIDEO_ENHANCEMENT_BIT_DEPTHS.map((value) => ({
+            label: `${value}-bit`,
+            value: String(value)
+          }))}
+          value={String(config.bit_depth)}
+        />
+        {config.tool_version === "standard" ? (
+          <p className="text-[10px] leading-4 text-muted-foreground">
+            标准版固定输出 8-bit；专业版可选择更高色深。
+          </p>
+        ) : config.bit_depth === 16 ? (
+          <p className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[10px] leading-4 text-amber-900">
+            16-bit 为高成本 MOV 输出，仅支持不超过 40 秒的视频，码率由服务自动处理。
+          </p>
+        ) : null}
+        {highCost.length > 0 ? (
+          <p className="rounded-md border border-orange-300 bg-orange-50 px-2.5 py-2 text-[10px] font-semibold text-orange-900">
+            高成本配置：{highCost.join(" · ")}
+          </p>
+        ) : null}
+      </div>
+    </ConfigGroup>
+  );
+}
+
+function VideoFaceBlurNodeConfig({
+  displayName,
+  node
+}: {
+  displayName: string;
+  node: Extract<AigcV2Node, { type: "video_face_blur" }>;
+}) {
+  const updateNodeConfig = useAigcEditorStore(
+    (state) => state.updateNodeConfig
+  );
+
+  function update(patch: Partial<VideoFaceBlurConfig>) {
+    updateNodeConfig(node.id, { ...node.config, ...patch });
+  }
+
+  return (
+    <ConfigGroup title={displayName}>
+      <ConfigSection title="打码参数">
+        <SelectField
+          label="打码方式"
+          onChange={(value) =>
+            update({ mask_mode: value as VideoFaceBlurConfig["mask_mode"] })
+          }
+          options={VIDEO_FACE_BLUR_MASK_MODES.map((value) => ({
+            label: videoFaceBlurModeLabel(value),
+            value
+          }))}
+          value={node.config.mask_mode}
+        />
+        <SelectField
+          label="打码强度"
+          onChange={(value) =>
+            update({
+              mask_strength:
+                value as VideoFaceBlurConfig["mask_strength"]
+            })
+          }
+          options={VIDEO_FACE_BLUR_MASK_STRENGTHS.map((value) => ({
+            label: videoFaceBlurStrengthLabel(value),
+            value
+          }))}
+          value={node.config.mask_strength}
+        />
+      </ConfigSection>
+    </ConfigGroup>
+  );
+}
+
+type ModalityNode = Extract<
+  AigcV2Node,
+  { type: "audio" | "image" | "text" | "video" }
+>;
+
+function ModalityNodeConfig({
+  displayName,
+  mode,
+  node,
+  runDetail
+}: {
+  displayName: string;
+  mode: "pipeline" | "template";
+  node: ModalityNode;
+  runDetail: AigcPipelineRunDetail | undefined;
+}) {
+  const definition = useAigcEditorStore((state) => state.definition);
+  const update = useAigcEditorStore((state) => state.updateNodeConfig);
+  const upstream = definition.edges.some(
+    (edge) =>
+      edge.targetNodeId === node.id && edge.targetHandle === node.type
+  );
+  const projection =
+    upstream && runDetail
+      ? node.type === "text"
+        ? projectAigcEffectiveText(
+            runDetail,
+            definition as AigcPipelineDefinitionV2,
+            node.id
+          )
+        : projectAigcModalityRunResult(runDetail, node.id)
+      : null;
+  const managedSource = managedTextSource(node, definition.nodes);
+  const resolvedDisplayName = managedSource?.itemLabel ?? displayName;
+
+  return (
+    <ConfigGroup title={resolvedDisplayName}>
+      <Label htmlFor={`node-title-${node.id}`}>显示标题</Label>
+      <Input
+        className="mt-1.5"
+        disabled={upstream || Boolean(managedSource)}
+        id={`node-title-${node.id}`}
+        onChange={(event) =>
+          update(node.id, { ...node.config, title: event.target.value || null })
+        }
+        placeholder={displayName}
+        value={node.config.title ?? ""}
+      />
+      <div className="mt-4 border-t border-border pt-4">
+        {managedSource && node.type === "text" ? (
+          <div className="space-y-2">
+            <p className="text-[10px] text-muted-foreground">
+              只读上游内容 · 来源：{managedSource.parserName}
+            </p>
+            <div
+              aria-label={`${managedSource.itemLabel}只读内容`}
+              className="max-h-64 overflow-y-auto rounded border border-border bg-muted/20 p-2.5"
+            >
+              <p className="break-words whitespace-pre-wrap text-xs leading-5 text-foreground">
+                {node.config.text || "无对应 item"}
+              </p>
+            </div>
+          </div>
+        ) : upstream && node.type === "text" ? (
+          projection &&
+          ["reused", "succeeded"].includes(projection.status) &&
+          projection.text !== null ? (
+            <div className="space-y-3">
+              <AigcPromptEditor node={node} runDetail={runDetail} />
+              {node.config.upstream_text_override != null ? (
+                <Button
+                  className="w-full"
+                  onClick={() =>
+                    update(node.id, {
+                      ...node.config,
+                      upstream_text_override: null
+                    })
+                  }
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  恢复上游文本
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <ModalityProjectionPreview
+              displayName={displayName}
+              node={node}
+              projection={projection}
+              runDetail={runDetail}
+            />
+          )
+        ) : upstream ? (
+          <ModalityProjectionPreview
+            displayName={displayName}
+            node={node}
+            projection={projection}
+            runDetail={runDetail}
+          />
+        ) : node.type === "text" ? (
+          <AigcPromptEditor node={node} runDetail={runDetail} />
+        ) : (
+          <MediaInputConfig
+            displayName={displayName}
+            embedded
+            mode={mode}
+            node={node}
+          />
+        )}
+      </div>
+    </ConfigGroup>
+  );
+}
+
+function ModalityProjectionPreview({
+  displayName,
+  node,
+  projection,
+  runDetail
+}: {
+  displayName: string;
+  node: ModalityNode;
+  projection: ReturnType<typeof projectAigcModalityRunResult>;
+  runDetail: AigcPipelineRunDetail | undefined;
+}) {
+  if (!projection || ["idle", "ready", "queued", "running"].includes(projection.status)) {
+    return <ModalityStatus copy="等待上游结果" />;
+  }
+  if (
+    ["blocked", "canceled", "failed", "timed_out"].includes(
+      projection.status
+    )
+  ) {
+    return <ModalityStatus copy="上游执行失败" tone="error" />;
+  }
+  if (projection.text) {
+    return (
+      <div>
+        <p className="whitespace-pre-wrap text-xs leading-5">
+          {projection.text}
+        </p>
+        <Button
+          className="mt-3 w-full"
+          onClick={() => void navigator.clipboard.writeText(projection.text ?? "")}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Copy className="h-4 w-4" />
+          复制文本
+        </Button>
+      </div>
+    );
+  }
+  if (!projection.asset?.available || !projection.downloadUrl) {
+    return <ModalityStatus copy="上游结果不可用，播放和下载已禁用" />;
+  }
+  return (
+    <ModalityAsset
+      asset={projection.asset}
+      nodeId={node.id}
+      runDetail={runDetail}
+      title={displayName}
+      type={node.type as "audio" | "image" | "video"}
+    />
+  );
+}
+
+function ModalityStatus({
+  copy,
+  tone = "muted"
+}: {
+  copy: string;
+  tone?: "error" | "muted";
+}) {
+  return (
+    <p
+      className={cn(
+        "rounded border border-dashed border-border px-3 py-6 text-center text-xs",
+        tone === "error" ? "text-destructive" : "text-muted-foreground"
+      )}
+      role="status"
+    >
+      {copy}
+    </p>
+  );
+}
+
 type MediaInputNode = Extract<
-  AigcNode,
-  { type: "image_input" | "video_input" | "audio_input" }
+  AigcV2Node,
+  { type: "image" | "video" | "audio" }
 >;
 
 const MEDIA_INPUT_OPTIONS = {
-  image_input: {
+  image: {
     accept: AIGC_MEDIA_ACCEPT.image,
     hint: "JPEG / PNG / WebP / BMP / TIFF / GIF / HEIC / HEIF；300-6000 px；小于 30 MB",
     kind: "image",
     label: "图片",
     queryKey: "selectable-image-assets"
   },
-  video_input: {
+  video: {
     accept: AIGC_MEDIA_ACCEPT.video,
     hint: "MP4 / MOV；H.264 / H.265；24-60 FPS；不超过 200 MB",
     kind: "video",
     label: "视频",
     queryKey: "selectable-video-assets"
   },
-  audio_input: {
+  audio: {
     accept: AIGC_MEDIA_ACCEPT.audio,
     hint: "WAV / MP3；不超过 15 MB",
     kind: "audio",
@@ -1598,9 +2504,13 @@ const MEDIA_INPUT_OPTIONS = {
 >;
 
 function MediaInputConfig({
+  displayName,
+  embedded = false,
   mode,
   node
 }: {
+  displayName: string;
+  embedded?: boolean;
   mode: "pipeline" | "template";
   node: MediaInputNode;
 }) {
@@ -1611,7 +2521,7 @@ function MediaInputConfig({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const options = MEDIA_INPUT_OPTIONS[node.type];
   const isLayerDecompositionInput =
-    node.type === "image_input" &&
+    node.type === "image" &&
     definition.edges.some((edge) => {
       if (
         edge.sourceNodeId !== node.id ||
@@ -1646,12 +2556,13 @@ function MediaInputConfig({
   });
 
   if (mode === "template") {
-    return (
-      <ConfigGroup title={`${options.label}输入`}>
-        <p className="text-xs leading-5 text-muted-foreground">
-          模板不保存具体{options.label}。创建画布实例后再选择或上传素材。
-        </p>
-      </ConfigGroup>
+    const content = (
+      <p className="text-xs leading-5 text-muted-foreground">
+        模板不保存具体{options.label}。创建画布实例后再选择或上传素材。
+      </p>
+    );
+    return embedded ? content : (
+      <ConfigGroup title={displayName}>{content}</ConfigGroup>
     );
   }
 
@@ -1690,8 +2601,8 @@ function MediaInputConfig({
     }
   }
 
-  return (
-    <ConfigGroup title={`${options.label}输入`}>
+  const content = (
+    <>
       <Label>资产库{options.label}</Label>
       <AigcMediaAssetDialog
         assets={assetsQuery.data ?? []}
@@ -1741,7 +2652,10 @@ function MediaInputConfig({
       {uploadError ? (
         <p className="mt-2 text-xs text-destructive">{uploadError}</p>
       ) : null}
-    </ConfigGroup>
+    </>
+  );
+  return embedded ? content : (
+    <ConfigGroup title={displayName}>{content}</ConfigGroup>
   );
 }
 
@@ -1773,12 +2687,60 @@ function ConfigGroup({
   );
 }
 
+function ConfigSection({
+  children,
+  title
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <fieldset className="grid grid-cols-1 gap-2 rounded-md border border-border bg-muted/20 p-2 sm:grid-cols-2">
+      <legend className="px-1 text-[10px] font-semibold text-muted-foreground">
+        {title}
+      </legend>
+      {children}
+    </fieldset>
+  );
+}
+
+function NumberField({
+  label,
+  max,
+  min,
+  onChange,
+  value
+}: {
+  label: string;
+  max: number;
+  min: number;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  return (
+    <label className="text-xs font-medium text-muted-foreground">
+      {label}
+      <Input
+        className="mt-1 h-9 text-xs text-foreground"
+        max={max}
+        min={min}
+        onChange={(event) => onChange(event.currentTarget.valueAsNumber)}
+        step={1}
+        type="number"
+        value={value}
+      />
+    </label>
+  );
+}
+
 function SelectField({
+  disabled = false,
   label,
   onChange,
   options,
   value
 }: {
+  disabled?: boolean;
   label: string;
   onChange: (value: string) => void;
   options: readonly (string | { label: string; value: string })[];
@@ -1788,7 +2750,8 @@ function SelectField({
     <label className="text-xs font-medium text-muted-foreground">
       {label}
       <select
-        className="mt-1 h-9 w-full rounded-md border border-input bg-card px-2 text-xs text-foreground"
+        className="mt-1 h-9 w-full rounded-md border border-input bg-card px-2 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       >
@@ -1829,6 +2792,10 @@ function ResultPanel({
   return (
     <div className="space-y-3">
       {resultNodes.map((item) => {
+        const modalityProjection = projectAigcModalityRunResult(
+          runDetail,
+          item.node_id
+        );
         const compositeProjection =
           item.result.kind === "layer_composite"
             ? projectAigcLayerCompositeResult(
@@ -1841,20 +2808,25 @@ function ResultPanel({
           <div className="border border-border bg-background p-3" key={item.node_id}>
           <div className="flex items-center justify-between gap-2">
             <span className="truncate font-mono text-[10px] text-muted-foreground">
-              {item.node_id}
+              {modalityProjection?.title ?? item.node_id}
             </span>
             <Badge variant={item.status === "reused" ? "info" : "success"}>
               {item.status === "reused" ? "复用" : "完成"}
             </Badge>
           </div>
+          <ResultExecutionMetadata node={item} />
           {item.result.kind === "text" && item.result.text ? (
             <>
               <p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-foreground">
-                {item.result.text}
+                {modalityProjection?.text ?? item.result.text}
               </p>
               <Button
                 className="mt-3 w-full"
-                onClick={() => void navigator.clipboard.writeText(item.result.text ?? "")}
+                onClick={() =>
+                  void navigator.clipboard.writeText(
+                    modalityProjection?.text ?? item.result.text ?? ""
+                  )
+                }
                 size="sm"
                 type="button"
                 variant="outline"
@@ -1927,6 +2899,22 @@ function ResultAsset({
   const resultUrl = asset.available
     ? getSafeAssetContentUrl(asset.download_url)
     : null;
+  const modalityProjection = projectAigcModalityRunResult(runDetail, nodeId);
+  if (
+    modalityProjection &&
+    modalityProjection.modality !== "text" &&
+    asset.available
+  ) {
+    return (
+      <ModalityAsset
+        asset={asset}
+        nodeId={nodeId}
+        runDetail={runDetail}
+        title={modalityProjection.title}
+        type={modalityProjection.modality}
+      />
+    );
+  }
   if (isAigcVideoResult(definition, nodeId, asset)) {
     const projection = projectAigcVideoResult(definition, nodeId, [asset]);
     const download = getAigcVideoDownload(asset, projection.title);
@@ -1934,6 +2922,8 @@ function ResultAsset({
       <div className="space-y-2">
         <AigcVideoPlayer
           audioState={projection.audioState}
+          bitDepth={projection.bitDepth}
+          fps={projection.fps}
           initialMetadata={{
             duration: projection.duration,
             height: null,
@@ -1943,10 +2933,12 @@ function ResultAsset({
           mimeType={asset.mime_type}
           name={`${projection.title}-${asset.ordinal + 1}`}
           resolutionLabel={projection.resolution}
+          toolVersion={projection.toolVersion}
           unavailableText="视频结果已不可用，资产可能已删除或无权访问"
           url={resultUrl}
           variant="panel"
         />
+        <VideoResultMetadata projection={projection} />
         {download && resultUrl ? (
           <Button asChild className="w-full" size="sm" variant="outline">
             <a download={download.filename} href={download.url}>
@@ -1963,10 +2955,8 @@ function ResultAsset({
     (candidate) => candidate.id === nodeId
   );
   const resultTitle =
-    sourceNode?.type === "image_output"
-      ? sourceNode.config.title
-      : (AIGC_NODE_REGISTRY_BY_TYPE.get(sourceNode?.type ?? "image_output")
-          ?.label ?? "图片结果");
+    AIGC_NODE_REGISTRY_BY_TYPE.get(sourceNode?.type ?? "")?.label ??
+    "图片结果";
   const download = getAigcImageDownload(asset, resultTitle);
   return resultUrl ? (
     <div className="space-y-2">
@@ -2000,18 +2990,264 @@ function ResultAsset({
   );
 }
 
+function ModalityAsset({
+  asset,
+  nodeId,
+  runDetail,
+  title,
+  type
+}: {
+  asset: AigcResultAsset;
+  nodeId: string;
+  runDetail: AigcPipelineRunDetail | undefined;
+  title: string;
+  type: "audio" | "image" | "video";
+}) {
+  const resultUrl = asset.available
+    ? getSafeAssetContentUrl(asset.download_url)
+    : null;
+  if (type === "video") {
+    const projection = runDetail
+      ? projectAigcVideoResult(
+          runDetail.run.definition_snapshot,
+          nodeId,
+          [asset]
+        )
+      : null;
+    const download = getAigcVideoDownload(asset, title);
+    return (
+      <div className="space-y-2">
+        <AigcVideoPlayer
+          audioState={projection?.audioState}
+          bitDepth={projection?.bitDepth}
+          fps={projection?.fps}
+          initialMetadata={{
+            duration:
+              projection?.duration ??
+              resultAssetMetadataNumber(asset, "duration_seconds"),
+            height: resultAssetMetadataNumber(asset, "height"),
+            width: resultAssetMetadataNumber(asset, "width")
+          }}
+          mimeType={asset.mime_type}
+          name={title}
+          resolutionLabel={projection?.resolution}
+          toolVersion={projection?.toolVersion}
+          unavailableText="视频结果已不可用，资产可能已删除或无权访问"
+          url={resultUrl}
+          variant="panel"
+        />
+        {download && resultUrl ? (
+          <Button asChild className="w-full" size="sm" variant="outline">
+            <a download={download.filename} href={download.url}>
+              <Download className="h-4 w-4" />
+              下载视频
+            </a>
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+  if (type === "audio") {
+    const download = getAigcAudioDownload(asset, title);
+    return (
+      <div className="space-y-2">
+        <AigcAudioPlayer
+          duration={resultAssetMetadataNumber(asset, "duration_seconds")}
+          mimeType={asset.mime_type}
+          name={title}
+          unavailableText="音频结果已不可用，资产可能已删除或无权访问"
+          url={resultUrl}
+          variant="panel"
+        />
+        {download && resultUrl ? (
+          <Button asChild className="w-full" size="sm" variant="outline">
+            <a download={download.filename} href={download.url}>
+              <Download className="h-4 w-4" />
+              下载音频
+            </a>
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
+  const download = getAigcImageDownload(asset, title);
+  return resultUrl ? (
+    <div className="space-y-2">
+      <a
+        aria-label={`查看原图：${title}`}
+        className="block overflow-hidden border border-border bg-card"
+        href={resultUrl}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {/* Signed result URL is intentionally rendered directly. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          alt={title}
+          className="block max-h-52 w-full object-contain"
+          src={resultUrl}
+        />
+      </a>
+      {download ? (
+        <Button asChild className="w-full" size="sm" variant="outline">
+          <a download={download.filename} href={download.url}>
+            <Download className="h-4 w-4" />
+            下载图片
+          </a>
+        </Button>
+      ) : null}
+    </div>
+  ) : (
+    <ModalityStatus copy="图片结果已不可用，预览和下载已禁用" />
+  );
+}
+
+function resultAssetMetadataNumber(
+  asset: AigcResultAsset,
+  key: string
+): number | null {
+  const value = asset.metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
+}
+
+function VideoResultMetadata({
+  projection
+}: {
+  projection: ReturnType<typeof projectAigcVideoResult>;
+}) {
+  const items = [
+    ...(projection.trackCount === null
+      ? []
+      : [["轨道", String(projection.trackCount)] as const]),
+    ...(projection.elementCount === null
+      ? []
+      : [["元素", String(projection.elementCount)] as const]),
+    ["分辨率", projection.resolution ?? "-"],
+    ["帧率", projection.fps === null ? "-" : `${projection.fps} fps`],
+    [
+      "时长",
+      projection.duration === null
+        ? "-"
+        : formatVideoDuration(projection.duration)
+    ],
+    [
+      "版本",
+      projection.toolVersion === null
+        ? "-"
+        : projection.toolVersion === "professional"
+          ? "专业版"
+          : "标准版"
+    ],
+    [
+      "色深",
+      projection.bitDepth === null ? "-" : `${projection.bitDepth}-bit`
+    ],
+    ...(projection.maskMode === null
+      ? []
+      : [["打码方式", videoFaceBlurModeLabel(projection.maskMode)] as const]),
+    ...(projection.maskStrength === null
+      ? []
+      : [
+          [
+            "打码强度",
+            videoFaceBlurStrengthLabel(projection.maskStrength)
+          ] as const
+        ]),
+    ...(projection.provider === null
+      ? []
+      : [["供应商", projection.provider] as const]),
+    ...(projection.providerTaskId === null
+      ? []
+      : [["供应商任务", projection.providerTaskId] as const]),
+    ...(projection.providerRequestId === null
+      ? []
+      : [["Request ID", projection.providerRequestId] as const])
+  ] as const;
+  return (
+    <dl
+      aria-label="视频输出信息"
+      className="grid grid-cols-2 gap-x-3 gap-y-1 rounded border border-border bg-card px-2.5 py-2 text-[10px]"
+    >
+      {items.map(([label, value]) => (
+        <div className="flex min-w-0 justify-between gap-2" key={label}>
+          <dt className="text-muted-foreground">{label}</dt>
+          <dd className="truncate font-mono text-foreground">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ResultExecutionMetadata({
+  node
+}: {
+  node: AigcPipelineRunDetail["nodes"][number];
+}) {
+  const attempt = latestRelevantAttempt(node);
+  const active =
+    attempt?.status === "queued" || attempt?.status === "running";
+  const cacheSource = getAigcCacheReuse(node);
+  const providerTrace = getAigcProviderTrace(node);
+  return (
+    <dl
+      aria-label={`结果执行信息：${node.node_id}`}
+      className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-[10px] text-muted-foreground"
+    >
+      <dt>状态</dt>
+      <dd>{nodeStatusLabel(node.status)}</dd>
+      <dt>耗时</dt>
+      <dd>
+        {attempt
+          ? formatAigcDuration(
+              attempt.started_at,
+              attempt.finished_at,
+              active
+            )
+          : "-"}
+      </dd>
+      <dt>Attempt</dt>
+      <dd>{attempt ? `#${attempt.attempt}` : "-"}</dd>
+      {cacheSource ? (
+        <>
+          <dt>缓存复用</dt>
+          <dd className="break-all font-mono">{cacheSource}</dd>
+        </>
+      ) : null}
+      {providerTrace?.taskId ? (
+        <>
+          <dt>供应商任务</dt>
+          <dd className="break-all font-mono">{providerTrace.taskId}</dd>
+        </>
+      ) : null}
+      {providerTrace?.requestId ? (
+        <>
+          <dt>Request ID</dt>
+          <dd className="break-all font-mono">{providerTrace.requestId}</dd>
+        </>
+      ) : null}
+    </dl>
+  );
+}
+
 function RunPanel({
   onCancel,
   onRetry,
   onSelectRun,
   runDetail,
-  runs
+  runDetailState,
+  runs,
+  selectedRunId
 }: {
   onCancel: (runId: string) => void;
   onRetry: (runId: string, nodeId: string) => void;
   onSelectRun: (runId: string) => void;
   runDetail: AigcPipelineRunDetail | undefined;
+  runDetailState: AigcRunDetailQueryState | undefined;
   runs: AigcPipelineRun[];
+  selectedRunId: string | null;
 }) {
   if (!runDetail && runs.length === 0) {
     return (
@@ -2029,7 +3265,7 @@ function RunPanel({
           <select
             className="mt-1.5 h-9 w-full rounded-md border border-input bg-card px-2 text-xs text-foreground"
             onChange={(event) => onSelectRun(event.target.value)}
-            value={runDetail?.run.id ?? runs[0]?.id}
+            value={selectedRunId ?? runs[0]?.id}
           >
             {runs.map((run) => (
               <option key={run.id} value={run.id}>
@@ -2039,6 +3275,13 @@ function RunPanel({
             ))}
           </select>
         </label>
+      ) : null}
+      {!runDetail && runDetailState ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          {runDetailState === "error"
+            ? "运行详情加载失败，正在重试。"
+            : "正在加载运行详情…"}
+        </p>
       ) : null}
       {runDetail ? (
         <>
@@ -2072,6 +3315,8 @@ function RunPanel({
               .filter((node) => node.included_in_plan)
               .map((node) => {
                 const attempt = latestRelevantAttempt(node);
+                const cacheSource = getAigcCacheReuse(node);
+                const providerTrace = getAigcProviderTrace(node);
                 const attemptActive =
                   attempt?.status === "queued" || attempt?.status === "running";
                 return (
@@ -2132,6 +3377,37 @@ function RunPanel({
                         </dd>
                       </dl>
                     ) : null}
+                    {cacheSource ? (
+                      <p className="text-[10px] text-info">
+                        缓存复用 · 来源 Task{" "}
+                        <span className="break-all font-mono">
+                          {cacheSource}
+                        </span>
+                      </p>
+                    ) : null}
+                    {providerTrace ? (
+                      <dl
+                        aria-label={`供应商追踪标识：${node.node_id}`}
+                        className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-[10px] text-muted-foreground"
+                      >
+                        {providerTrace.taskId ? (
+                          <>
+                            <dt>供应商任务 ID</dt>
+                            <dd className="break-all font-mono">
+                              {providerTrace.taskId}
+                            </dd>
+                          </>
+                        ) : null}
+                        {providerTrace.requestId ? (
+                          <>
+                            <dt>供应商 Request ID</dt>
+                            <dd className="break-all font-mono">
+                              {providerTrace.requestId}
+                            </dd>
+                          </>
+                        ) : null}
+                      </dl>
+                    ) : null}
                     <LogErrorDetails
                       error={getAigcNodeLogError(node)}
                       label={`节点失败原因：${node.node_id}`}
@@ -2171,6 +3447,7 @@ function LogErrorDetails({
   label: string;
 }) {
   if (!error) return null;
+  const message = jsonParserErrorMessage(error) ?? error.message;
   const metadata = [
     error.code ? `错误码：${error.code}` : null,
     error.stage ? `阶段：${error.stage}` : null,
@@ -2182,7 +3459,7 @@ function LogErrorDetails({
       aria-label={label}
       className="border-l-2 border-destructive pl-2 text-[10px]"
     >
-      <p className="break-words text-destructive">{error.message}</p>
+      <p className="break-words text-destructive">{message}</p>
       {metadata.length > 0 ? (
         <p className="mt-1 break-words text-muted-foreground">
           {metadata.join(" · ")}
@@ -2252,7 +3529,16 @@ function InspectorPlaceholder({ copy, title }: { copy: string; title: string }) 
   );
 }
 
-function toFlowNode(node: AigcNode): AigcFlowNode {
+function asModalityNode(node: AigcV2Node): ModalityNode | null {
+  return node.type === "audio" ||
+    node.type === "image" ||
+    node.type === "text" ||
+    node.type === "video"
+    ? node
+    : null;
+}
+
+function toFlowNode(node: AigcV2Node): AigcFlowNode {
   return {
     id: node.id,
     type: node.type,
@@ -2264,7 +3550,7 @@ function toFlowNode(node: AigcNode): AigcFlowNode {
 
 export function toFlowEdge(
   edge: AigcEdge,
-  nodes: readonly AigcNode[] = [],
+  nodes: readonly AigcV2Node[] = [],
   edges: readonly AigcEdge[] = [edge]
 ): Edge {
   const incompatible =
@@ -2302,175 +3588,6 @@ function connectionToDomainEdge(connection: Connection): AigcEdge {
   };
 }
 
-export function isValidAigcConnection(
-  connection: Pick<
-    Connection | Edge,
-    "source" | "sourceHandle" | "target" | "targetHandle"
-  >,
-  nodes: AigcNode[],
-  edges: AigcEdge[]
-): boolean {
-  return getAigcConnectionValidationError(connection, nodes, edges) === null;
-}
-
-type AigcConnectionValidationError =
-  | "bbox_reference_conflict"
-  | "invalid_connection"
-  | "duplicate_edge"
-  | "input_not_allowed_for_mode"
-  | "output_not_allowed_for_mode"
-  | "port_type_mismatch"
-  | "target_connection_limit";
-
-export function getAigcConnectionValidationError(
-  connection: Pick<
-    Connection | Edge,
-    "source" | "sourceHandle" | "target" | "targetHandle"
-  >,
-  nodes: AigcNode[],
-  edges: AigcEdge[]
-): AigcConnectionValidationError | null {
-  if (
-    !connection.source ||
-    !connection.target ||
-    !connection.sourceHandle ||
-    !connection.targetHandle ||
-    connection.source === connection.target
-  ) {
-    return "invalid_connection";
-  }
-  if (
-    edges.some(
-      (edge) =>
-        edge.sourceNodeId === connection.source &&
-        edge.sourceHandle === connection.sourceHandle &&
-        edge.targetNodeId === connection.target &&
-        edge.targetHandle === connection.targetHandle
-    )
-  ) {
-    return "duplicate_edge";
-  }
-  const source = nodes.find((node) => node.id === connection.source);
-  const target = nodes.find((node) => node.id === connection.target);
-  if (!source || !target) return "invalid_connection";
-  const sourcePort = AIGC_NODE_REGISTRY_BY_TYPE.get(source.type)?.outputs.find(
-    (port) => port.id === connection.sourceHandle
-  );
-  const targetPort = AIGC_NODE_REGISTRY_BY_TYPE.get(target.type)?.inputs.find(
-    (port) => port.id === connection.targetHandle
-  );
-  if (!sourcePort || !targetPort || sourcePort.type !== targetPort.type) {
-    return "port_type_mismatch";
-  }
-  if (
-    target.type === "video_generation" &&
-    !isVideoPortActive(targetPort, target.config.generation_mode)
-  ) {
-    return "input_not_allowed_for_mode";
-  }
-  if (
-    target.type === "image_to_image" &&
-    !isSeedreamImageInputActive(target, targetPort.id, edges)
-  ) {
-    return "input_not_allowed_for_mode";
-  }
-  if (
-    source.type === "image_to_image" &&
-    !isSeedreamImageOutputActive(source, sourcePort.id, edges)
-  ) {
-    return "output_not_allowed_for_mode";
-  }
-  if (
-    connectionBreaksBboxReferences(
-      {
-        sourceNodeId: connection.source,
-        sourceHandle: connection.sourceHandle,
-        targetNodeId: connection.target,
-        targetHandle: connection.targetHandle
-      },
-      nodes,
-      edges
-    )
-  ) {
-    return "bbox_reference_conflict";
-  }
-  const connectionCount = edges.filter(
-    (edge) =>
-      edge.targetNodeId === connection.target &&
-      edge.targetHandle === connection.targetHandle
-  ).length;
-  const maxConnections =
-    target.type === "video_generation"
-      ? videoInputLimit(target, targetPort)
-      : target.type === "image_to_image"
-        ? seedreamImageInputLimit(target, targetPort)
-        : targetPort.max_connections;
-  return connectionCount >= maxConnections
-    ? "target_connection_limit"
-    : null;
-}
-
-export function connectionValidationFeedback(
-  validationError: AigcConnectionValidationError,
-  connection: Pick<Connection | Edge, "target" | "targetHandle">,
-  nodes: AigcNode[]
-): string {
-  const target = nodes.find((node) => node.id === connection.target);
-  if (
-    validationError === "target_connection_limit" &&
-    target?.type === "image_to_image" &&
-    connection.targetHandle === "image"
-  ) {
-    const registration = AIGC_NODE_REGISTRY_BY_TYPE.get(target.type);
-    const port = registration?.inputs.find(
-      (candidate) => candidate.id === connection.targetHandle
-    );
-    const limit = port ? seedreamImageInputLimit(target, port) : 1;
-    return (target.config.operation ?? "image_to_image") === "image_to_image"
-      ? `图生图节点最多支持 ${limit} 张参考图`
-      : `${seedreamImageTitle(target)}节点最多支持 ${limit} 张图片`;
-  }
-  if (
-    validationError === "target_connection_limit" &&
-    target?.type === "video_generation"
-  ) {
-    const port = AIGC_NODE_REGISTRY_BY_TYPE.get(target.type)?.inputs.find(
-      (candidate) => candidate.id === connection.targetHandle
-    );
-    if (port) {
-      return `${port.label}最多支持 ${videoInputLimit(target, port)} 个连接`;
-    }
-  }
-  if (
-    validationError === "input_not_allowed_for_mode" &&
-    target?.type === "video_generation"
-  ) {
-    const port = AIGC_NODE_REGISTRY_BY_TYPE.get(target.type)?.inputs.find(
-      (candidate) => candidate.id === connection.targetHandle
-    );
-    return `${port?.label ?? "该输入"}不适用于当前生成模式`;
-  }
-  if (
-    validationError === "input_not_allowed_for_mode" &&
-    target?.type === "image_to_image"
-  ) {
-    const port = AIGC_NODE_REGISTRY_BY_TYPE.get(target.type)?.inputs.find(
-      (candidate) => candidate.id === connection.targetHandle
-    );
-    return `${port?.label ?? "该输入"}不适用于${seedreamImageTitle(target)}模式`;
-  }
-  if (validationError === "output_not_allowed_for_mode") {
-    return "该输出不适用于当前 Seedream 模式或编辑目标";
-  }
-  if (validationError === "duplicate_edge") {
-    return "该连线已存在。";
-  }
-  if (validationError === "bbox_reference_conflict") {
-    return "该文本节点含框选引用，只能连接到同时接收对应图片的图生图节点。";
-  }
-  return "端口类型不匹配，或目标端口已有输入。";
-}
-
 function videoValidationFeedback(
   issue: { message: string; nodeId: string }
 ): string {
@@ -2484,12 +3601,114 @@ function seedreamValidationFeedback(
 }
 
 function definitionValidationIssue(
-  definition: AigcPipeline["definition"]
+  definition: AigcPipelineDefinition | AigcPipelineDefinitionV2
 ): string | null {
   const seedreamIssue = validateSeedreamImageDefinition(definition)[0];
   if (seedreamIssue) {
     return seedreamValidationFeedback(seedreamIssue);
   }
   const videoIssue = validateVideoGenerationDefinition(definition)[0];
-  return videoIssue ? videoValidationFeedback(videoIssue) : null;
+  if (videoIssue) {
+    return videoValidationFeedback(videoIssue);
+  }
+  const faceBlurIssue = validateVideoFaceBlurDefinition(definition)[0];
+  return faceBlurIssue
+    ? `视频人脸打码节点（${faceBlurIssue.nodeId}）：${faceBlurIssue.message}`
+    : null;
+}
+
+function definitionForNodeScope<
+  TDefinition extends AigcPipelineDefinition | AigcPipelineDefinitionV2
+>(definition: TDefinition, startNodeId: string): TDefinition {
+  const nodeIds = getConnectedAigcNodeIds(definition, startNodeId);
+  return {
+    ...definition,
+    nodes: definition.nodes.filter((node) => nodeIds.has(node.id)),
+    edges: definition.edges.filter(
+      (edge) =>
+        nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId)
+    )
+  } as TDefinition;
+}
+
+function editorDraftFromEntity(entity: EditorEntity): AigcEditorDraft {
+  return {
+    definition: serializeAigcEditorDefinition(entity.definition),
+    description: entity.description,
+    name: entity.name
+  };
+}
+
+function editorDraftFromState(
+  state: ReturnType<AigcEditorStore["getState"]>
+): AigcEditorDraft {
+  return {
+    definition: state.definition,
+    description: state.description,
+    name: state.name
+  };
+}
+
+function editorDraftsEqual(
+  left: Readonly<AigcEditorDraft>,
+  right: Readonly<AigcEditorDraft>
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function validateEditorDraft(
+  draft: Readonly<AigcEditorDraft>,
+  startNodeId?: string
+): string | null {
+  if (!draft.name.trim()) return "名称不能为空。";
+  return definitionValidationIssue(
+    startNodeId
+      ? definitionForNodeScope(draft.definition, startNodeId)
+      : draft.definition
+  );
+}
+
+function autosaveErrorMessage(error: unknown): string {
+  if (
+    (isApiError(error) && error.status === 409) ||
+    (typeof error === "object" &&
+      error !== null &&
+      "status" in error &&
+      error.status === 409)
+  ) {
+    return "保存冲突：服务端已有更新，请刷新后重新编辑。";
+  }
+  return getUserFacingErrorMessage(error);
+}
+
+function autosaveStatusText(state: AutosaveState): string {
+  if (state.status === "pending") return "等待自动保存";
+  if (state.status === "saving") {
+    return state.retryAttempt > 0
+      ? `正在保存（重试 ${state.retryAttempt}/3）`
+      : "正在保存";
+  }
+  if (state.status === "failed") {
+    return `自动保存失败：${state.message ?? "请稍后重试。"}`;
+  }
+  if (state.status === "conflict") {
+    return state.message ?? "保存冲突：服务端已有更新，请刷新后重新编辑。";
+  }
+  if (state.status === "invalid") {
+    return `草稿无效：${state.message ?? "请检查画布内容。"}`;
+  }
+  return `已保存 Revision ${state.revision}`;
+}
+
+function useLatestCallback<TArgs extends unknown[], TResult>(
+  callback: (...args: TArgs) => TResult
+): (...args: TArgs) => TResult {
+  const callbackRef = useRef(callback);
+  useLayoutEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+  return useCallback(
+    (...args: TArgs) => callbackRef.current(...args),
+    []
+  );
 }

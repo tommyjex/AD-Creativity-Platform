@@ -23,6 +23,13 @@ export function getAigcVideoDownload(
   return getAigcAssetDownload(asset, title, "视频结果", videoExtension);
 }
 
+export function getAigcAudioDownload(
+  asset: AigcResultAsset | undefined,
+  title: string
+): AigcAssetDownload | null {
+  return getAigcAssetDownload(asset, title, "音频结果", audioExtension);
+}
+
 function getAigcAssetDownload(
   asset: AigcResultAsset | undefined,
   title: string,
@@ -67,4 +74,15 @@ function videoExtension(
   if (normalized === "video/webm") return "webm";
   if (normalized === "video/mpeg") return "mpeg";
   return "mp4";
+}
+
+function audioExtension(
+  mimeType: string | null
+): "aac" | "m4a" | "mp3" | "ogg" | "wav" {
+  const normalized = mimeType?.split(";", 1)[0]?.trim().toLowerCase();
+  if (normalized === "audio/aac") return "aac";
+  if (normalized === "audio/mp4" || normalized === "audio/x-m4a") return "m4a";
+  if (normalized === "audio/ogg") return "ogg";
+  if (normalized === "audio/wav" || normalized === "audio/x-wav") return "wav";
+  return "mp3";
 }

@@ -12,10 +12,11 @@ import {
   type OnNodesChange,
   type ReactFlowProps
 } from "@xyflow/react";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { OutputNode } from "@/components/workspace/canvas/output-node";
 import { ReferenceNode } from "@/components/workspace/canvas/reference-node";
+import { cn } from "@/lib/utils";
 
 import "@xyflow/react/dist/style.css";
 
@@ -26,6 +27,9 @@ export const defaultNodeTypes: NodeTypes = {
 };
 
 export interface NodeCanvasProps<NodeType extends Node = Node> {
+  backgroundProps?: ComponentProps<typeof Background>;
+  className?: string;
+  controlsProps?: ComponentProps<typeof Controls>;
   nodes: NodeType[];
   edges?: Edge[];
   nodeTypes?: NodeTypes;
@@ -39,6 +43,9 @@ export interface NodeCanvasProps<NodeType extends Node = Node> {
 }
 
 export function NodeCanvas<NodeType extends Node = Node>({
+  backgroundProps,
+  className,
+  controlsProps,
   nodes,
   edges,
   nodeTypes = defaultNodeTypes,
@@ -49,7 +56,10 @@ export function NodeCanvas<NodeType extends Node = Node>({
 }: NodeCanvasProps<NodeType>) {
   return (
     <ReactFlowProvider>
-      <div className="relative h-full w-full">
+      <div
+        className={cn("relative h-full w-full", className)}
+        data-testid="node-canvas-root"
+      >
         <ReactFlow<NodeType>
           {...reactFlowProps}
           edges={edges}
@@ -60,8 +70,8 @@ export function NodeCanvas<NodeType extends Node = Node>({
           onNodesChange={onNodesChange}
           proOptions={{ hideAttribution: true }}
         >
-          <Background />
-          <Controls />
+          <Background {...backgroundProps} />
+          <Controls {...controlsProps} />
         </ReactFlow>
         {children}
       </div>

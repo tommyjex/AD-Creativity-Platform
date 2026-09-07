@@ -1,27 +1,31 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { AigcPipelineRunDetail } from "@/lib/aigc/types";
+import type { AigcRunProjection } from "@/lib/aigc/run-scope";
 
-const AigcRunContext = createContext<AigcPipelineRunDetail | null>(null);
-const AigcLayerPreviewRunContext =
-  createContext<AigcPipelineRunDetail | null>(null);
+const AigcRunContext = createContext<AigcRunProjection | null>(null);
 interface AigcRunActions {
   continueFromNode: (nodeId: string) => void;
-  pending: boolean;
+  openLayerEditor: (href: string) => void;
+  pendingForNode: (nodeId: string) => boolean;
 }
 const AigcRunActionsContext = createContext<AigcRunActions | null>(null);
 
 export const AigcRunProvider = AigcRunContext.Provider;
-export const AigcLayerPreviewRunProvider = AigcLayerPreviewRunContext.Provider;
 export const AigcRunActionsProvider = AigcRunActionsContext.Provider;
 
-export function useAigcRunProjection() {
-  return useContext(AigcRunContext);
+export function useAigcRunProjection(nodeId: string) {
+  return useContext(AigcRunContext)?.displayRunForNode(nodeId) ?? null;
 }
 
-export function useAigcLayerPreviewRun() {
-  return useContext(AigcLayerPreviewRunContext);
+export function useAigcActiveRun(nodeId: string) {
+  return useContext(AigcRunContext)?.activeRunForNode(nodeId) ?? null;
+}
+
+export function useAigcLayerPreviewRun(nodeId: string) {
+  return (
+    useContext(AigcRunContext)?.latestSuccessfulRunForNode(nodeId) ?? null
+  );
 }
 
 export function useAigcRunActions() {

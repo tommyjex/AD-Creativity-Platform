@@ -63,6 +63,33 @@ class Settings(BaseModel):
     mediakit_asr_poll_interval_seconds: int = Field(default=3, gt=0)
     mediakit_asr_timeout_seconds: int = Field(default=1800, gt=0)
     mediakit_asr_language: str | None = None
+    aigc_video_enhancement_concurrency: int = Field(default=1, gt=0)
+    mediakit_video_enhancement_poll_interval_seconds: int = Field(default=3, gt=0)
+    mediakit_video_enhancement_timeout_seconds: int = Field(default=1800, gt=0)
+    mediakit_video_enhancement_transfer_timeout_seconds: int = Field(
+        default=600,
+        gt=0,
+    )
+    mediakit_video_enhancement_transfer_max_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        gt=0,
+    )
+    aigc_video_face_blur_concurrency: int = Field(default=1, gt=0)
+    mediakit_face_blur_poll_interval_seconds: int = Field(default=3, gt=0)
+    mediakit_face_blur_timeout_seconds: int = Field(default=1800, gt=0)
+    mediakit_face_blur_transfer_timeout_seconds: int = Field(default=600, gt=0)
+    mediakit_face_blur_transfer_max_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        gt=0,
+    )
+    aigc_multitrack_concurrency: int = Field(default=1, gt=0)
+    mediakit_multitrack_poll_interval_seconds: int = Field(default=3, gt=0)
+    mediakit_multitrack_timeout_seconds: int = Field(default=1800, gt=0)
+    mediakit_multitrack_transfer_timeout_seconds: int = Field(default=600, gt=0)
+    mediakit_multitrack_transfer_max_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        gt=0,
+    )
     asset_download_timeout_seconds: int = Field(default=600, gt=0)
     asset_download_max_bytes: int = Field(default=30 * 1024 * 1024, gt=0)
     composer_ffmpeg_path: str | None = None
@@ -153,6 +180,88 @@ class Settings(BaseModel):
                 cls.model_fields["mediakit_asr_timeout_seconds"].default,
             ),
             mediakit_asr_language=_get_env_first("MEDIAKIT_ASR_LANGUAGE"),
+            aigc_video_enhancement_concurrency=_parse_positive_int_env(
+                "AIGC_VIDEO_ENHANCEMENT_CONCURRENCY",
+                cls.model_fields["aigc_video_enhancement_concurrency"].default,
+            ),
+            mediakit_video_enhancement_poll_interval_seconds=_parse_positive_int_env(
+                "MEDIAKIT_VIDEO_ENHANCEMENT_POLL_INTERVAL_SECONDS",
+                cls.model_fields[
+                    "mediakit_video_enhancement_poll_interval_seconds"
+                ].default,
+            ),
+            mediakit_video_enhancement_timeout_seconds=_parse_positive_int_env(
+                "MEDIAKIT_VIDEO_ENHANCEMENT_TIMEOUT_SECONDS",
+                cls.model_fields[
+                    "mediakit_video_enhancement_timeout_seconds"
+                ].default,
+            ),
+            mediakit_video_enhancement_transfer_timeout_seconds=(
+                _parse_positive_int_env(
+                    "MEDIAKIT_VIDEO_ENHANCEMENT_TRANSFER_TIMEOUT_SECONDS",
+                    cls.model_fields[
+                        "mediakit_video_enhancement_transfer_timeout_seconds"
+                    ].default,
+                )
+            ),
+            mediakit_video_enhancement_transfer_max_bytes=_parse_positive_int_env(
+                "MEDIAKIT_VIDEO_ENHANCEMENT_TRANSFER_MAX_BYTES",
+                cls.model_fields[
+                    "mediakit_video_enhancement_transfer_max_bytes"
+                ].default,
+            ),
+            aigc_video_face_blur_concurrency=_parse_positive_int_env(
+                "AIGC_VIDEO_FACE_BLUR_CONCURRENCY",
+                cls.model_fields["aigc_video_face_blur_concurrency"].default,
+            ),
+            mediakit_face_blur_poll_interval_seconds=_parse_positive_int_env(
+                "MEDIAKIT_FACE_BLUR_POLL_INTERVAL_SECONDS",
+                cls.model_fields[
+                    "mediakit_face_blur_poll_interval_seconds"
+                ].default,
+            ),
+            mediakit_face_blur_timeout_seconds=_parse_positive_int_env(
+                "MEDIAKIT_FACE_BLUR_TIMEOUT_SECONDS",
+                cls.model_fields["mediakit_face_blur_timeout_seconds"].default,
+            ),
+            mediakit_face_blur_transfer_timeout_seconds=_parse_positive_int_env(
+                "MEDIAKIT_FACE_BLUR_TRANSFER_TIMEOUT_SECONDS",
+                cls.model_fields[
+                    "mediakit_face_blur_transfer_timeout_seconds"
+                ].default,
+            ),
+            mediakit_face_blur_transfer_max_bytes=_parse_positive_int_env(
+                "MEDIAKIT_FACE_BLUR_TRANSFER_MAX_BYTES",
+                cls.model_fields[
+                    "mediakit_face_blur_transfer_max_bytes"
+                ].default,
+            ),
+            aigc_multitrack_concurrency=_parse_positive_int_env(
+                "AIGC_MULTITRACK_CONCURRENCY",
+                cls.model_fields["aigc_multitrack_concurrency"].default,
+            ),
+            mediakit_multitrack_poll_interval_seconds=_parse_positive_int_env(
+                "MEDIAKIT_MULTITRACK_POLL_INTERVAL_SECONDS",
+                cls.model_fields[
+                    "mediakit_multitrack_poll_interval_seconds"
+                ].default,
+            ),
+            mediakit_multitrack_timeout_seconds=_parse_positive_int_env(
+                "MEDIAKIT_MULTITRACK_TIMEOUT_SECONDS",
+                cls.model_fields["mediakit_multitrack_timeout_seconds"].default,
+            ),
+            mediakit_multitrack_transfer_timeout_seconds=_parse_positive_int_env(
+                "MEDIAKIT_MULTITRACK_TRANSFER_TIMEOUT_SECONDS",
+                cls.model_fields[
+                    "mediakit_multitrack_transfer_timeout_seconds"
+                ].default,
+            ),
+            mediakit_multitrack_transfer_max_bytes=_parse_positive_int_env(
+                "MEDIAKIT_MULTITRACK_TRANSFER_MAX_BYTES",
+                cls.model_fields[
+                    "mediakit_multitrack_transfer_max_bytes"
+                ].default,
+            ),
             asset_download_timeout_seconds=_parse_positive_int_env(
                 "ASSET_DOWNLOAD_TIMEOUT_SECONDS",
                 ark_image_timeout_seconds,

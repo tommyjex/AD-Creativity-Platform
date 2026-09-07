@@ -6,6 +6,7 @@ import type {
 } from "@/lib/aigc/types";
 
 export const AIGC_RUN_ERROR_FALLBACK = "执行失败，未提供详细原因";
+export const AIGC_REDACTED_ERROR_FALLBACK = "执行失败，错误详情已脱敏";
 export const AIGC_BLOCKED_MESSAGE = "因上游失败被阻塞";
 
 export interface AigcLogError {
@@ -13,6 +14,11 @@ export interface AigcLogError {
   message: string;
   requestId: string | null;
   stage: string | null;
+}
+
+export interface AigcProviderTrace {
+  requestId: string | null;
+  taskId: string | null;
 }
 
 const localDateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
@@ -88,7 +94,7 @@ export function getAigcRunLogError(
 export function getAigcNodeLogError(
   node: Pick<
     AigcPipelineRunNode,
-    "attempts" | "current_task_id" | "status"
+    "attempts" | "current_task_id" | "error" | "status"
   >
 ): AigcLogError | null {
   if (node.status === "blocked") {
@@ -101,7 +107,60 @@ export function getAigcNodeLogError(
   }
   if (node.status !== "failed" && node.status !== "timed_out") return null;
 
-  return toLogError(latestRelevantAttempt(node)?.error ?? null);
+  return toLogError(latestRelevantAttempt(node)?.error ?? node.error ?? null);
+}
+
+export function getAigcCacheReuse(
+  node: Pick<AigcPipelineRunNode, "reused_from_task_id" | "status">
+): string | null {
+  return node.status === "reused"
+    ? safeTraceValue(node.reused_from_task_id)
+    : null;
+}
+
+export function formatAigcErrorStage(
+  stage: string | null | undefined
+): string | null {
+  if (!stage) return null;
+  const normalized = stage.trim().toLowerCase();
+  if (
+    ["initialization", "input_resolution", "scheduling", "validate", "validation"]
+      .includes(normalized)
+  ) {
+    return "validate";
+  }
+  if (["create", "submit"].includes(normalized)) return "submit";
+  if (["poll", "provider_poll"].includes(normalized)) return "poll";
+  if (
+    ["asset_transfer", "download", "store", "transfer"].includes(normalized)
+  ) {
+    return "transfer";
+  }
+  if (
+    ["database", "db", "persist", "persistence", "repository"].includes(
+      normalized
+    )
+  ) {
+    return "persistence";
+  }
+  return safeStageValue(normalized);
+}
+
+export function getAigcProviderTrace(
+  node: Pick<
+    AigcPipelineRunNode,
+    "attempts" | "current_task_id" | "result"
+  >
+): AigcProviderTrace | null {
+  const attempt = latestRelevantAttempt(node);
+  const assets =
+    attempt?.result.assets.length
+      ? attempt.result.assets
+      : node.result.assets;
+  const metadata = assets.find((asset) => asset.metadata)?.metadata;
+  const requestId = safeTraceValue(metadata?.provider_request_id);
+  const taskId = safeTraceValue(metadata?.provider_task_id);
+  return requestId || taskId ? { requestId, taskId } : null;
 }
 
 function parseTimestamp(value: string | null | undefined): number | null {
@@ -127,8 +186,31 @@ function formatDurationMilliseconds(durationMs: number): string {
 function toLogError(error: AigcTaskError | null): AigcLogError {
   return {
     code: error?.code ?? null,
-    message: error?.message || AIGC_RUN_ERROR_FALLBACK,
+    message: safeErrorMessage(error?.message),
     requestId: error?.request_id ?? null,
-    stage: error?.stage ?? null
+    stage: formatAigcErrorStage(error?.stage)
   };
+}
+
+function safeErrorMessage(value: string | null | undefined): string {
+  if (!value) return AIGC_RUN_ERROR_FALLBACK;
+  if (
+    /https?:\/\//i.test(value) ||
+    /\b(api[_ -]?key|authorization|bearer|credential|password|secret|signature|token)\b/i.test(
+      value
+    )
+  ) {
+    return AIGC_REDACTED_ERROR_FALLBACK;
+  }
+  return value;
+}
+
+function safeStageValue(value: string): string | null {
+  return /^[a-z0-9_-]{1,80}$/.test(value) ? value : null;
+}
+
+function safeTraceValue(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return /^[A-Za-z0-9._:/-]{1,255}$/.test(normalized) ? normalized : null;
 }

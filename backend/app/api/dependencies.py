@@ -25,6 +25,10 @@ from backend.app.services.mediakit import (
     get_asr_subtitle_client as create_asr_subtitle_client,
 )
 from backend.app.services.mediakit_face_blur import FaceBlurVideoClient
+from backend.app.services.mediakit_multitrack import MediaKitMultiTrackClient
+from backend.app.services.mediakit_video_enhancement import (
+    MediaKitVideoEnhancementClient,
+)
 from backend.app.services.video_normalizer import VideoNormalizer, get_video_normalizer
 from backend.app.services.workflow import WorkflowService
 
@@ -59,11 +63,34 @@ def get_media_inspector_service() -> MediaInspector:
     return get_media_inspector()
 
 
+def get_video_enhancement_client_factory() -> Callable[
+    [], MediaKitVideoEnhancementClient
+]:
+    return MediaKitVideoEnhancementClient
+
+
+def get_face_blur_video_client_factory() -> Callable[[], FaceBlurVideoClient]:
+    return FaceBlurVideoClient
+
+
+def get_multitrack_client_factory() -> Callable[[], MediaKitMultiTrackClient]:
+    return MediaKitMultiTrackClient
+
+
 def get_aigc_pipeline_runtime(
     repository: Repository = Depends(get_repository),
     asset_storage: AssetStorageService = Depends(get_asset_storage_service),
     generation: ModelArkGenerationService = Depends(get_modelark_generation_service),
     media_inspector: MediaInspector = Depends(get_media_inspector_service),
+    video_enhancement_client_factory: Callable[
+        [], MediaKitVideoEnhancementClient
+    ] = Depends(get_video_enhancement_client_factory),
+    face_blur_client_factory: Callable[
+        [], FaceBlurVideoClient
+    ] = Depends(get_face_blur_video_client_factory),
+    multitrack_client_factory: Callable[
+        [], MediaKitMultiTrackClient
+    ] = Depends(get_multitrack_client_factory),
     settings: Settings = Depends(get_settings),
 ) -> AigcPipelineRuntime:
     runtime = _aigc_runtimes.get(repository)
@@ -76,8 +103,38 @@ def get_aigc_pipeline_runtime(
                 asset_storage,
                 media_inspector=media_inspector,
                 video_timeout_seconds=settings.aigc_video_timeout_seconds,
+                video_enhancement_client_factory=(
+                    video_enhancement_client_factory
+                ),
+                video_enhancement_poll_interval_seconds=(
+                    settings.mediakit_video_enhancement_poll_interval_seconds
+                ),
+                video_enhancement_timeout_seconds=(
+                    settings.mediakit_video_enhancement_timeout_seconds
+                ),
+                face_blur_client_factory=face_blur_client_factory,
+                face_blur_poll_interval_seconds=(
+                    settings.mediakit_face_blur_poll_interval_seconds
+                ),
+                face_blur_timeout_seconds=(
+                    settings.mediakit_face_blur_timeout_seconds
+                ),
+                multitrack_client_factory=multitrack_client_factory,
+                multitrack_poll_interval_seconds=(
+                    settings.mediakit_multitrack_poll_interval_seconds
+                ),
+                multitrack_timeout_seconds=(
+                    settings.mediakit_multitrack_timeout_seconds
+                ),
             ),
             video_concurrency=settings.aigc_video_concurrency,
+            video_enhancement_concurrency=(
+                settings.aigc_video_enhancement_concurrency
+            ),
+            video_face_blur_concurrency=(
+                settings.aigc_video_face_blur_concurrency
+            ),
+            multitrack_concurrency=settings.aigc_multitrack_concurrency,
         )
         _aigc_runtimes[repository] = runtime
     return runtime
@@ -97,10 +154,6 @@ def get_video_normalizer_service() -> VideoNormalizer:
 
 def get_asr_subtitle_client() -> AsrSubtitleClient:
     return create_asr_subtitle_client()
-
-
-def get_face_blur_video_client_factory() -> Callable[[], FaceBlurVideoClient]:
-    return FaceBlurVideoClient
 
 
 def get_background_task_runner() -> BackgroundTaskRunner:

@@ -38,7 +38,7 @@
 - Modify: `backend/app/services/aigc_dag.py`
 - Test: `backend/tests/test_aigc_dag.py`
 
-- [ ] **Step 1: 写入失败的连通子图测试**
+- [x] **Step 1: 写入失败的连通子图测试**
 
 在 `backend/tests/test_aigc_dag.py` 增加覆盖两条独立链、分支、孤立节点、`full`、`from_node`、`retry_node` 和非法起始节点的测试。测试核心断言如下：
 
@@ -77,7 +77,7 @@ def test_aigc_run_scope_rejects_missing_start_node() -> None:
     assert error.value.code == "start_node_missing"
 ```
 
-- [ ] **Step 2: 运行范围测试并确认失败**
+- [x] **Step 2: 运行范围测试并确认失败**
 
 Run:
 
@@ -88,7 +88,7 @@ cd backend
 
 Expected: FAIL，提示 `aigc_run_scope_node_ids` 尚不存在。
 
-- [ ] **Step 3: 实现最小范围算法**
+- [x] **Step 3: 实现最小范围算法**
 
 在 `backend/app/services/aigc_dag.py` 增加纯函数，统一先 canonicalize，再构建无向邻接表：
 
@@ -136,7 +136,7 @@ def aigc_run_scope_node_ids(
     return aigc_connected_node_ids(graph, start_node_id)
 ```
 
-- [ ] **Step 4: 运行后端范围测试**
+- [x] **Step 4: 运行后端范围测试**
 
 Run:
 
@@ -147,7 +147,7 @@ cd backend
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交范围算法**
+- [x] **Step 5: 提交范围算法**
 
 ```bash
 git add backend/app/services/aigc_dag.py backend/tests/test_aigc_dag.py
@@ -161,7 +161,7 @@ git commit -m "feat(aigc): derive connected flow run scopes"
 - Modify: `backend/app/repositories/mysql.py`
 - Test: `backend/tests/test_aigc_repository.py`
 
-- [ ] **Step 1: 写入 Repository 契约失败测试**
+- [x] **Step 1: 写入 Repository 契约失败测试**
 
 使用现有 `aigc_repository` 参数化 fixture，为同一 Pipeline 创建两个断开的流程 Run：
 
@@ -213,7 +213,7 @@ def test_older_run_completion_does_not_replace_latest_status(
 
 同时保留并扩展现有测试，断言活动 `full` Run 与任何局部 Run 相互冲突、相同幂等键仍返回原 Run。
 
-- [ ] **Step 2: 运行 Repository 契约测试并确认失败**
+- [x] **Step 2: 运行 Repository 契约测试并确认失败**
 
 Run:
 
@@ -225,7 +225,7 @@ cd backend
 
 Expected: 不相交流程创建因现有 Pipeline 全局锁而 FAIL。
 
-- [ ] **Step 3: 修改内存 Repository 的冲突判断**
+- [x] **Step 3: 修改内存 Repository 的冲突判断**
 
 在锁内计算 candidate 与所有活动 Run 的范围交集：
 
@@ -253,7 +253,7 @@ for active in self._aigc_runs.values():
 
 将活动状态集合提取为 Repository 文件内常量，避免 Memory 与 MySQL 分支复制枚举字面量。
 
-- [ ] **Step 4: 修改 MySQL Repository 的事务冲突判断**
+- [x] **Step 4: 修改 MySQL Repository 的事务冲突判断**
 
 保持现有 Pipeline `FOR UPDATE` 行锁，在同一事务内读取全部活动 Run 并逐个比较范围：
 
@@ -283,7 +283,7 @@ if any(
 
 Pipeline 行锁必须覆盖幂等检查、范围冲突检查和 `run_number` 分配。
 
-- [ ] **Step 5: 只允许最新 Run 更新 Pipeline 摘要**
+- [x] **Step 5: 只允许最新 Run 更新 Pipeline 摘要**
 
 Memory 与 MySQL 的 `update_aigc_run` 都先定位该 Pipeline 最大 `run_number` 的 Run：
 
@@ -303,7 +303,7 @@ if latest.id == updated.id:
 
 MySQL 使用按 `run_number DESC LIMIT 1` 的查询完成同样判断。创建新 Run 时仍直接写入新 Run 的 queued 状态，因为其 `run_number` 必然最大。
 
-- [ ] **Step 6: 运行 Repository 契约和并发测试**
+- [x] **Step 6: 运行 Repository 契约和并发测试**
 
 Run:
 
@@ -327,7 +327,7 @@ git commit -m "feat(aigc): isolate active runs by connected flow"
 - Modify: `backend/app/services/aigc_executor.py`
 - Test: `backend/tests/test_aigc_executor.py`
 
-- [ ] **Step 1: 写入两个流程同时执行的失败测试**
+- [x] **Step 1: 写入两个流程同时执行的失败测试**
 
 创建包含两个断开 LLM 流程的定义，并使用带 `asyncio.Event` 闸门的 Fake Gateway：
 
@@ -376,7 +376,7 @@ async def test_disconnected_flows_run_and_cancel_independently() -> None:
         await runtime.stop()
 ```
 
-- [ ] **Step 2: 运行 Runtime 测试并确认当前失败模式**
+- [x] **Step 2: 运行 Runtime 测试并确认当前失败模式**
 
 Run:
 
@@ -388,7 +388,7 @@ cd backend
 
 Expected: 第二个 Run 在 Repository 冲突修复前失败；Task 2 完成后进入并行执行并暴露任何 Runtime 全局状态问题。
 
-- [ ] **Step 3: 移除 Runtime 中残留的 Pipeline 全局假设**
+- [x] **Step 3: 移除 Runtime 中残留的 Pipeline 全局假设**
 
 若测试显示 Runtime 内部仍按 Pipeline 串行，所有 worker、enqueue 和 cancellation 数据结构 SHALL 以 `run_id` 为键。保留队列与模态 semaphore，仅移除 Pipeline 级互斥。目标结构：
 
@@ -400,7 +400,7 @@ self._workers: list[asyncio.Task[None]]
 
 取消逻辑只更新目标 `run_id` 的节点与 attempt，不遍历或取消同 Pipeline 的其他 Run。
 
-- [ ] **Step 4: 增加同流程冲突和 full 冲突的 Runtime 测试**
+- [x] **Step 4: 增加同流程冲突和 full 冲突的 Runtime 测试**
 
 ```python
 with pytest.raises(ActiveRunConflictError):
@@ -418,7 +418,7 @@ with pytest.raises(ActiveRunConflictError):
     )
 ```
 
-- [ ] **Step 5: 运行后端相关测试**
+- [x] **Step 5: 运行后端相关测试**
 
 Run:
 
@@ -442,7 +442,7 @@ git commit -m "test(aigc): verify disconnected flow concurrency"
 - Create: `frontend/lib/aigc/run-scope.ts`
 - Create: `frontend/tests/aigc-run-scope.test.ts`
 
-- [ ] **Step 1: 写入前端范围和优先级失败测试**
+- [x] **Step 1: 写入前端范围和优先级失败测试**
 
 ```typescript
 it("maps each node to its own active run", () => {
@@ -483,7 +483,7 @@ it("applies selected history only to its connected flow", () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试并确认失败**
+- [x] **Step 2: 运行测试并确认失败**
 
 Run:
 
@@ -494,7 +494,7 @@ npm test -- --run tests/aigc-run-scope.test.ts
 
 Expected: FAIL，模块 `@/lib/aigc/run-scope` 不存在。
 
-- [ ] **Step 3: 实现前端范围函数**
+- [x] **Step 3: 实现前端范围函数**
 
 `frontend/lib/aigc/run-scope.ts` 导出以下稳定接口：
 
@@ -529,7 +529,7 @@ function scopeContainsNode(run: AigcPipelineRun, nodeId: string): boolean {
 // 其余节点回退到该流程最新终态详情。
 ```
 
-- [ ] **Step 4: 实现需要加载的 Run ID 选择**
+- [x] **Step 4: 实现需要加载的 Run ID 选择**
 
 仅请求所有活动 Run、用户选择的 Run，以及当前定义每个流程最新相关终态 Run：
 
@@ -549,7 +549,7 @@ export function selectAigcProjectionRunIds(
 }
 ```
 
-- [ ] **Step 5: 运行范围测试和静态检查**
+- [x] **Step 5: 运行范围测试和静态检查**
 
 Run:
 
@@ -561,7 +561,7 @@ npm run typecheck
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交前端范围模块**
+- [x] **Step 6: 提交前端范围模块**
 
 ```bash
 git add frontend/lib/aigc/run-scope.ts frontend/tests/aigc-run-scope.test.ts
@@ -576,7 +576,7 @@ git commit -m "feat(aigc): resolve runs by connected flow"
 - Modify: `frontend/tests/aigc-flow-node.test.tsx`
 - Modify: `frontend/tests/aigc-prompt-editor.test.tsx`
 
-- [ ] **Step 1: 写入节点级 Context 失败测试**
+- [x] **Step 1: 写入节点级 Context 失败测试**
 
 调整测试 helper，使 Provider 接收 Resolver，并验证两个节点分别读取不同 Run：
 
@@ -600,7 +600,7 @@ expect(screen.queryByText("运行中")).toBeNull();
 expect(screen.getByText("流程 B 结果")).toBeInTheDocument();
 ```
 
-- [ ] **Step 2: 运行组件测试并确认类型或断言失败**
+- [x] **Step 2: 运行组件测试并确认类型或断言失败**
 
 Run:
 
@@ -613,7 +613,7 @@ npm test -- --run \
 
 Expected: FAIL，因为 Context 仍是单个 `AigcPipelineRunDetail`。
 
-- [ ] **Step 3: 增加批量详情查询 Hook**
+- [x] **Step 3: 增加批量详情查询 Hook**
 
 在 `frontend/lib/aigc/queries.ts` 使用 TanStack `useQueries`：
 
@@ -638,7 +638,7 @@ export function useAigcRunDetails(runIds: readonly string[]) {
 
 `useAigcRuns` 请求页大小调整到 `100`，保证常见多流程画布能从最新记录中找到每个流程的最近 Run。
 
-- [ ] **Step 4: 将 Run Context 改为 Resolver**
+- [x] **Step 4: 将 Run Context 改为 Resolver**
 
 ```typescript
 const AigcRunContext = createContext<AigcRunProjection | null>(null);
@@ -660,7 +660,7 @@ interface AigcRunActions {
 
 Layer preview SHALL 通过 `latestSuccessfulRunForNode(nodeId)` 解析，不再使用单个全局 fallback Run。
 
-- [ ] **Step 5: 更新 Flow Node 与 Prompt Editor 消费方式**
+- [x] **Step 5: 更新 Flow Node 与 Prompt Editor 消费方式**
 
 ```typescript
 const runDetail = useAigcRunProjection(id);
@@ -670,7 +670,7 @@ const pending = runActions?.pendingForNode(id) ?? false;
 
 `AigcPromptEditor` 使用其 `activeNode.id` 获取 Run；显式 prop 仅保留给独立测试或历史详情组件，不得回退到其他流程 Run。
 
-- [ ] **Step 6: 运行组件测试**
+- [x] **Step 6: 运行组件测试**
 
 Run:
 
@@ -703,7 +703,7 @@ git commit -m "feat(aigc): provide node-scoped run projections"
 - Modify: `frontend/components/workspace/aigc/aigc-editor.tsx`
 - Modify: `frontend/tests/aigc-editor.test.tsx`
 
-- [ ] **Step 1: 写入编辑器多流程失败测试**
+- [x] **Step 1: 写入编辑器多流程失败测试**
 
 构造两个断开流程和两个活动 Run，断言状态及局部按钮互不影响：
 
@@ -746,8 +746,9 @@ it("keeps disconnected flow controls and results independent", async () => {
 - 取消流程 A 只调用其 Run ID。
 - 顶部执行全部在任一活动 Run 存在时禁用。
 - 流程 A 的 create mutation pending 时流程 B 仍可提交。
+- 流程 A 配置或媒体资产无效时，从流程 B 节点运行仍可提交。
 
-- [ ] **Step 2: 运行编辑器测试并确认失败**
+- [x] **Step 2: 运行编辑器测试并确认失败**
 
 Run:
 
@@ -759,7 +760,7 @@ npm test -- --run tests/aigc-editor.test.tsx \
 
 Expected: FAIL，因为编辑器仍只有 `visibleRunId` 和单一 `runDetail`。
 
-- [ ] **Step 3: 在编辑器组装多 Run Projection**
+- [x] **Step 3: 在编辑器组装多 Run Projection**
 
 替换 `preferredRun/visibleRunId/runQuery` 的全局画布投影：
 
@@ -786,7 +787,7 @@ const selectedRunDetail =
 
 Run Panel 使用 `selectedRunDetail`；画布 Provider 使用 `runProjection`。
 
-- [ ] **Step 4: 将局部 pending 状态按流程隔离**
+- [x] **Step 4: 将局部 pending 状态按流程隔离**
 
 使用起始节点集合记录正在提交的局部 Run：
 
@@ -819,9 +820,31 @@ if (startNodeId) {
 }
 ```
 
+局部执行的定义与媒体资产预检仅遍历
+`getConnectedAigcNodeIds(definition, startNodeId)` 中的节点；full 执行继续
+预检全部节点：
+
+```typescript
+const validationNodeIds = startNodeId
+  ? getConnectedAigcNodeIds(currentDefinition, startNodeId)
+  : new Set(currentDefinition.nodes.map((node) => node.id));
+const validationDefinition = {
+  ...currentDefinition,
+  nodes: currentDefinition.nodes.filter((node) =>
+    validationNodeIds.has(node.id)
+  ),
+  edges: currentDefinition.edges.filter(
+    (edge) =>
+      validationNodeIds.has(edge.sourceNodeId) &&
+      validationNodeIds.has(edge.targetNodeId)
+  )
+};
+const validationIssue = definitionValidationIssue(validationDefinition);
+```
+
 局部请求只在自身 scope 标记 pending；`finally` 精确移除对应 `startNodeId`。顶部 full 请求使用保留键 `__full__` 并阻塞所有局部提交。
 
-- [ ] **Step 5: 绑定检查器、结果和操作到选中节点流程**
+- [x] **Step 5: 绑定检查器、结果和操作到选中节点流程**
 
 ```typescript
 const selectedNodeRunDetail = selectedNode
@@ -837,7 +860,7 @@ const selectedNodeActiveRun = selectedNode
 - Run Panel 继续展示完整运行历史，但选择历史仅更新该 Run 所属流程。
 - Cancel/Retry 始终传入面板中明确选择的 `run.id`。
 
-- [ ] **Step 6: 运行编辑器与全部前端单元测试**
+- [x] **Step 6: 运行编辑器与全部前端单元测试**
 
 Run:
 
@@ -868,7 +891,7 @@ git commit -m "feat(aigc): isolate canvas run state by flow"
 - Modify: `frontend/package.json`
 - Modify: `.trae/specs/isolate-aigc-connected-flow-runs/checklist.md`
 
-- [ ] **Step 1: 扩展验收 Fixture**
+- [x] **Step 1: 扩展验收 Fixture**
 
 为 `create-aigc-acceptance-fixture.mjs` 增加 `--flow-isolation`，创建两条不相连的 `text -> llm -> text` 流程，节点 ID 固定为：
 
@@ -930,7 +953,7 @@ const flowIsolationDefinition = {
 
 Fixture 只创建 Pipeline，不提交模型任务，并输出包含 `pipelineUrl`、`pipelineId` 和 definition 的 JSON。
 
-- [ ] **Step 2: 编写 Playwright 验收脚本**
+- [x] **Step 2: 编写 Playwright 验收脚本**
 
 脚本读取 fixture JSON，在浏览器侧拦截 Run 列表和详情请求。SSR 的 Pipeline 请求继续访问真实后端，Run 数据使用确定性响应：
 
@@ -1087,7 +1110,7 @@ for (const viewport of viewports) {
 
 `runDetail`、`textNode`、`llmNode` 和 `textEdge` 在各自脚本中定义为返回完整契约对象的本地 helper，不从生产代码复制状态判断逻辑。脚本同时检查按钮 bounding box 位于视口内且互不重叠。图片/视频媒体继续使用 `object-contain`，不得改变现有宽高比规则。
 
-- [ ] **Step 3: 注册验收命令**
+- [x] **Step 3: 注册验收命令**
 
 在 `frontend/package.json` scripts 增加：
 
@@ -1096,7 +1119,7 @@ for (const viewport of viewports) {
 "acceptance:aigc-flow-isolation": "node scripts/verify-aigc-flow-run-isolation.mjs"
 ```
 
-- [ ] **Step 4: 运行完整后端测试**
+- [x] **Step 4: 运行完整后端测试**
 
 Run:
 
@@ -1107,7 +1130,7 @@ cd backend
 
 Expected: 全部 PASS。
 
-- [ ] **Step 5: 运行完整前端质量门禁**
+- [x] **Step 5: 运行完整前端质量门禁**
 
 Run:
 
@@ -1121,7 +1144,7 @@ npm run build
 
 Expected: 全部 PASS，构建完成且 ESLint 为 0 warnings。
 
-- [ ] **Step 6: 启动服务并运行 Playwright**
+- [x] **Step 6: 启动服务并运行 Playwright**
 
 Run:
 
@@ -1142,7 +1165,7 @@ AIGC_FLOW_ISOLATION_FIXTURE="$(
 
 Expected: 三个视口全部通过，无页面异常、控制台错误、状态串扰或布局重叠。
 
-- [ ] **Step 7: 核对并勾选验收清单**
+- [x] **Step 7: 核对并勾选验收清单**
 
 逐项验证 `.trae/specs/isolate-aigc-connected-flow-runs/checklist.md`。任何失败项先追加修复任务，不得直接勾选。
 

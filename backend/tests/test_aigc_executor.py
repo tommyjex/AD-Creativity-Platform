@@ -4,7 +4,11 @@ import asyncio
 
 import pytest
 
-from backend.app.repositories import InMemoryRepository, NotFoundError
+from backend.app.repositories import (
+    ActiveRunConflictError,
+    InMemoryRepository,
+    NotFoundError,
+)
 from backend.app.schemas import (
     AigcAssetDirection,
     AigcEditedLayer,
@@ -12,10 +16,13 @@ from backend.app.schemas import (
     AigcLayerSet,
     AigcPipelineCreate,
     AigcPipelineDefinition,
+    AigcPipelineDefinitionV2,
     AigcPipelineRun,
     AigcPipelineRunCreate,
+    AigcPipelineRunMode,
     AigcPipelineRunNode,
     AigcPipelineRunStatus,
+    AigcPipelineUpdate,
     AigcPipelineTaskAttempt,
     AigcPipelineTaskAssetReference,
     AigcResultAsset,
@@ -35,6 +42,7 @@ from backend.app.services.aigc_executor import (
     AIGC_LAYER_EXECUTOR_VERSION,
     AIGC_VIDEO_EXECUTOR_VERSION,
     AigcPipelineRuntime,
+    AigcResolvedInputError,
     _compile_bbox_prompt,
     _execute_layer_canvas,
     _project_result_for_port,
@@ -43,9 +51,12 @@ from backend.app.services.aigc_executor import (
 )
 from backend.app.services.aigc_gateway import (
     AIGC_IMAGE_EXECUTOR_VERSION,
+    AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION,
+    AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION,
     AigcGatewayError,
     AigcGatewayExecution,
 )
+from backend.app.services.aigc_pipeline import canonicalize_aigc_definition
 
 
 def node(node_id: str, node_type: str, x: int, *, config=None):
@@ -68,13 +79,21 @@ def edge(edge_id: str, source: str, source_handle: str, target: str, target_hand
     }
 
 
-def chain_definition() -> AigcPipelineDefinition:
+def chain_definition(
+    *,
+    image_size: str = "2K",
+) -> AigcPipelineDefinition:
     return AigcPipelineDefinition.model_validate(
         {
             "nodes": [
                 node("input", "text_input", 0, config={"text": "商品"}),
                 node("llm", "llm", 300),
-                node("image", "text_to_image", 600),
+                node(
+                    "image",
+                    "text_to_image",
+                    600,
+                    config={"size": image_size},
+                ),
                 node("output", "image_output", 900),
             ],
             "edges": [
@@ -102,16 +121,49 @@ def branching_definition() -> AigcPipelineDefinition:
     )
 
 
+def disconnected_llm_definition() -> AigcPipelineDefinition:
+    return AigcPipelineDefinition.model_validate(
+        {
+            "nodes": [
+                node("flow-a-input", "text_input", 0, config={"text": "流程 A"}),
+                node("flow-a-model", "llm", 300),
+                node("flow-b-input", "text_input", 0, config={"text": "流程 B"}),
+                node("flow-b-model", "llm", 300),
+            ],
+            "edges": [
+                edge(
+                    "flow-a-edge",
+                    "flow-a-input",
+                    "text",
+                    "flow-a-model",
+                    "prompt",
+                ),
+                edge(
+                    "flow-b-edge",
+                    "flow-b-input",
+                    "text",
+                    "flow-b-model",
+                    "prompt",
+                ),
+            ],
+        }
+    )
+
+
 class FakeGateway:
     def __init__(
         self,
         *,
         retry_first: bool = False,
         fail_node: str | None = None,
+        error_code_by_node: dict[str, str] | None = None,
+        results_by_node: dict[str, AigcTaskResult] | None = None,
         result_assets_by_node: dict[str, list[AigcResultAsset]] | None = None,
     ):
         self.retry_first = retry_first
         self.fail_node = fail_node
+        self.error_code_by_node = error_code_by_node or {}
+        self.results_by_node = results_by_node or {}
         self.result_assets_by_node = result_assets_by_node or {}
         self.calls: dict[str, int] = {}
         self.tasks = []
@@ -126,10 +178,11 @@ class FakeGateway:
         self.max_active = max(self.max_active, self.active)
         await asyncio.sleep(0.01)
         self.active -= 1
-        if task.node_id == self.fail_node:
+        error_code = self.error_code_by_node.get(task.node_id)
+        if task.node_id == self.fail_node or error_code is not None:
             raise AigcGatewayError(
                 AigcTaskError(
-                    code="invalid_input",
+                    code=error_code or "invalid_input",
                     message="permanent failure",
                     stage="test",
                 )
@@ -143,7 +196,14 @@ class FakeGateway:
                 ),
                 retryable=True,
             )
-        if task.type == AigcTaskType.LLM:
+        if task.node_id in self.results_by_node:
+            result = self.results_by_node[task.node_id].model_copy(deep=True)
+            version = (
+                AIGC_VIDEO_EXECUTOR_VERSION
+                if task.type == AigcTaskType.VIDEO_GENERATION
+                else AIGC_IMAGE_EXECUTOR_VERSION
+            )
+        elif task.type == AigcTaskType.LLM:
             result = AigcTaskResult(
                 kind=AigcResultKind.TEXT,
                 text=f"result:{task.node_id}",
@@ -168,7 +228,15 @@ class FakeGateway:
             version = (
                 AIGC_VIDEO_EXECUTOR_VERSION
                 if task.type == AigcTaskType.VIDEO_GENERATION
-                else AIGC_IMAGE_EXECUTOR_VERSION
+                else (
+                    AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION
+                    if task.type == AigcTaskType.VIDEO_FACE_BLUR
+                    else (
+                        AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION
+                        if task.type == AigcTaskType.VIDEO_ENHANCEMENT
+                        else AIGC_IMAGE_EXECUTOR_VERSION
+                    )
+                )
             )
         return AigcGatewayExecution(
             result=result,
@@ -221,9 +289,24 @@ class FlakyLeaseRepository(InMemoryRepository):
         )
 
 
+class FailingLeaseRecoveryRepository(FlakyLeaseRepository):
+    def __init__(self) -> None:
+        super().__init__(renew_failures=1)
+        self.recovery_list_failures = 1
+
+    def list_aigc_task_attempts(self, *, statuses=None):
+        if self.renew_failed.is_set() and self.recovery_list_failures > 0:
+            self.recovery_list_failures -= 1
+            raise RuntimeError("simulated recovery database outage")
+        return super().list_aigc_task_attempts(statuses=statuses)
+
+
 class _NoopAssetStorage:
     def delete_asset_objects(self, _asset) -> None:
         return None
+
+    def with_access_url(self, asset):
+        return asset
 
 
 class FailingTaskCreationRepository(InMemoryRepository):
@@ -259,6 +342,28 @@ class BlockingGateway(FakeGateway):
         self.started.set()
         await self.release.wait()
         return await super().execute(task)
+
+
+class GatedLlmGateway(FakeGateway):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started: asyncio.Queue[str] = asyncio.Queue()
+        self.release = asyncio.Event()
+
+    async def execute(self, task) -> AigcGatewayExecution:
+        self.tasks.append(task)
+        self.calls[task.node_id] = self.calls.get(task.node_id, 0) + 1
+        await self.started.put(task.node_id)
+        await self.release.wait()
+        return AigcGatewayExecution(
+            result=AigcTaskResult(
+                kind=AigcResultKind.TEXT,
+                text=f"result:{task.node_id}",
+                text_digest="a" * 64,
+            ),
+            metrics=AigcTaskMetrics(duration_ms=10),
+            executor_version="aigc-llm-v1",
+        )
 
 
 class PersistingBlockingVideoGateway(FakeGateway):
@@ -312,6 +417,51 @@ class PersistingBlockingVideoGateway(FakeGateway):
 
 def run_runtime_scenario(coroutine_factory):
     return asyncio.run(coroutine_factory())
+
+
+def v2_definition(
+    nodes: list[dict[str, object]],
+    edges: list[dict[str, object]] | None = None,
+) -> AigcPipelineDefinitionV2:
+    return AigcPipelineDefinitionV2.model_validate(
+        {
+            "schemaVersion": 2,
+            "nodes": nodes,
+            "edges": edges or [],
+        }
+    )
+
+
+def create_v2_runtime_pipeline(
+    repository: InMemoryRepository,
+    definition: AigcPipelineDefinitionV2,
+    *,
+    name: str,
+):
+    stored = repository.create_aigc_pipeline(
+        AigcPipelineCreate(name=name, definition=AigcPipelineDefinition())
+    )
+    return stored.model_copy(update={"definition": definition}, deep=True)
+
+
+async def submit_v2_run(
+    runtime: AigcPipelineRuntime,
+    pipeline,
+    *,
+    mode: AigcPipelineRunMode = AigcPipelineRunMode.FULL,
+    start_node_id: str | None = None,
+    idempotency_key: str,
+):
+    return await runtime._submit(
+        pipeline,
+        definition=pipeline.definition,
+        persisted_mode=mode,
+        planning_mode=mode,
+        start_node_id=start_node_id,
+        source_run_id=None,
+        source_node_id=None,
+        idempotency_key=idempotency_key,
+    )
 
 
 def create_image_asset(repository: InMemoryRepository, asset_id: str) -> None:
@@ -446,6 +596,100 @@ def text_to_video_definition(
     )
 
 
+def video_enhancement_definition(
+    *,
+    input_asset_id: str = "enhancement-input",
+    enhance_style: str = "hd",
+    include_output: bool = True,
+) -> AigcPipelineDefinition:
+    nodes = [
+        node(
+            "video-input",
+            "video_input",
+            0,
+            config={"asset_id": input_asset_id},
+        ),
+        node(
+            "enhance",
+            "video_enhancement",
+            300,
+            config={"enhance_style": enhance_style},
+        ),
+    ]
+    edges = [
+        edge(
+            "enhancement-input-edge",
+            "video-input",
+            "video",
+            "enhance",
+            "video",
+        )
+    ]
+    if include_output:
+        nodes.append(node("video-output", "video_output", 600))
+        edges.append(
+            edge(
+                "enhancement-output-edge",
+                "enhance",
+                "video",
+                "video-output",
+                "video",
+            )
+        )
+    return AigcPipelineDefinition.model_validate(
+        {"nodes": nodes, "edges": edges}
+    )
+
+
+def video_face_blur_definition(
+    *,
+    input_asset_id: str = "face-blur-input",
+    mask_mode: str = "mosaic",
+    mask_strength: str = "medium",
+    include_output: bool = True,
+) -> AigcPipelineDefinition:
+    nodes = [
+        node(
+            "video-input",
+            "video_input",
+            0,
+            config={"asset_id": input_asset_id},
+        ),
+        node(
+            "face-blur",
+            "video_face_blur",
+            300,
+            config={
+                "mask_mode": mask_mode,
+                "mask_strength": mask_strength,
+            },
+        ),
+    ]
+    edges = [
+        edge(
+            "face-blur-input-edge",
+            "video-input",
+            "video",
+            "face-blur",
+            "video",
+        )
+    ]
+    if include_output:
+        nodes.append(node("video-output", "video_output", 600))
+        edges.append(
+            edge(
+                "face-blur-output-edge",
+                "face-blur",
+                "video",
+                "video-output",
+                "video",
+            )
+        )
+    return AigcPipelineDefinition.model_validate(
+        {"nodes": nodes, "edges": edges}
+    )
+
+
 def image_reference_definition(
     image_edges: list[tuple[str, str]],
 ) -> AigcPipelineDefinition:
@@ -505,6 +749,1038 @@ def test_runtime_executes_dependency_chain_and_projects_output() -> None:
     assert by_id["output"].status == AigcRunNodeStatus.SUCCEEDED
     assert by_id["output"].result.kind == AigcResultKind.ASSETS
     assert gateway.calls == {"llm": 1, "image": 1}
+
+
+def test_v2_local_modalities_create_frozen_results_without_attempts() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_media_asset(repository, "local-image", AssetType.UPLOADED_IMAGE)
+        create_media_asset(repository, "local-video", AssetType.UPLOADED_VIDEO)
+        create_media_asset(repository, "local-audio", AssetType.UPLOADED_AUDIO)
+        definition = v2_definition(
+            [
+                node("text", "text", 0, config={"text": "商品文案"}),
+                node("llm", "llm", 250),
+                node("image", "image", 0, config={"asset_id": "local-image"}),
+                node("video", "video", 0, config={"asset_id": "local-video"}),
+                node("audio", "audio", 0, config={"asset_id": "local-audio"}),
+            ],
+            [edge("text-llm", "text", "text", "llm", "prompt")],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 local snapshots",
+        )
+        runtime = AigcPipelineRuntime(repository, FakeGateway())  # type: ignore[arg-type]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="v2-local-snapshots",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id)
+        finally:
+            await runtime.stop()
+
+    detail = run_runtime_scenario(scenario)
+    by_id = {item.node_id: item for item in detail.nodes}
+
+    assert detail.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert by_id["text"].result.text == "商品文案"
+    assert by_id["text"].result.text_digest is not None
+    assert {
+        node_id: by_id[node_id].result.assets[0].asset_id
+        for node_id in ("image", "video", "audio")
+    } == {
+        "image": "local-image",
+        "video": "local-video",
+        "audio": "local-audio",
+    }
+    for node_id in ("text", "image", "video", "audio"):
+        assert by_id[node_id].status == AigcRunNodeStatus.SUCCEEDED
+        assert by_id[node_id].current_task_id is None
+        assert by_id[node_id].attempts == []
+
+
+@pytest.mark.parametrize("asset_id", [None, "missing-image"])
+def test_v2_consumed_empty_or_unavailable_media_fails_before_model_task(
+    asset_id: str | None,
+) -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        definition = v2_definition(
+            [
+                node("image", "image", 0, config={"asset_id": asset_id}),
+                node("prompt", "text", 0, config={"text": "调整背景"}),
+                node("image-model", "image_to_image", 300),
+                node("independent-prompt", "text", 0, config={"text": "独立分支"}),
+                node("independent-llm", "llm", 300),
+                node("empty-terminal", "audio", 600),
+            ],
+            [
+                edge("image-model-image", "image", "image", "image-model", "image"),
+                edge("image-model-prompt", "prompt", "text", "image-model", "prompt"),
+                edge(
+                    "independent",
+                    "independent-prompt",
+                    "text",
+                    "independent-llm",
+                    "prompt",
+                ),
+            ],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 invalid local media",
+        )
+        gateway = FakeGateway()
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key=f"v2-invalid-media-{asset_id}",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id), gateway
+        finally:
+            await runtime.stop()
+
+    detail, gateway = run_runtime_scenario(scenario)
+    by_id = {item.node_id: item for item in detail.nodes}
+
+    assert detail.run.status == AigcPipelineRunStatus.FAILED
+    assert by_id["image"].status == AigcRunNodeStatus.FAILED
+    assert by_id["image"].error is not None
+    assert by_id["image"].error.code == "invalid_input"
+    assert by_id["image-model"].status == AigcRunNodeStatus.BLOCKED
+    assert by_id["image-model"].attempts == []
+    assert by_id["independent-llm"].status == AigcRunNodeStatus.SUCCEEDED
+    assert by_id["empty-terminal"].status == AigcRunNodeStatus.IDLE
+    assert not by_id["empty-terminal"].included_in_plan
+    assert gateway.calls == {"independent-llm": 1}
+
+
+def test_v2_text_modality_chain_projects_immediately_and_supports_from_node() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        definition = v2_definition(
+            [
+                node("source", "text", 0, config={"text": "商品"}),
+                node("producer", "llm", 200),
+                node("relay-one", "text", 400, config={"text": "备用一"}),
+                node(
+                    "relay-two",
+                    "text",
+                    600,
+                    config={
+                        "text": "备用二",
+                        "upstream_text_override": "人工覆盖",
+                    },
+                ),
+                node("consumer", "llm", 800),
+                node("terminal", "text", 1000),
+            ],
+            [
+                edge("source-producer", "source", "text", "producer", "prompt"),
+                edge("producer-relay-one", "producer", "text", "relay-one", "text"),
+                edge("relay-one-two", "relay-one", "text", "relay-two", "text"),
+                edge("relay-two-consumer", "relay-two", "text", "consumer", "prompt"),
+                edge("consumer-terminal", "consumer", "text", "terminal", "text"),
+            ],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 relay chain",
+        )
+        gateway = FakeGateway()
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            first = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="v2-relay-first",
+            )
+            await runtime.wait_until_idle()
+            second = await submit_v2_run(
+                runtime,
+                pipeline,
+                mode=AigcPipelineRunMode.FROM_NODE,
+                start_node_id="relay-one",
+                idempotency_key="v2-relay-second",
+            )
+            await runtime.wait_until_idle()
+            return (
+                repository.get_aigc_run(first.run.id),
+                repository.get_aigc_run(second.run.id),
+                gateway,
+            )
+        finally:
+            await runtime.stop()
+
+    first, second, gateway = run_runtime_scenario(scenario)
+    first_by_id = {item.node_id: item for item in first.nodes}
+    second_by_id = {item.node_id: item for item in second.nodes}
+
+    assert first.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert first_by_id["relay-one"].result.text == "result:producer"
+    assert first_by_id["relay-two"].result.text == "人工覆盖"
+    for node_id in ("relay-one", "relay-two"):
+        assert first_by_id[node_id].status == AigcRunNodeStatus.SUCCEEDED
+        assert first_by_id[node_id].attempts == []
+    assert first_by_id["consumer"].attempts[0].params["prompt"] == "人工覆盖"
+    assert first_by_id["terminal"].result.text == "result:consumer"
+    assert first_by_id["terminal"].attempts == []
+
+    assert second.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert second_by_id["producer"].status == AigcRunNodeStatus.REUSED
+    assert second_by_id["relay-one"].result.text == "result:producer"
+    assert second_by_id["relay-two"].result.text == "人工覆盖"
+    assert second_by_id["relay-one"].attempts == []
+    assert second_by_id["relay-two"].attempts == []
+    assert second_by_id["terminal"].result.text == "result:consumer"
+    assert second_by_id["terminal"].attempts == []
+    assert gateway.calls == {"producer": 1, "consumer": 2}
+
+
+def test_v2_media_relay_passes_same_asset_id_without_task_or_backup_fallback() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        definition = v2_definition(
+            [
+                node("source-prompt", "text", 0, config={"text": "商品图"}),
+                node("producer", "text_to_image", 200),
+                node(
+                    "relay",
+                    "image",
+                    400,
+                    config={"asset_id": "missing-local-backup"},
+                ),
+                node("edit-prompt", "text", 400, config={"text": "调整背景"}),
+                node("consumer", "image_to_image", 600),
+            ],
+            [
+                edge(
+                    "source-prompt-producer",
+                    "source-prompt",
+                    "text",
+                    "producer",
+                    "prompt",
+                ),
+                edge("producer-relay", "producer", "image", "relay", "image"),
+                edge("relay-consumer", "relay", "image", "consumer", "image"),
+                edge(
+                    "edit-prompt-consumer",
+                    "edit-prompt",
+                    "text",
+                    "consumer",
+                    "prompt",
+                ),
+            ],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 media relay",
+        )
+        gateway = FakeGateway(
+            result_assets_by_node={
+                "producer": [
+                    AigcResultAsset(
+                        asset_id="upstream-image",
+                        ordinal=0,
+                        mime_type="image/png",
+                    )
+                ]
+            }
+        )
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="v2-media-relay",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id)
+        finally:
+            await runtime.stop()
+
+    detail = run_runtime_scenario(scenario)
+    by_id = {item.node_id: item for item in detail.nodes}
+
+    assert detail.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert by_id["relay"].result.assets[0].asset_id == "upstream-image"
+    assert by_id["relay"].current_task_id is None
+    assert by_id["relay"].attempts == []
+    assert by_id["consumer"].attempts[0].params["reference_asset_ids"] == [
+        "upstream-image"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("base_text", "expected_prompt"),
+    [
+        (
+            "替换包装",
+            "替换包装 图1<bbox>100 200 700 800</bbox> 保留商标位置",
+        ),
+        (
+            "",
+            "图1<bbox>100 200 700 800</bbox> 保留商标位置",
+        ),
+    ],
+)
+def test_v2_local_text_compiles_bbox_for_plain_image_to_image(
+    base_text: str,
+    expected_prompt: str,
+) -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_image_asset(repository, "bbox-image")
+        definition = v2_definition(
+            [
+                node(
+                    "image",
+                    "image",
+                    0,
+                    config={
+                        "asset_id": "bbox-image",
+                        "bbox_asset_id": "bbox-image",
+                        "bbox": {
+                            "type": "bbox",
+                            "x1": 100,
+                            "y1": 200,
+                            "x2": 700,
+                            "y2": 800,
+                        },
+                    },
+                ),
+                node(
+                    "prompt",
+                    "text",
+                    0,
+                    config={
+                        "text": base_text,
+                        "bbox_references": [
+                            {
+                                "source_node_id": "image",
+                                "instruction": "保留商标位置",
+                            }
+                        ],
+                    },
+                ),
+                node("model", "image_to_image", 300),
+            ],
+            [
+                edge("image-model", "image", "image", "model", "image"),
+                edge("prompt-model", "prompt", "text", "model", "prompt"),
+            ],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 bbox prompt",
+        )
+        runtime = AigcPipelineRuntime(
+            repository,
+            FakeGateway(),  # type: ignore[arg-type]
+        )
+        expected_hash = runtime._expected_input_hashes(definition, {})["model"]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="v2-bbox-prompt",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id), expected_hash
+        finally:
+            await runtime.stop()
+
+    detail, expected_hash = run_runtime_scenario(scenario)
+    model = next(item for item in detail.nodes if item.node_id == "model")
+    task = model.attempts[0]
+
+    assert task.params["prompt"] == expected_prompt
+    assert model.input_hash == expected_hash
+
+
+def test_v2_local_text_rejects_when_text_and_bbox_references_are_empty() -> None:
+    repository = InMemoryRepository()
+    definition = v2_definition(
+        [node("prompt", "text", 0, config={"text": "", "bbox_references": []})],
+        [],
+    )
+    runtime = AigcPipelineRuntime(repository, FakeGateway())  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="local text value is empty"):
+        runtime._local_modality_result(definition.nodes[0])  # type: ignore[arg-type]
+
+
+def test_v2_bbox_reference_pauses_while_image_uses_upstream() -> None:
+    definition = v2_definition(
+        [
+            node("producer", "text_to_image", 0),
+            node(
+                "image",
+                "image",
+                300,
+                config={
+                    "asset_id": "local-backup",
+                    "bbox_asset_id": "local-backup",
+                    "bbox": {
+                        "type": "bbox",
+                        "x1": 100,
+                        "y1": 200,
+                        "x2": 700,
+                        "y2": 800,
+                    },
+                },
+            ),
+            node(
+                "prompt",
+                "text",
+                300,
+                config={
+                    "text": "替换包装",
+                    "bbox_references": [
+                        {
+                            "source_node_id": "image",
+                            "instruction": "保留商标位置",
+                        }
+                    ],
+                },
+            ),
+            node("model", "image_to_image", 600),
+        ],
+        [
+            edge("producer-image", "producer", "image", "image", "image"),
+            edge("image-model", "image", "image", "model", "image"),
+            edge("prompt-model", "prompt", "text", "model", "prompt"),
+        ],
+    )
+    node_by_id = {item.id: item for item in definition.nodes}
+
+    assert _compile_bbox_prompt(
+        node_by_id["prompt"],  # type: ignore[arg-type]
+        target_node_id="model",
+        edges=definition.edges,
+        node_by_id=node_by_id,
+    ) == "替换包装"
+
+    local_edges = [
+        item for item in definition.edges if item.id != "producer-image"
+    ]
+    assert _compile_bbox_prompt(
+        node_by_id["prompt"],  # type: ignore[arg-type]
+        target_node_id="model",
+        edges=local_edges,
+        node_by_id=node_by_id,
+    ) == "替换包装 图1<bbox>100 200 700 800</bbox> 保留商标位置"
+
+
+def test_v2_upstream_bbox_compiles_only_for_bound_result_asset() -> None:
+    definition = v2_definition(
+        [
+            node("producer", "text_to_image", 0),
+            node(
+                "image",
+                "image",
+                300,
+                config={
+                    "asset_id": "local-backup",
+                    "upstream_bbox_asset_id": "upstream-image",
+                    "upstream_bbox": {
+                        "type": "bbox",
+                        "x1": 100,
+                        "y1": 200,
+                        "x2": 700,
+                        "y2": 800,
+                    },
+                },
+            ),
+            node(
+                "prompt",
+                "text",
+                300,
+                config={
+                    "text": "替换包装",
+                    "bbox_references": [
+                        {
+                            "source_node_id": "image",
+                            "instruction": "保留商标位置",
+                        }
+                    ],
+                },
+            ),
+            node("model", "image_to_image", 600),
+        ],
+        [
+            edge("producer-image", "producer", "image", "image", "image"),
+            edge("image-model", "image", "image", "model", "image"),
+            edge("prompt-model", "prompt", "text", "model", "prompt"),
+        ],
+    )
+    node_by_id = {item.id: item for item in definition.nodes}
+
+    def image_run_node(asset_id: str) -> AigcPipelineRunNode:
+        return AigcPipelineRunNode(
+            node_id="image",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=AigcTaskResult(
+                kind=AigcResultKind.ASSETS,
+                assets=[
+                    AigcResultAsset(
+                        asset_id=asset_id,
+                        ordinal=0,
+                        mime_type="image/png",
+                    )
+                ],
+            ),
+        )
+
+    assert _compile_bbox_prompt(
+        node_by_id["prompt"],  # type: ignore[arg-type]
+        target_node_id="model",
+        edges=definition.edges,
+        node_by_id=node_by_id,
+        run_node_by_id={"image": image_run_node("upstream-image")},
+    ) == "替换包装 图1<bbox>100 200 700 800</bbox> 保留商标位置"
+
+    with pytest.raises(AigcResolvedInputError) as raised:
+        _compile_bbox_prompt(
+            node_by_id["prompt"],  # type: ignore[arg-type]
+            target_node_id="model",
+            edges=definition.edges,
+            node_by_id=node_by_id,
+            run_node_by_id={"image": image_run_node("new-upstream-image")},
+        )
+    assert raised.value.code == "bbox_reference_asset_changed"
+    assert "image node 'image'" in str(raised.value)
+    assert "text node 'prompt'" in str(raised.value)
+
+
+def test_v2_changed_upstream_bbox_asset_fails_before_provider_call() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        definition = v2_definition(
+            [
+                node(
+                    "source",
+                    "text",
+                    0,
+                    config={"text": "生成商品图"},
+                ),
+                node("producer", "text_to_image", 300),
+                node(
+                    "image",
+                    "image",
+                    600,
+                    config={
+                        "upstream_bbox_asset_id": "previous-upstream-image",
+                        "upstream_bbox": {
+                            "type": "bbox",
+                            "x1": 100,
+                            "y1": 200,
+                            "x2": 700,
+                            "y2": 800,
+                        },
+                    },
+                ),
+                node(
+                    "prompt",
+                    "text",
+                    600,
+                    config={
+                        "text": "替换包装",
+                        "bbox_references": [
+                            {
+                                "source_node_id": "image",
+                                "instruction": "保留商标位置",
+                            }
+                        ],
+                    },
+                ),
+                node("model", "image_to_image", 900),
+            ],
+            [
+                edge("source-producer", "source", "text", "producer", "prompt"),
+                edge("producer-image", "producer", "image", "image", "image"),
+                edge("image-model", "image", "image", "model", "image"),
+                edge("prompt-model", "prompt", "text", "model", "prompt"),
+            ],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 stale upstream bbox",
+        )
+        gateway = FakeGateway(
+            result_assets_by_node={
+                "producer": [
+                    AigcResultAsset(
+                        asset_id="new-upstream-image",
+                        ordinal=0,
+                        mime_type="image/png",
+                    )
+                ]
+            }
+        )
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="v2-stale-upstream-bbox",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id), gateway
+        finally:
+            await runtime.stop()
+
+    detail, gateway = run_runtime_scenario(scenario)
+    model = next(item for item in detail.nodes if item.node_id == "model")
+
+    assert model.status == AigcRunNodeStatus.FAILED
+    assert model.error is not None
+    assert model.error.code == "bbox_reference_asset_changed"
+    assert gateway.calls == {"producer": 1}
+
+
+def test_v2_modality_hash_uses_effective_value_and_ignores_upstream_backup() -> None:
+    repository = InMemoryRepository()
+    runtime = AigcPipelineRuntime(repository, FakeGateway())  # type: ignore[arg-type]
+
+    def local_definition(text: str) -> AigcPipelineDefinitionV2:
+        return v2_definition(
+            [
+                node("prompt", "text", 0, config={"text": text}),
+                node("consumer", "llm", 300),
+            ],
+            [edge("prompt-consumer", "prompt", "text", "consumer", "prompt")],
+        )
+
+    def upstream_definition(
+        backup: str,
+        override: str | None = None,
+    ) -> AigcPipelineDefinitionV2:
+        return v2_definition(
+            [
+                node("source", "text", 0, config={"text": "有效输入"}),
+                node("producer", "llm", 200),
+                node(
+                    "relay",
+                    "text",
+                    400,
+                    config={
+                        "text": backup,
+                        "upstream_text_override": override,
+                    },
+                ),
+                node("consumer", "llm", 600),
+            ],
+            [
+                edge("source-producer", "source", "text", "producer", "prompt"),
+                edge("producer-relay", "producer", "text", "relay", "text"),
+                edge("relay-consumer", "relay", "text", "consumer", "prompt"),
+            ],
+        )
+
+    first_local = runtime._expected_input_hashes(local_definition("第一版"), {})
+    second_local = runtime._expected_input_hashes(local_definition("第二版"), {})
+    cached_producer = AigcPipelineRunNode(
+        node_id="producer",
+        included_in_plan=True,
+        status=AigcRunNodeStatus.SUCCEEDED,
+        result=AigcTaskResult(
+            kind=AigcResultKind.TEXT,
+            text="上游结果",
+            text_digest="b" * 64,
+        ),
+    )
+    first_upstream = runtime._expected_input_hashes(
+        upstream_definition("备用一"),
+        {"producer": cached_producer},
+    )
+    second_upstream = runtime._expected_input_hashes(
+        upstream_definition("备用二"),
+        {"producer": cached_producer},
+    )
+
+    assert first_local["consumer"] != second_local["consumer"]
+    assert first_upstream["consumer"] == second_upstream["consumer"]
+    first_override = runtime._expected_input_hashes(
+        upstream_definition("备用", "覆盖一"),
+        {"producer": cached_producer},
+    )
+    second_override = runtime._expected_input_hashes(
+        upstream_definition("备用", "覆盖二"),
+        {"producer": cached_producer},
+    )
+    assert first_override["consumer"] != second_override["consumer"]
+
+    changed_upstream = cached_producer.model_copy(
+        update={
+            "result": AigcTaskResult(
+                kind=AigcResultKind.TEXT,
+                text="新的上游结果",
+                text_digest="c" * 64,
+            )
+        },
+        deep=True,
+    )
+    stable_override = runtime._expected_input_hashes(
+        upstream_definition("备用", "覆盖一"),
+        {"producer": changed_upstream},
+    )
+    assert first_override["consumer"] == stable_override["consumer"]
+
+
+def test_v2_media_relay_preserves_model_task_asset_trace_without_relay_relation() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_image_asset(repository, "trace-input")
+        definition = v2_definition(
+            [
+                node("source", "image", 0, config={"asset_id": "trace-input"}),
+                node("relay", "image", 200, config={"asset_id": "unused-backup"}),
+                node("prompt", "text", 200, config={"text": "调整背景"}),
+                node("model", "image_to_image", 400),
+            ],
+            [
+                edge("source-relay", "source", "image", "relay", "image"),
+                edge("relay-model", "relay", "image", "model", "image"),
+                edge("prompt-model", "prompt", "text", "model", "prompt"),
+            ],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 asset trace",
+        )
+        runtime = AigcPipelineRuntime(repository, FakeGateway())  # type: ignore[arg-type]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="v2-asset-trace",
+            )
+            await runtime.wait_until_idle()
+            detail = repository.get_aigc_run(created.run.id)
+            model = next(item for item in detail.nodes if item.node_id == "model")
+            task = model.attempts[0]
+            repository.add_aigc_task_assets(
+                [
+                    AigcPipelineTaskAssetReference(
+                        task_id=task.task_id,
+                        direction=AigcAssetDirection.INPUT,
+                        slot="image",
+                        ordinal=0,
+                        asset_id=task.params["reference_asset_ids"][0],
+                    )
+                ]
+            )
+            return detail, repository.list_aigc_task_assets(task.task_id)
+        finally:
+            await runtime.stop()
+
+    detail, references = run_runtime_scenario(scenario)
+    by_id = {item.node_id: item for item in detail.nodes}
+
+    assert by_id["relay"].attempts == []
+    assert by_id["relay"].result.assets[0].asset_id == "trace-input"
+    assert [
+        (item.direction, item.slot, item.ordinal, item.asset_id)
+        for item in references
+    ] == [(AigcAssetDirection.INPUT, "image", 0, "trace-input")]
+
+
+@pytest.mark.parametrize(
+    ("error_code", "producer_status"),
+    [
+        ("invalid_input", AigcRunNodeStatus.FAILED),
+        ("timeout", AigcRunNodeStatus.TIMED_OUT),
+    ],
+)
+def test_v2_upstream_failure_or_timeout_blocks_relay_without_local_fallback(
+    error_code: str,
+    producer_status: AigcRunNodeStatus,
+) -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        definition = v2_definition(
+            [
+                node("source", "text", 0, config={"text": "商品"}),
+                node("producer", "llm", 200),
+                node(
+                    "relay",
+                    "text",
+                    400,
+                    config={
+                        "text": "不得回退",
+                        "upstream_text_override": "覆盖也不得绕过失败",
+                    },
+                ),
+                node("consumer", "llm", 600),
+                node("independent", "text", 0, config={"text": "独立"}),
+                node("independent-llm", "llm", 200),
+            ],
+            [
+                edge("source-producer", "source", "text", "producer", "prompt"),
+                edge("producer-relay", "producer", "text", "relay", "text"),
+                edge("relay-consumer", "relay", "text", "consumer", "prompt"),
+                edge(
+                    "independent-model",
+                    "independent",
+                    "text",
+                    "independent-llm",
+                    "prompt",
+                ),
+            ],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 failed relay",
+        )
+        gateway = FakeGateway(error_code_by_node={"producer": error_code})
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key=f"v2-relay-{error_code}",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id), gateway
+        finally:
+            await runtime.stop()
+
+    detail, gateway = run_runtime_scenario(scenario)
+    by_id = {item.node_id: item for item in detail.nodes}
+
+    assert detail.run.status == AigcPipelineRunStatus.FAILED
+    assert by_id["producer"].status == producer_status
+    assert by_id["relay"].status == AigcRunNodeStatus.BLOCKED
+    assert by_id["relay"].result.kind == AigcResultKind.NONE
+    assert by_id["relay"].attempts == []
+    assert by_id["consumer"].status == AigcRunNodeStatus.BLOCKED
+    assert by_id["consumer"].attempts == []
+    assert by_id["independent-llm"].status == AigcRunNodeStatus.SUCCEEDED
+    assert gateway.calls == {"producer": 1, "independent-llm": 1}
+
+
+def test_v2_unavailable_upstream_blocks_media_relay_without_asset_copy() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        definition = v2_definition(
+            [
+                node("prompt", "text", 0, config={"text": "商品图"}),
+                node("producer", "text_to_image", 200),
+                node("relay", "image", 400, config={"asset_id": "local-backup"}),
+                node("edit-prompt", "text", 400, config={"text": "调整背景"}),
+                node("consumer", "image_to_image", 600),
+            ],
+            [
+                edge("prompt-producer", "prompt", "text", "producer", "prompt"),
+                edge("producer-relay", "producer", "image", "relay", "image"),
+                edge("relay-consumer", "relay", "image", "consumer", "image"),
+                edge(
+                    "edit-prompt-consumer",
+                    "edit-prompt",
+                    "text",
+                    "consumer",
+                    "prompt",
+                ),
+            ],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 unavailable relay",
+        )
+        unavailable = AigcTaskResult(
+            kind=AigcResultKind.UNAVAILABLE,
+            assets=[
+                AigcResultAsset(
+                    asset_id="deleted-output",
+                    ordinal=0,
+                    mime_type="image/png",
+                    available=False,
+                )
+            ],
+        )
+        gateway = FakeGateway(results_by_node={"producer": unavailable})
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="v2-unavailable-relay",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id), gateway
+        finally:
+            await runtime.stop()
+
+    detail, gateway = run_runtime_scenario(scenario)
+    by_id = {item.node_id: item for item in detail.nodes}
+
+    assert detail.run.status == AigcPipelineRunStatus.FAILED
+    assert by_id["producer"].status == AigcRunNodeStatus.SUCCEEDED
+    assert by_id["relay"].status == AigcRunNodeStatus.BLOCKED
+    assert by_id["relay"].result.kind == AigcResultKind.UNAVAILABLE
+    assert by_id["relay"].result.assets[0].asset_id == "deleted-output"
+    assert not by_id["relay"].result.assets[0].available
+    assert by_id["relay"].attempts == []
+    assert by_id["consumer"].status == AigcRunNodeStatus.BLOCKED
+    assert gateway.calls == {"producer": 1}
+
+
+def test_v2_cancellation_never_resolves_relay_from_backup_value() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        definition = v2_definition(
+            [
+                node("source", "text", 0, config={"text": "商品"}),
+                node("producer", "llm", 200),
+                node("relay", "text", 400, config={"text": "不得回退"}),
+                node("consumer", "llm", 600),
+            ],
+            [
+                edge("source-producer", "source", "text", "producer", "prompt"),
+                edge("producer-relay", "producer", "text", "relay", "text"),
+                edge("relay-consumer", "relay", "text", "consumer", "prompt"),
+            ],
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            definition,
+            name="v2 canceled relay",
+        )
+        gateway = BlockingGateway()
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="v2-canceled-relay",
+            )
+            await asyncio.wait_for(gateway.started.wait(), timeout=1)
+            await runtime.cancel_run(created.run.id)
+            gateway.release.set()
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id)
+        finally:
+            await runtime.stop()
+
+    detail = run_runtime_scenario(scenario)
+    by_id = {item.node_id: item for item in detail.nodes}
+
+    assert detail.run.status == AigcPipelineRunStatus.CANCELED
+    assert by_id["relay"].status == AigcRunNodeStatus.CANCELED
+    assert by_id["relay"].result.kind == AigcResultKind.NONE
+    assert by_id["relay"].attempts == []
+    assert by_id["consumer"].status == AigcRunNodeStatus.CANCELED
+    assert by_id["consumer"].attempts == []
+
+
+def test_custom_image_size_is_normalized_in_snapshot_params_and_hash() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        definition = chain_definition(image_size="02048x01024")
+        changed_width = chain_definition(image_size="1920x1024")
+        changed_height = chain_definition(image_size="2048x1080")
+        gateway = FakeGateway()
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+        )
+        hashes = {
+            runtime._expected_input_hashes(item, {})["image"]
+            for item in (definition, changed_width, changed_height)
+        }
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(name="custom size snapshot", definition=definition)
+        )
+        try:
+            created = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="custom-size-snapshot",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id), hashes
+        finally:
+            await runtime.stop()
+
+    detail, hashes = run_runtime_scenario(scenario)
+    image_node = next(item for item in detail.nodes if item.node_id == "image")
+    frozen_config = next(
+        item.config
+        for item in detail.run.definition_snapshot.nodes
+        if item.id == "image"
+    )
+
+    assert frozen_config.size == "2048x1024"
+    assert image_node.attempts[0].params["size"] == "2048x1024"
+    assert len(hashes) == 3
+
+
+def test_manual_retry_uses_frozen_custom_image_size_after_pipeline_change() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        original = chain_definition(image_size="2048x1024")
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(name="frozen custom size", definition=original)
+        )
+        gateway = FakeGateway(fail_node="image")
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+        )
+        try:
+            first = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="frozen-custom-size-first",
+            )
+            await runtime.wait_until_idle()
+            repository.update_aigc_pipeline(
+                pipeline.id,
+                AigcPipelineUpdate(
+                    expected_revision=0,
+                    name=pipeline.name,
+                    definition=chain_definition(image_size="1920x1080"),
+                ),
+            )
+            gateway.fail_node = None
+            retry = await runtime.retry_node(
+                first.run.id,
+                "image",
+                idempotency_key="frozen-custom-size-retry",
+            )
+            await runtime.wait_until_idle()
+            return (
+                repository.get_aigc_run(first.run.id),
+                repository.get_aigc_run(retry.run.id),
+            )
+        finally:
+            await runtime.stop()
+
+    first, retry = run_runtime_scenario(scenario)
+    first_image = next(item for item in first.nodes if item.node_id == "image")
+    retry_image = next(item for item in retry.nodes if item.node_id == "image")
+
+    assert first_image.attempts[0].params["size"] == "2048x1024"
+    assert retry_image.attempts[0].params["size"] == "2048x1024"
+    assert retry_image.input_hash == first_image.input_hash
 
 
 def test_image_to_image_task_preserves_definition_edge_order_and_duplicates() -> None:
@@ -662,6 +1938,24 @@ def test_image_reference_order_changes_expected_input_hash() -> None:
     assert AIGC_IMAGE_EXECUTOR_VERSION == "aigc-image-v3"
 
 
+def test_local_modality_result_uses_storage_access_url() -> None:
+    repository = InMemoryRepository()
+    create_image_asset(repository, "asset-a")
+    definition = canonicalize_aigc_definition(
+        image_reference_definition([("image-a", "asset-a")])
+    )
+    gateway = FakeGateway()
+    gateway.asset_storage.with_access_url = lambda asset: asset.model_copy(
+        update={"url": f"/api/assets/{asset.id}/content"}
+    )
+    runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+    image_node = next(item for item in definition.nodes if item.id == "image-a")
+
+    result = runtime._local_modality_result(image_node)
+
+    assert result.assets[0].download_url == "/api/assets/asset-a/content"
+
+
 def test_video_task_snapshot_preserves_material_order_and_parameters() -> None:
     repository = InMemoryRepository()
     references = [
@@ -685,7 +1979,9 @@ def test_video_task_snapshot_preserves_material_order_and_parameters() -> None:
             }[handle],
         )
         created_asset_ids.add(asset_id)
-    definition = video_reference_definition(references)
+    definition = canonicalize_aigc_definition(
+        video_reference_definition(references)
+    )
     runtime = AigcPipelineRuntime(repository, FakeGateway())  # type: ignore[arg-type]
     node_by_id = {item.id: item for item in definition.nodes}
     run_node_by_id = {
@@ -693,6 +1989,11 @@ def test_video_task_snapshot_preserves_material_order_and_parameters() -> None:
             node_id=item.id,
             included_in_plan=True,
             status=AigcRunNodeStatus.SUCCEEDED,
+            result=(
+                runtime._local_modality_result(item)
+                if item.type.value in {"text", "image", "video", "audio"}
+                else AigcTaskResult()
+            ),
         )
         for item in definition.nodes
     }
@@ -762,21 +2063,35 @@ def test_video_input_snapshot_and_hash_include_all_cache_inputs() -> None:
     assert first_hash != audio_disabled_hash
     assert len(first_hash) == 64
     assert AIGC_VIDEO_EXECUTOR_VERSION == "aigc-video-v2"
-    assert snapshot["video-a"] == {"asset_id": "asset-video-a"}
-    assert snapshot["audio-a"] == {"asset_id": "asset-audio-a"}
+    assert snapshot["video-a"] == {
+        "asset_id": "asset-video-a",
+        "title": None,
+    }
+    assert snapshot["audio-a"] == {
+        "asset_id": "asset-audio-a",
+        "title": None,
+    }
 
 
 def test_video_task_snapshot_rejects_empty_resolved_text_prompt() -> None:
-    definition = AigcPipelineDefinition.model_validate(
-        {
-            "nodes": [
-                node("prompt", "text_input", 0, config={"text": "   "}),
-                node("video-model", "video_generation", 300),
-            ],
-            "edges": [
-                edge("prompt-edge", "prompt", "text", "video-model", "prompt")
-            ],
-        }
+    definition = canonicalize_aigc_definition(
+        AigcPipelineDefinition.model_validate(
+            {
+                "nodes": [
+                    node("prompt", "text_input", 0, config={"text": "   "}),
+                    node("video-model", "video_generation", 300),
+                ],
+                "edges": [
+                    edge(
+                        "prompt-edge",
+                        "prompt",
+                        "text",
+                        "video-model",
+                        "prompt",
+                    )
+                ],
+            }
+        )
     )
     node_by_id = {item.id: item for item in definition.nodes}
     run_node_by_id = {
@@ -784,6 +2099,14 @@ def test_video_task_snapshot_rejects_empty_resolved_text_prompt() -> None:
             node_id=item.id,
             included_in_plan=True,
             status=AigcRunNodeStatus.SUCCEEDED,
+            result=(
+                AigcTaskResult(
+                    kind=AigcResultKind.TEXT,
+                    text="   ",
+                )
+                if item.id == "prompt"
+                else AigcTaskResult()
+            ),
         )
         for item in definition.nodes
     }
@@ -1124,6 +2447,512 @@ def test_incremental_run_reuses_available_video_result() -> None:
     assert gateway.calls["video-model"] == 1
 
 
+def test_video_enhancement_snapshot_hash_and_cache_reuse() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_media_asset(
+            repository,
+            "enhancement-input",
+            AssetType.UPLOADED_VIDEO,
+        )
+        create_media_asset(
+            repository,
+            "enhancement-output",
+            AssetType.UPLOADED_VIDEO,
+        )
+        definition = video_enhancement_definition()
+        changed_config = video_enhancement_definition(enhance_style="natural")
+        create_media_asset(
+            repository,
+            "enhancement-input-2",
+            AssetType.UPLOADED_VIDEO,
+        )
+        changed_input = video_enhancement_definition(
+            input_asset_id="enhancement-input-2"
+        )
+        gateway = FakeGateway(
+            result_assets_by_node={
+                "enhance": [
+                    AigcResultAsset(
+                        asset_id="enhancement-output",
+                        ordinal=0,
+                        mime_type="video/mp4",
+                    )
+                ]
+            }
+        )
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        hashes = (
+            runtime._expected_input_hashes(definition, {})["enhance"],
+            runtime._expected_input_hashes(changed_config, {})["enhance"],
+            runtime._expected_input_hashes(changed_input, {})["enhance"],
+        )
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(
+                name="enhancement cache",
+                definition=definition,
+            )
+        )
+        try:
+            first = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="enhancement-cache-first",
+            )
+            await runtime.wait_until_idle()
+            second = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(
+                    expected_revision=0,
+                    mode="from_node",
+                    start_node_id="video-output",
+                ),
+                idempotency_key="enhancement-cache-second",
+            )
+            await runtime.wait_until_idle()
+            return (
+                repository.get_aigc_run(first.run.id),
+                repository.get_aigc_run(second.run.id),
+                gateway,
+                hashes,
+            )
+        finally:
+            await runtime.stop()
+
+    first, second, gateway, hashes = run_runtime_scenario(scenario)
+    first_node = next(item for item in first.nodes if item.node_id == "enhance")
+    second_node = next(item for item in second.nodes if item.node_id == "enhance")
+    attempt = first_node.attempts[0]
+
+    assert attempt.type == AigcTaskType.VIDEO_ENHANCEMENT
+    assert attempt.upstream == ["video-input"]
+    assert attempt.params == {
+        "tool_version": "standard",
+        "scene": "aigc",
+        "enhance_style": "hd",
+        "resolution_mode": "preset",
+        "resolution": "1080p",
+        "bitrate_mode": "level",
+        "bitrate_level": "medium",
+        "bit_depth": 8,
+        "input_asset_id": "enhancement-input",
+    }
+    assert len(set(hashes)) == 3
+    assert second_node.status == AigcRunNodeStatus.REUSED
+    assert second_node.reused_from_task_id == first_node.current_task_id
+    assert gateway.calls == {"enhance": 1}
+
+
+def test_video_enhancement_has_independent_seedance_concurrency() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_media_asset(
+            repository,
+            "enhancement-input",
+            AssetType.UPLOADED_VIDEO,
+        )
+        enhancement = video_enhancement_definition(include_output=False)
+        seedance = text_to_video_definition()
+        payload = enhancement.model_dump(mode="json", by_alias=True)
+        payload["nodes"].extend(
+            item.model_dump(mode="json", by_alias=True)
+            for item in seedance.nodes
+            if item.id != "video-output"
+        )
+        payload["edges"].extend(
+            item.model_dump(mode="json", by_alias=True)
+            for item in seedance.edges
+            if item.target_node_id != "video-output"
+        )
+        definition = AigcPipelineDefinition.model_validate(payload)
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(name="independent video limits", definition=definition)
+        )
+        gateway = FakeGateway()
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+            worker_count=2,
+            video_concurrency=1,
+            video_enhancement_concurrency=1,
+        )
+        try:
+            created = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="independent-video-limits",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id), gateway.max_active
+        finally:
+            await runtime.stop()
+
+    detail, max_active = run_runtime_scenario(scenario)
+
+    assert detail.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert max_active == 2
+
+
+def test_video_enhancement_retry_and_independent_branch_converge() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_media_asset(
+            repository,
+            "enhancement-input",
+            AssetType.UPLOADED_VIDEO,
+        )
+        enhancement = video_enhancement_definition(include_output=False)
+        branch = branching_definition()
+        payload = enhancement.model_dump(mode="json", by_alias=True)
+        payload["nodes"].extend(
+            item.model_dump(mode="json", by_alias=True)
+            for item in branch.nodes
+        )
+        payload["edges"].extend(
+            item.model_dump(mode="json", by_alias=True)
+            for item in branch.edges
+        )
+        definition = AigcPipelineDefinition.model_validate(payload)
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(name="enhancement retry branches", definition=definition)
+        )
+        gateway = FakeGateway(retry_first=True)
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+            worker_count=3,
+        )
+        try:
+            created = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="enhancement-retry-branches",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id)
+        finally:
+            await runtime.stop()
+
+    detail = run_runtime_scenario(scenario)
+    enhancement = next(item for item in detail.nodes if item.node_id == "enhance")
+
+    assert detail.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert [attempt.status for attempt in enhancement.attempts] == [
+        AigcTaskStatus.FAILED,
+        AigcTaskStatus.SUCCEEDED,
+    ]
+    assert all(
+        next(item for item in detail.nodes if item.node_id == node_id).status
+        == AigcRunNodeStatus.SUCCEEDED
+        for node_id in ("first", "second")
+    )
+
+
+def test_video_enhancement_cancellation_rejects_late_result() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_media_asset(
+            repository,
+            "enhancement-input",
+            AssetType.UPLOADED_VIDEO,
+        )
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(
+                name="cancel enhancement",
+                definition=video_enhancement_definition(),
+            )
+        )
+        gateway = PersistingBlockingVideoGateway(repository)
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            created = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="cancel-enhancement-run",
+            )
+            await asyncio.wait_for(gateway.started.wait(), timeout=1)
+            await runtime.cancel_run(created.run.id)
+            gateway.release.set()
+            await runtime.wait_until_idle()
+            detail = repository.get_aigc_run(created.run.id)
+            assert gateway.created_asset_id is not None
+            with pytest.raises(NotFoundError):
+                repository.get_asset(gateway.created_asset_id)
+            return detail
+        finally:
+            await runtime.stop()
+
+    detail = run_runtime_scenario(scenario)
+    enhancement = next(item for item in detail.nodes if item.node_id == "enhance")
+
+    assert detail.run.status == AigcPipelineRunStatus.CANCELED
+    assert enhancement.status == AigcRunNodeStatus.CANCELED
+    assert enhancement.result.kind == AigcResultKind.NONE
+
+
+def test_video_face_blur_snapshot_hash_cache_and_from_node_reuse() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_media_asset(
+            repository,
+            "face-blur-input",
+            AssetType.UPLOADED_VIDEO,
+        )
+        create_media_asset(
+            repository,
+            "face-blur-input-2",
+            AssetType.UPLOADED_VIDEO,
+        )
+        create_media_asset(
+            repository,
+            "face-blur-output",
+            AssetType.UPLOADED_VIDEO,
+        )
+        definition = video_face_blur_definition()
+        gateway = FakeGateway(
+            result_assets_by_node={
+                "face-blur": [
+                    AigcResultAsset(
+                        asset_id="face-blur-output",
+                        ordinal=0,
+                        mime_type="video/mp4",
+                    )
+                ]
+            }
+        )
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        hashes = {
+            runtime._expected_input_hashes(definition, {})["face-blur"],
+            runtime._expected_input_hashes(
+                video_face_blur_definition(mask_strength="high"),
+                {},
+            )["face-blur"],
+            runtime._expected_input_hashes(
+                video_face_blur_definition(
+                    input_asset_id="face-blur-input-2"
+                ),
+                {},
+            )["face-blur"],
+        }
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(name="face blur cache", definition=definition)
+        )
+        try:
+            first = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="face-blur-cache-first",
+            )
+            await runtime.wait_until_idle()
+            second = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(
+                    expected_revision=0,
+                    mode="from_node",
+                    start_node_id="video-output",
+                ),
+                idempotency_key="face-blur-cache-second",
+            )
+            await runtime.wait_until_idle()
+            return (
+                repository.get_aigc_run(first.run.id),
+                repository.get_aigc_run(second.run.id),
+                gateway,
+                hashes,
+            )
+        finally:
+            await runtime.stop()
+
+    first, second, gateway, hashes = run_runtime_scenario(scenario)
+    first_node = next(item for item in first.nodes if item.node_id == "face-blur")
+    second_node = next(item for item in second.nodes if item.node_id == "face-blur")
+    attempt = first_node.attempts[0]
+
+    assert attempt.type == AigcTaskType.VIDEO_FACE_BLUR
+    assert attempt.upstream == ["video-input"]
+    assert attempt.params == {
+        "mask_mode": "mosaic",
+        "mask_strength": "medium",
+        "input_asset_id": "face-blur-input",
+    }
+    assert len(hashes) == 3
+    assert second_node.status == AigcRunNodeStatus.REUSED
+    assert second_node.reused_from_task_id == first_node.current_task_id
+    assert gateway.calls == {"face-blur": 1}
+
+
+def test_video_face_blur_has_independent_video_concurrency() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_media_asset(
+            repository,
+            "face-blur-input",
+            AssetType.UPLOADED_VIDEO,
+        )
+        create_media_asset(
+            repository,
+            "enhancement-input",
+            AssetType.UPLOADED_VIDEO,
+        )
+        definition = AigcPipelineDefinition.model_validate(
+            {
+                "nodes": [
+                    node(
+                        "face-input",
+                        "video_input",
+                        0,
+                        config={"asset_id": "face-blur-input"},
+                    ),
+                    node("face-blur", "video_face_blur", 300),
+                    node(
+                        "enhancement-input-node",
+                        "video_input",
+                        0,
+                        config={"asset_id": "enhancement-input"},
+                    ),
+                    node("enhance", "video_enhancement", 300),
+                    node("prompt", "text_input", 0, config={"text": "生成视频"}),
+                    node("video-model", "video_generation", 300),
+                ],
+                "edges": [
+                    edge("face-edge", "face-input", "video", "face-blur", "video"),
+                    edge(
+                        "enhance-edge",
+                        "enhancement-input-node",
+                        "video",
+                        "enhance",
+                        "video",
+                    ),
+                    edge("seedance-edge", "prompt", "text", "video-model", "prompt"),
+                ],
+            }
+        )
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(name="isolated face blur limit", definition=definition)
+        )
+        gateway = FakeGateway()
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+            worker_count=3,
+            video_concurrency=1,
+            video_enhancement_concurrency=1,
+            video_face_blur_concurrency=1,
+        )
+        try:
+            created = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="isolated-face-blur-limit",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id), gateway.max_active
+        finally:
+            await runtime.stop()
+
+    detail, max_active = run_runtime_scenario(scenario)
+
+    assert detail.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert max_active == 3
+
+
+def test_video_face_blur_retry_and_independent_branch_converge() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_media_asset(
+            repository,
+            "face-blur-input",
+            AssetType.UPLOADED_VIDEO,
+        )
+        face_blur = video_face_blur_definition(include_output=False)
+        branch = branching_definition()
+        payload = face_blur.model_dump(mode="json", by_alias=True)
+        payload["nodes"].extend(
+            item.model_dump(mode="json", by_alias=True)
+            for item in branch.nodes
+        )
+        payload["edges"].extend(
+            item.model_dump(mode="json", by_alias=True)
+            for item in branch.edges
+        )
+        definition = AigcPipelineDefinition.model_validate(payload)
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(name="face blur retry branches", definition=definition)
+        )
+        gateway = FakeGateway(retry_first=True)
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+            worker_count=3,
+        )
+        try:
+            created = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="face-blur-retry-branches",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id)
+        finally:
+            await runtime.stop()
+
+    detail = run_runtime_scenario(scenario)
+    face_blur = next(item for item in detail.nodes if item.node_id == "face-blur")
+
+    assert detail.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert [attempt.status for attempt in face_blur.attempts] == [
+        AigcTaskStatus.FAILED,
+        AigcTaskStatus.SUCCEEDED,
+    ]
+    assert all(
+        next(item for item in detail.nodes if item.node_id == node_id).status
+        == AigcRunNodeStatus.SUCCEEDED
+        for node_id in ("first", "second")
+    )
+
+
+def test_video_face_blur_cancellation_rejects_late_result() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        create_media_asset(
+            repository,
+            "face-blur-input",
+            AssetType.UPLOADED_VIDEO,
+        )
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(
+                name="cancel face blur",
+                definition=video_face_blur_definition(),
+            )
+        )
+        gateway = PersistingBlockingVideoGateway(repository)
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            created = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="cancel-face-blur-run",
+            )
+            await asyncio.wait_for(gateway.started.wait(), timeout=1)
+            await runtime.cancel_run(created.run.id)
+            gateway.release.set()
+            await runtime.wait_until_idle()
+            detail = repository.get_aigc_run(created.run.id)
+            assert gateway.created_asset_id is not None
+            with pytest.raises(NotFoundError):
+                repository.get_asset(gateway.created_asset_id)
+            return detail
+        finally:
+            await runtime.stop()
+
+    detail = run_runtime_scenario(scenario)
+    face_blur = next(item for item in detail.nodes if item.node_id == "face-blur")
+
+    assert detail.run.status == AigcPipelineRunStatus.CANCELED
+    assert face_blur.status == AigcRunNodeStatus.CANCELED
+    assert face_blur.result.kind == AigcResultKind.NONE
+
+
 def test_runtime_cancellation_rejects_and_cleans_late_video_result() -> None:
     async def scenario():
         repository = InMemoryRepository()
@@ -1168,8 +2997,8 @@ def test_runtime_cancellation_rejects_and_cleans_late_video_result() -> None:
 
 
 def test_bbox_prompt_compiles_against_each_target_image_order() -> None:
-    definition = AigcPipelineDefinition.model_validate(
-        {
+    definition = canonicalize_aigc_definition(
+        AigcPipelineDefinition.model_validate({
             "nodes": [
                 node(
                     "image-a",
@@ -1250,7 +3079,7 @@ def test_bbox_prompt_compiles_against_each_target_image_order() -> None:
                     "prompt",
                 ),
             ],
-        }
+        })
     )
     node_by_id = {item.id: item for item in definition.nodes}
     prompt = node_by_id["prompt"]
@@ -1283,7 +3112,9 @@ def test_bbox_prompt_compiles_against_each_target_image_order() -> None:
         item for item in changed_payload["nodes"] if item["id"] == "image-b"
     )
     changed_image["config"]["bbox"]["x1"] = 101
-    changed_definition = AigcPipelineDefinition.model_validate(changed_payload)
+    changed_definition = AigcPipelineDefinitionV2.model_validate(
+        changed_payload
+    )
 
     first_hash = runtime._expected_input_hashes(definition, {})["target"]
     changed_hash = runtime._expected_input_hashes(changed_definition, {})["target"]
@@ -1520,6 +3351,46 @@ def test_runtime_restarts_workers_after_heartbeat_loses_lease() -> None:
     assert worker_done is False
 
 
+def test_runtime_retries_lease_when_recovery_database_query_fails() -> None:
+    async def scenario():
+        repository = FailingLeaseRecoveryRepository()
+        runtime = AigcPipelineRuntime(
+            repository,
+            FakeGateway(),  # type: ignore[arg-type]
+            worker_count=1,
+            lease_seconds=3,
+            lease_retry_seconds=0.01,
+        )
+        try:
+            assert await runtime.start()
+            await asyncio.wait_for(repository.renew_failed.wait(), timeout=2)
+            for _ in range(100):
+                if (
+                    repository.acquire_calls >= 2
+                    and runtime._lease_token is not None
+                    and runtime._workers
+                ):
+                    break
+                await asyncio.sleep(0.01)
+            return (
+                repository.acquire_calls,
+                runtime._lease_token,
+                len(runtime._workers),
+                runtime._workers[0].done(),
+            )
+        finally:
+            await runtime.stop()
+
+    acquire_calls, lease_token, worker_count, worker_done = run_runtime_scenario(
+        scenario
+    )
+
+    assert acquire_calls >= 2
+    assert lease_token is not None
+    assert worker_count == 1
+    assert worker_done is False
+
+
 def test_runtime_finalizes_task_interrupted_by_lease_loss() -> None:
     async def scenario():
         repository = FlakyLeaseRepository(renew_failures=1)
@@ -1597,6 +3468,88 @@ def test_runtime_cancellation_rejects_late_result() -> None:
     assert detail.run.status == AigcPipelineRunStatus.CANCELED
     assert llm.status == AigcRunNodeStatus.CANCELED
     assert llm.result.kind == AigcResultKind.NONE
+
+
+def test_disconnected_flows_run_and_cancel_independently() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(
+                name="disconnected flows",
+                definition=disconnected_llm_definition(),
+            )
+        )
+        gateway = GatedLlmGateway()
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+            worker_count=2,
+            llm_concurrency=2,
+        )
+        try:
+            run_a = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(
+                    expected_revision=0,
+                    mode="from_node",
+                    start_node_id="flow-a-model",
+                ),
+                idempotency_key="flow-a",
+            )
+            run_b = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(
+                    expected_revision=0,
+                    mode="from_node",
+                    start_node_id="flow-b-model",
+                ),
+                idempotency_key="flow-b",
+            )
+
+            started = {
+                await asyncio.wait_for(gateway.started.get(), timeout=1),
+                await asyncio.wait_for(gateway.started.get(), timeout=1),
+            }
+            assert started == {"flow-a-model", "flow-b-model"}
+
+            with pytest.raises(ActiveRunConflictError):
+                await runtime.submit_run(
+                    pipeline.id,
+                    AigcPipelineRunCreate(
+                        expected_revision=0,
+                        mode="from_node",
+                        start_node_id="flow-a-input",
+                    ),
+                    idempotency_key="flow-a-conflict",
+                )
+            with pytest.raises(ActiveRunConflictError):
+                await runtime.submit_run(
+                    pipeline.id,
+                    AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                    idempotency_key="full-while-partial-active",
+                )
+
+            await runtime.cancel_run(run_a.run.id)
+            gateway.release.set()
+            await asyncio.wait_for(runtime.wait_until_idle(), timeout=1)
+            return (
+                repository.get_aigc_run(run_a.run.id),
+                repository.get_aigc_run(run_b.run.id),
+            )
+        finally:
+            gateway.release.set()
+            await runtime.stop()
+
+    run_a, run_b = run_runtime_scenario(scenario)
+
+    assert run_a.run.status == AigcPipelineRunStatus.CANCELED
+    assert run_b.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert next(
+        item for item in run_a.nodes if item.node_id == "flow-a-model"
+    ).status == AigcRunNodeStatus.CANCELED
+    assert next(
+        item for item in run_b.nodes if item.node_id == "flow-b-model"
+    ).status == AigcRunNodeStatus.SUCCEEDED
 
 
 def test_incremental_run_reuses_valid_ancestor() -> None:
@@ -1799,8 +3752,8 @@ def test_resolve_plain_edit_and_decomposition_params_by_operation() -> None:
         InMemoryRepository(),
         FakeGateway(),  # type: ignore[arg-type]
     )
-    definition = AigcPipelineDefinition.model_validate(
-        {
+    definition = canonicalize_aigc_definition(
+        AigcPipelineDefinition.model_validate({
             "nodes": [
                 node(
                     "image",
@@ -1836,7 +3789,7 @@ def test_resolve_plain_edit_and_decomposition_params_by_operation() -> None:
                     "image",
                 ),
             ],
-        }
+        })
     )
     node_by_id = {item.id: item for item in definition.nodes}
     run_nodes = {
@@ -1844,6 +3797,27 @@ def test_resolve_plain_edit_and_decomposition_params_by_operation() -> None:
             node_id=item.id,
             included_in_plan=True,
             status=AigcRunNodeStatus.SUCCEEDED,
+            result=(
+                AigcTaskResult(
+                    kind=AigcResultKind.ASSETS,
+                    assets=[
+                        AigcResultAsset(
+                            asset_id="asset-1",
+                            ordinal=0,
+                            available=True,
+                        )
+                    ],
+                )
+                if item.id == "image"
+                else (
+                    AigcTaskResult(
+                        kind=AigcResultKind.TEXT,
+                        text="移除文字",
+                    )
+                    if item.id == "prompt"
+                    else AigcTaskResult()
+                )
+            ),
         )
         for item in definition.nodes
     }
@@ -1875,8 +3849,8 @@ def test_resolve_layer_canvas_and_composite_params_preserves_snapshot_source() -
     replacement = AigcEditedLayer.model_validate(
         image_layer_payload(asset_id="edited-asset")
     )
-    definition = AigcPipelineDefinition.model_validate(
-        {
+    definition = canonicalize_aigc_definition(
+        AigcPipelineDefinition.model_validate({
             "nodes": [
                 node(
                     "producer",
@@ -1937,7 +3911,7 @@ def test_resolve_layer_canvas_and_composite_params_preserves_snapshot_source() -
                     "replacement",
                 ),
             ],
-        }
+        })
     )
     node_by_id = {item.id: item for item in definition.nodes}
     run_node_by_id = {
@@ -1973,6 +3947,10 @@ def test_resolve_layer_canvas_and_composite_params_preserves_snapshot_source() -
             node_id="edit-prompt",
             included_in_plan=True,
             status=AigcRunNodeStatus.SUCCEEDED,
+                result=AigcTaskResult(
+                    kind=AigcResultKind.TEXT,
+                    text="改红",
+                ),
         ),
         "composite": AigcPipelineRunNode(
             node_id="composite",
@@ -2893,3 +4871,535 @@ def test_layer_canvas_cancellation_cleanup_preserves_shared_assets() -> None:
         assert repository.get_asset("layer-asset").id == "layer-asset"
 
     run_runtime_scenario(scenario)
+
+
+def _multi_track_config(
+    *,
+    video_source: str = "video",
+    video_source_handle: str = "video",
+    subtitle_asset_id: str = "subtitle",
+    inline_text: str | None = None,
+) -> dict[str, object]:
+    text_source = (
+        None
+        if inline_text is not None
+        else {"source_node_id": "text", "source_handle": "text"}
+    )
+    return {
+        "canvas": {
+            "mode": "custom",
+            "width": 1920,
+            "height": 1080,
+            "background_color": "#000000FF",
+        },
+        "output": {"format": "mp4", "fps": 30},
+        "tracks": [
+            {
+                "id": "video-track",
+                "name": "视频",
+                "type": "video",
+                "elements": [
+                    {
+                        "id": "video-element",
+                        "type": "video",
+                        "source": {
+                            "source_node_id": video_source,
+                            "source_handle": video_source_handle,
+                        },
+                        "target_time": {"start_ms": 0, "end_ms": 2000},
+                        "transform": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 1920,
+                            "height": 1080,
+                        },
+                    }
+                ],
+            },
+            {
+                "id": "image-track",
+                "name": "图片",
+                "type": "image",
+                "elements": [
+                    {
+                        "id": "image-element",
+                        "type": "image",
+                        "source": {
+                            "source_node_id": "image",
+                            "source_handle": "image",
+                        },
+                        "target_time": {"start_ms": 0, "end_ms": 2000},
+                        "transform": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 1920,
+                            "height": 1080,
+                        },
+                    }
+                ],
+            },
+            {
+                "id": "audio-track",
+                "name": "音频",
+                "type": "audio",
+                "elements": [
+                    {
+                        "id": "audio-element",
+                        "type": "audio",
+                        "source": {
+                            "source_node_id": "audio",
+                            "source_handle": "audio",
+                        },
+                        "target_time": {"start_ms": 0, "end_ms": 2000},
+                    }
+                ],
+            },
+            {
+                "id": "text-track",
+                "name": "文字",
+                "type": "text",
+                "elements": [
+                    {
+                        "id": "text-element",
+                        "type": "text",
+                        "source": text_source,
+                        "inline_text": inline_text,
+                        "target_time": {"start_ms": 0, "end_ms": 2000},
+                        "transform": {
+                            "x": 100,
+                            "y": 100,
+                            "width": 600,
+                            "height": 100,
+                        },
+                    }
+                ],
+            },
+            {
+                "id": "subtitle-track",
+                "name": "字幕",
+                "type": "subtitle",
+                "elements": [
+                    {
+                        "id": "subtitle-element",
+                        "type": "subtitle",
+                        "asset_id": subtitle_asset_id,
+                        "target_time": {"start_ms": 0, "end_ms": 2000},
+                        "transform": {
+                            "x": 100,
+                            "y": 900,
+                            "width": 1720,
+                            "height": 100,
+                        },
+                    }
+                ],
+            },
+        ],
+    }
+
+
+def _multi_track_definition(
+    *,
+    config: dict[str, object] | None = None,
+) -> AigcPipelineDefinitionV2:
+    return v2_definition(
+        [
+            node("video", "video", 0, config={"asset_id": "video-local"}),
+            node("image", "image", 0, config={"asset_id": "image-local"}),
+            node("audio", "audio", 0, config={"asset_id": "audio-local"}),
+            node("text", "text", 0, config={"text": "本地备用文字"}),
+            node(
+                "edit",
+                "multi_track_edit",
+                300,
+                config=config or _multi_track_config(),
+            ),
+        ],
+        [
+            edge("video-edit", "video", "video", "edit", "videos"),
+            edge("image-edit", "image", "image", "edit", "images"),
+            edge("audio-edit", "audio", "audio", "edit", "audios"),
+            edge("text-edit", "text", "text", "edit", "texts"),
+        ],
+    )
+
+
+def _create_subtitle_asset(
+    repository: InMemoryRepository,
+    asset_id: str,
+    *,
+    size_bytes: int = 100,
+) -> None:
+    repository.create_asset(
+        AssetCreate(
+            id=asset_id,
+            tool_asset_role=ToolAssetRole.INPUT,
+            type=AssetType.SUBTITLE,
+            status=Status.SUCCEEDED,
+            object_key=f"aigc/{asset_id}.srt",
+            mime_type="application/x-subrip",
+            size_bytes=size_bytes,
+        )
+    )
+
+
+def test_multi_track_resolves_current_run_values_into_stable_snapshot() -> None:
+    repository = InMemoryRepository()
+    for asset_id, asset_type in (
+        ("run-video", AssetType.UPLOADED_VIDEO),
+        ("run-image", AssetType.UPLOADED_IMAGE),
+        ("run-audio", AssetType.UPLOADED_AUDIO),
+    ):
+        create_media_asset(repository, asset_id, asset_type)
+    _create_subtitle_asset(repository, "subtitle")
+    definition = _multi_track_definition()
+    node_by_id = {item.id: item for item in definition.nodes}
+    run_nodes = {
+        "video": AigcPipelineRunNode(
+            node_id="video",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=AigcTaskResult(
+                kind=AigcResultKind.ASSETS,
+                assets=[AigcResultAsset(asset_id="run-video", ordinal=0)],
+            ),
+        ),
+        "image": AigcPipelineRunNode(
+            node_id="image",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=AigcTaskResult(
+                kind=AigcResultKind.ASSETS,
+                assets=[AigcResultAsset(asset_id="run-image", ordinal=0)],
+            ),
+        ),
+        "audio": AigcPipelineRunNode(
+            node_id="audio",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=AigcTaskResult(
+                kind=AigcResultKind.ASSETS,
+                assets=[AigcResultAsset(asset_id="run-audio", ordinal=0)],
+            ),
+        ),
+        "text": AigcPipelineRunNode(
+            node_id="text",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=AigcTaskResult(
+                kind=AigcResultKind.TEXT,
+                text="当前 Run 文本",
+                text_digest="a" * 64,
+            ),
+        ),
+        "edit": AigcPipelineRunNode(
+            node_id="edit",
+            included_in_plan=True,
+        ),
+    }
+    runtime = AigcPipelineRuntime(repository, FakeGateway())  # type: ignore[arg-type]
+    incoming = [
+        item for item in definition.edges if item.target_node_id == "edit"
+    ]
+
+    params, upstream = runtime._resolve_task_params(
+        node_by_id["edit"],
+        incoming,
+        node_by_id,
+        run_nodes,
+        all_edges=definition.edges,
+    )
+
+    assert params["resolved_sources"] == {
+        "video-element": {"type": "video", "asset_id": "run-video"},
+        "image-element": {"type": "image", "asset_id": "run-image"},
+        "audio-element": {"type": "audio", "asset_id": "run-audio"},
+        "text-element": {"type": "text", "text": "当前 Run 文本"},
+        "subtitle-element": {"type": "subtitle", "asset_id": "subtitle"},
+    }
+    assert params["project"] == node_by_id["edit"].config.model_dump(mode="json")
+    assert upstream == ["video", "image", "audio", "text"]
+    assert "http" not in repr(params)
+
+
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        (_multi_track_config(video_source="missing"), "direct input edge"),
+        (
+            _multi_track_config(
+                video_source="image",
+                video_source_handle="image",
+            ),
+            "matching videos input edge",
+        ),
+    ],
+)
+def test_multi_track_rejects_missing_or_wrong_direct_source(
+    config: dict[str, object],
+    message: str,
+) -> None:
+    repository = InMemoryRepository()
+    for asset_id, asset_type in (
+        ("run-video", AssetType.UPLOADED_VIDEO),
+        ("run-image", AssetType.UPLOADED_IMAGE),
+        ("run-audio", AssetType.UPLOADED_AUDIO),
+    ):
+        create_media_asset(repository, asset_id, asset_type)
+    _create_subtitle_asset(repository, "subtitle")
+    definition = _multi_track_definition(config=config)
+    node_by_id = {item.id: item for item in definition.nodes}
+    run_nodes = {
+        item.id: AigcPipelineRunNode(
+            node_id=item.id,
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=(
+                AigcTaskResult(
+                    kind=AigcResultKind.TEXT,
+                    text="当前 Run 文本",
+                    text_digest="a" * 64,
+                )
+                if item.id == "text"
+                else AigcTaskResult(
+                    kind=AigcResultKind.ASSETS,
+                    assets=[AigcResultAsset(asset_id=f"run-{item.id}", ordinal=0)],
+                )
+            ),
+        )
+        for item in definition.nodes
+        if item.id != "edit"
+    }
+    runtime = AigcPipelineRuntime(repository, FakeGateway())  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match=message):
+        runtime._resolve_task_params(
+            node_by_id["edit"],
+            [
+                item
+                for item in definition.edges
+                if item.target_node_id == "edit"
+            ],
+            node_by_id,
+            run_nodes,
+            all_edges=definition.edges,
+        )
+
+
+def test_multi_track_hash_changes_with_project_upstream_and_subtitle() -> None:
+    repository = InMemoryRepository()
+    for asset_id, asset_type in (
+        ("video-local", AssetType.UPLOADED_VIDEO),
+        ("video-other", AssetType.UPLOADED_VIDEO),
+        ("image-local", AssetType.UPLOADED_IMAGE),
+        ("audio-local", AssetType.UPLOADED_AUDIO),
+    ):
+        create_media_asset(repository, asset_id, asset_type)
+    _create_subtitle_asset(repository, "subtitle", size_bytes=100)
+    _create_subtitle_asset(repository, "subtitle-other", size_bytes=101)
+    runtime = AigcPipelineRuntime(repository, FakeGateway())  # type: ignore[arg-type]
+    original = _multi_track_definition()
+    changed_project = _multi_track_definition()
+    changed_project.nodes[-1].config.output.fps = 60  # type: ignore[union-attr]
+    changed_upstream = _multi_track_definition()
+    changed_upstream.nodes[0].config.asset_id = "video-other"  # type: ignore[union-attr]
+    changed_subtitle = _multi_track_definition(
+        config=_multi_track_config(subtitle_asset_id="subtitle-other")
+    )
+
+    hashes = {
+        runtime._expected_input_hashes(definition, {})["edit"]
+        for definition in (
+            original,
+            changed_project,
+            changed_upstream,
+            changed_subtitle,
+        )
+    }
+
+    assert len(hashes) == 4
+
+
+def _create_multi_track_assets(repository: InMemoryRepository) -> None:
+    for asset_id, asset_type in (
+        ("video-local", AssetType.UPLOADED_VIDEO),
+        ("image-local", AssetType.UPLOADED_IMAGE),
+        ("audio-local", AssetType.UPLOADED_AUDIO),
+        ("multi-track-output", AssetType.UPLOADED_VIDEO),
+    ):
+        create_media_asset(repository, asset_id, asset_type)
+    _create_subtitle_asset(repository, "subtitle")
+
+
+def _multi_track_runtime_definition() -> AigcPipelineDefinitionV2:
+    definition = _multi_track_definition()
+    payload = definition.model_dump(mode="json", by_alias=True)
+    payload["nodes"].append(node("output", "video", 600))
+    payload["edges"].append(
+        edge("edit-output", "edit", "video", "output", "video")
+    )
+    return AigcPipelineDefinitionV2.model_validate(payload)
+
+
+def test_multi_track_runtime_snapshot_cache_and_frozen_retry() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        _create_multi_track_assets(repository)
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            _multi_track_runtime_definition(),
+            name="multi-track runtime",
+        )
+        gateway = FakeGateway(
+            fail_node="edit",
+            result_assets_by_node={
+                "edit": [
+                    AigcResultAsset(
+                        asset_id="multi-track-output",
+                        ordinal=0,
+                        mime_type="video/mp4",
+                    )
+                ]
+            },
+        )
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            failed = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="multi-track-failed",
+            )
+            await runtime.wait_until_idle()
+            gateway.fail_node = None
+            retry = await runtime.retry_node(
+                failed.run.id,
+                "edit",
+                idempotency_key="multi-track-retry",
+            )
+            await runtime.wait_until_idle()
+            cached = await submit_v2_run(
+                runtime,
+                pipeline,
+                mode=AigcPipelineRunMode.FROM_NODE,
+                start_node_id="output",
+                idempotency_key="multi-track-cache",
+            )
+            await runtime.wait_until_idle()
+            return (
+                repository.get_aigc_run(failed.run.id),
+                repository.get_aigc_run(retry.run.id),
+                repository.get_aigc_run(cached.run.id),
+                gateway,
+            )
+        finally:
+            await runtime.stop()
+
+    failed, retry, cached, gateway = run_runtime_scenario(scenario)
+    failed_edit = next(item for item in failed.nodes if item.node_id == "edit")
+    retry_edit = next(item for item in retry.nodes if item.node_id == "edit")
+    cached_edit = next(item for item in cached.nodes if item.node_id == "edit")
+
+    assert failed_edit.attempts[0].type == AigcTaskType.MULTI_TRACK_EDIT
+    assert retry.run.definition_snapshot == failed.run.definition_snapshot
+    assert retry_edit.attempts[0].params == failed_edit.attempts[0].params
+    assert retry_edit.input_hash == failed_edit.input_hash
+    assert cached_edit.status == AigcRunNodeStatus.REUSED
+    assert cached_edit.reused_from_task_id == retry_edit.current_task_id
+    assert gateway.calls == {"edit": 2}
+
+
+def test_multi_track_has_independent_concurrency_and_failure_branch() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        _create_multi_track_assets(repository)
+        definition = _multi_track_definition()
+        payload = definition.model_dump(mode="json", by_alias=True)
+        second = node(
+            "edit-second",
+            "multi_track_edit",
+            600,
+            config=_multi_track_config(inline_text="内联文字"),
+        )
+        payload["nodes"].extend(
+            [
+                second,
+                node("prompt", "text", 0, config={"text": "独立分支"}),
+                node("llm", "llm", 300),
+            ]
+        )
+        payload["edges"].extend(
+            [
+                edge("video-second", "video", "video", "edit-second", "videos"),
+                edge("image-second", "image", "image", "edit-second", "images"),
+                edge("audio-second", "audio", "audio", "edit-second", "audios"),
+                edge("prompt-llm", "prompt", "text", "llm", "prompt"),
+            ]
+        )
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            AigcPipelineDefinitionV2.model_validate(payload),
+            name="multi-track concurrency",
+        )
+        gateway = FakeGateway(fail_node="edit")
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+            worker_count=3,
+            llm_concurrency=1,
+            multitrack_concurrency=1,
+        )
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="multi-track-concurrency",
+            )
+            await runtime.wait_until_idle()
+            return repository.get_aigc_run(created.run.id), gateway
+        finally:
+            await runtime.stop()
+
+    detail, gateway = run_runtime_scenario(scenario)
+    by_id = {item.node_id: item for item in detail.nodes}
+
+    assert detail.run.status == AigcPipelineRunStatus.FAILED
+    assert by_id["edit"].status == AigcRunNodeStatus.FAILED
+    assert by_id["edit-second"].status == AigcRunNodeStatus.SUCCEEDED
+    assert by_id["llm"].status == AigcRunNodeStatus.SUCCEEDED
+    assert gateway.max_active == 2
+
+
+def test_multi_track_cancellation_rejects_late_result_and_cleans_output() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        _create_multi_track_assets(repository)
+        pipeline = create_v2_runtime_pipeline(
+            repository,
+            _multi_track_runtime_definition(),
+            name="cancel multi-track",
+        )
+        gateway = PersistingBlockingVideoGateway(repository)
+        runtime = AigcPipelineRuntime(repository, gateway)  # type: ignore[arg-type]
+        try:
+            created = await submit_v2_run(
+                runtime,
+                pipeline,
+                idempotency_key="cancel-multi-track",
+            )
+            await asyncio.wait_for(gateway.started.wait(), timeout=1)
+            await runtime.cancel_run(created.run.id)
+            gateway.release.set()
+            await runtime.wait_until_idle()
+            detail = repository.get_aigc_run(created.run.id)
+            assert gateway.created_asset_id is not None
+            with pytest.raises(NotFoundError):
+                repository.get_asset(gateway.created_asset_id)
+            return detail
+        finally:
+            await runtime.stop()
+
+    detail = run_runtime_scenario(scenario)
+    edit = next(item for item in detail.nodes if item.node_id == "edit")
+
+    assert detail.run.status == AigcPipelineRunStatus.CANCELED
+    assert edit.status == AigcRunNodeStatus.CANCELED
+    assert edit.result.kind == AigcResultKind.NONE

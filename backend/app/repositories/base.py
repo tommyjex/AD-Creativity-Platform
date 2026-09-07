@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import datetime
+import hashlib
 from typing import Protocol
 
 from backend.app.schemas import (
@@ -73,6 +74,11 @@ class AssetReferenceConflictError(RuntimeError):
 
 class PipelineRunConflictError(RuntimeError):
     """Raised when a pipeline is still referenced by an AIGC run."""
+
+
+def multitrack_subtitle_asset_slot(track_id: str, element_id: str) -> str:
+    identity = f"{track_id}\0{element_id}".encode()
+    return f"subtitle:{hashlib.sha256(identity).hexdigest()}"
 
 
 class Repository(Protocol):
@@ -187,6 +193,15 @@ class Repository(Protocol):
         status: AigcTaskStatus,
         result: AigcTaskResult,
         error: AigcTaskError | None,
+        metrics: AigcTaskMetrics,
+    ) -> tuple[AigcPipelineTaskAttempt, bool]: ...
+
+    def commit_aigc_json_parser_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+        result: AigcTaskResult,
         metrics: AigcTaskMetrics,
     ) -> tuple[AigcPipelineTaskAttempt, bool]: ...
 
@@ -322,6 +337,13 @@ class Repository(Protocol):
 
     def create_assets(self, items: Iterable[AssetCreate]) -> list[Asset]: ...
 
+    def create_aigc_output_asset(
+        self,
+        data: AssetCreate,
+        *,
+        references: Iterable[AigcPipelineTaskAssetReference],
+    ) -> Asset: ...
+
     def create_asset_and_set_current_image(
         self,
         data: AssetCreate,
@@ -343,6 +365,8 @@ class Repository(Protocol):
     ) -> list[Asset]: ...
 
     def update_asset(self, asset_id: str, **changes: object) -> Asset: ...
+
+    def rename_asset(self, asset_id: str, *, name: str) -> Asset: ...
 
     def delete_asset(self, project_id: str, asset_id: str) -> Asset: ...
 

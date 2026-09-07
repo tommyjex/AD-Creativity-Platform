@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from threading import Barrier
 from typing import Protocol
 
 import pytest
 from sqlalchemy import event, inspect
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import ORMExecuteState
 
 from backend.app.repositories import (
     ActiveRunConflictError,
@@ -20,6 +23,7 @@ from backend.app.schemas import (
     AigcAssetDirection,
     AigcPipelineCreate,
     AigcPipelineDefinition,
+    AigcPipelineDefinitionV2,
     AigcPipelineRun,
     AigcPipelineRunNode,
     AigcPipelineRunStatus,
@@ -182,6 +186,90 @@ def definition(*, image_asset_id: str | None = None) -> AigcPipelineDefinition:
     )
 
 
+def disconnected_definition() -> AigcPipelineDefinition:
+    nodes = [
+        {
+            "id": f"flow-{flow}-{node_type}",
+            "type": schema_type,
+            "position": {"x": x, "y": y},
+            "size": {"width": 240, "height": 160},
+            "config": config,
+        }
+        for flow, y in (("a", 0), ("b", 240))
+        for node_type, schema_type, x, config in (
+            ("input", "text_input", 0, {"text": f"流程 {flow.upper()}"}),
+            ("model", "text_to_image", 320, {}),
+        )
+    ]
+    edges = [
+        {
+            "id": f"flow-{flow}-edge",
+            "sourceNodeId": f"flow-{flow}-input",
+            "sourceHandle": "text",
+            "targetNodeId": f"flow-{flow}-model",
+            "targetHandle": "prompt",
+        }
+        for flow in ("a", "b")
+    ]
+    return AigcPipelineDefinition.model_validate(
+        {
+            "nodes": nodes,
+            "edges": edges,
+        }
+    )
+
+
+def multitrack_subtitle_definition(
+    asset_ids: tuple[str, ...],
+) -> AigcPipelineDefinitionV2:
+    tracks = [
+        {
+            "id": f"subtitle-track-{index}",
+            "name": f"字幕 {index}",
+            "type": "subtitle",
+            "elements": [
+                {
+                    "id": f"subtitle-element-{index}",
+                    "type": "subtitle",
+                    "asset_id": asset_id,
+                    "target_time": {"start_ms": 0, "end_ms": 2000},
+                    "transform": {
+                        "x": 100,
+                        "y": 800,
+                        "width": 1720,
+                        "height": 180,
+                    },
+                }
+            ],
+        }
+        for index, asset_id in enumerate(asset_ids)
+    ]
+    return AigcPipelineDefinitionV2.model_validate(
+        {
+            "schemaVersion": 2,
+            "nodes": [
+                {
+                    "id": "edit",
+                    "type": "multi_track_edit",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 320, "height": 240},
+                    "config": {
+                        "canvas": {
+                            "mode": "custom",
+                            "width": 1920,
+                            "height": 1080,
+                            "background_color": "#000000FF",
+                        },
+                        "output": {"format": "mp4", "fps": 30},
+                        "tracks": tracks,
+                    },
+                }
+            ],
+            "edges": [],
+        }
+    )
+
+
 def create_pipeline(
     repository: AigcRepositoryContract,
     *,
@@ -219,6 +307,39 @@ def create_run(repository: AigcRepositoryContract, pipeline):
     return repository.create_aigc_run(
         run,
         idempotency_key="run-request-1",
+        nodes=nodes,
+    )
+
+
+def create_scoped_run(
+    repository: AigcRepositoryContract,
+    pipeline,
+    *,
+    idempotency_key: str,
+    mode: str = "from_node",
+    start_node_id: str | None = None,
+):
+    run = AigcPipelineRun(
+        pipeline_id=pipeline.id,
+        run_number=1,
+        pipeline_revision=pipeline.revision,
+        mode=mode,
+        start_node_id=start_node_id,
+        definition_snapshot=pipeline.definition,
+    )
+    nodes = [
+        AigcPipelineRunNode(
+            node_id=node.id,
+            included_in_plan=mode == "full" or node.id.startswith(
+                (start_node_id or "").rsplit("-", 1)[0]
+            ),
+            status=AigcRunNodeStatus.READY,
+        )
+        for node in pipeline.definition.nodes
+    ]
+    return repository.create_aigc_run(
+        run,
+        idempotency_key=idempotency_key,
         nodes=nodes,
     )
 
@@ -648,6 +769,167 @@ def test_pipeline_asset_references_protect_current_inputs(
     assert aigc_repository.delete_tool_asset(asset.id).id == asset.id
 
 
+def test_pipeline_asset_references_protect_all_multitrack_subtitles(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    asset_ids = ("subtitle-asset-a", "subtitle-asset-b")
+    for asset_id in asset_ids:
+        aigc_repository.create_asset(
+            AssetCreate(
+                id=asset_id,
+                tool_asset_role=ToolAssetRole.INPUT,
+                type=AssetType.SUBTITLE,
+                status=Status.SUCCEEDED,
+                object_key=f"aigc/{asset_id}.srt",
+                mime_type="application/x-subrip",
+            )
+        )
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=multitrack_subtitle_definition(asset_ids),
+    )
+
+    references = aigc_repository.list_aigc_pipeline_assets(pipeline.id)
+    assert {item.asset_id for item in references} == set(asset_ids)
+    slots = [item.slot for item in references]
+    assert len(slots) == len(set(slots)) == 2
+    assert all(slot.startswith("subtitle:") for slot in slots)
+    unchanged = aigc_repository.update_aigc_pipeline(
+        pipeline.id,
+        AigcPipelineUpdate(
+            expected_revision=pipeline.revision,
+            name=pipeline.name,
+            description=pipeline.description,
+            definition=multitrack_subtitle_definition(asset_ids),
+        ),
+    )
+    assert [
+        item.slot
+        for item in aigc_repository.list_aigc_pipeline_assets(pipeline.id)
+    ] == slots
+    for asset_id in asset_ids:
+        with pytest.raises(AssetReferenceConflictError):
+            aigc_repository.delete_tool_asset(asset_id)
+
+    aigc_repository.update_aigc_pipeline(
+        pipeline.id,
+        AigcPipelineUpdate(
+            expected_revision=unchanged.revision,
+            name=pipeline.name,
+            description=pipeline.description,
+            definition=multitrack_subtitle_definition(()),
+        ),
+    )
+
+    assert aigc_repository.list_aigc_pipeline_assets(pipeline.id) == []
+    for asset_id in asset_ids:
+        assert aigc_repository.delete_tool_asset(asset_id).id == asset_id
+
+
+def test_v2_pipeline_asset_references_include_upstream_mode_local_backups(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    asset_types = {
+        "local-image": AssetType.UPLOADED_IMAGE,
+        "local-video": AssetType.UPLOADED_VIDEO,
+        "local-audio": AssetType.UPLOADED_AUDIO,
+    }
+    for asset_id, asset_type in asset_types.items():
+        aigc_repository.create_asset(
+            AssetCreate(
+                id=asset_id,
+                tool_asset_role=ToolAssetRole.INPUT,
+                type=asset_type,
+                status=Status.SUCCEEDED,
+                object_key=f"aigc/{asset_id}",
+            )
+        )
+    stored = create_pipeline(aigc_repository)
+
+    def v2_node(
+        node_id: str,
+        node_type: str,
+        x: int,
+        *,
+        config: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        return {
+            "id": node_id,
+            "type": node_type,
+            "position": {"x": x, "y": 0},
+            "size": {"width": 240, "height": 160},
+            "config": config or {},
+        }
+
+    v2_definition = AigcPipelineDefinitionV2.model_validate(
+        {
+            "schemaVersion": 2,
+            "nodes": [
+                v2_node(
+                    "image",
+                    "image",
+                    0,
+                    config={"asset_id": "local-image"},
+                ),
+                v2_node(
+                    "video",
+                    "video",
+                    0,
+                    config={"asset_id": "local-video"},
+                ),
+                v2_node(
+                    "audio",
+                    "audio",
+                    0,
+                    config={"asset_id": "local-audio"},
+                ),
+                v2_node("image-producer", "text_to_image", 300),
+                v2_node("video-producer", "video_generation", 300),
+            ],
+            "edges": [
+                {
+                    "id": "image-upstream",
+                    "sourceNodeId": "image-producer",
+                    "sourceHandle": "image",
+                    "targetNodeId": "image",
+                    "targetHandle": "image",
+                },
+                {
+                    "id": "video-upstream",
+                    "sourceNodeId": "video-producer",
+                    "sourceHandle": "video",
+                    "targetNodeId": "video",
+                    "targetHandle": "video",
+                },
+            ],
+        }
+    )
+    pipeline = stored.model_copy(
+        update={"definition": v2_definition},
+        deep=True,
+    )
+
+    if isinstance(aigc_repository, InMemoryRepository):
+        references = aigc_repository._aigc_asset_references_for_pipeline(
+            pipeline
+        )
+    else:
+        assert isinstance(aigc_repository, MySQLRepository)
+        with aigc_repository._session_factory() as session:
+            references = aigc_repository._aigc_asset_references_for_pipeline(
+                session,
+                pipeline,
+            )
+
+    assert sorted(
+        (item.node_id, item.slot, item.asset_id) for item in references
+    ) == [
+        ("audio", "audio", "local-audio"),
+        ("image", "image", "local-image"),
+        ("video", "video", "local-video"),
+    ]
+
+
 def test_run_and_attempt_idempotency_and_snapshot_isolation(
     aigc_repository: AigcRepositoryContract,
 ) -> None:
@@ -719,6 +1001,240 @@ def test_run_and_attempt_idempotency_and_snapshot_isolation(
         retry_of_task_id=created.task_id,
     )
     assert retry.attempt == 2
+
+
+def test_disjoint_flow_runs_can_be_active_together(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=disconnected_definition(),
+    )
+
+    flow_a = create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="flow-a-model",
+        idempotency_key="flow-a-request",
+    )
+    flow_b = create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="flow-b-model",
+        idempotency_key="flow-b-request",
+    )
+
+    assert flow_a.run.status == AigcPipelineRunStatus.QUEUED
+    assert flow_b.run.status == AigcPipelineRunStatus.QUEUED
+    assert flow_b.run.run_number == flow_a.run.run_number + 1
+
+
+def test_in_memory_concurrent_overlapping_flow_creates_only_one_run(
+    repository: InMemoryRepository,
+) -> None:
+    pipeline = create_pipeline(
+        repository,
+        pipeline_definition=disconnected_definition(),
+    )
+    ready = Barrier(2)
+
+    def create(index: int):
+        ready.wait()
+        try:
+            return create_scoped_run(
+                repository,
+                pipeline,
+                start_node_id="flow-a-model",
+                idempotency_key=f"concurrent-flow-a-{index}",
+            )
+        except ActiveRunConflictError as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(create, range(2)))
+
+    created = [item for item in outcomes if not isinstance(item, Exception)]
+    conflicts = [
+        item for item in outcomes if isinstance(item, ActiveRunConflictError)
+    ]
+    assert len(created) == 1
+    assert len(conflicts) == 1
+    assert len(repository.list_aigc_runs(pipeline.id)) == 1
+
+
+def test_overlapping_flow_run_is_rejected(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=disconnected_definition(),
+    )
+    create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="flow-a-model",
+        idempotency_key="flow-a-request",
+    )
+
+    with pytest.raises(ActiveRunConflictError):
+        create_scoped_run(
+            aigc_repository,
+            pipeline,
+            start_node_id="flow-a-input",
+            idempotency_key="flow-a-request-2",
+        )
+
+
+@pytest.mark.parametrize("full_first", [True, False])
+def test_full_and_partial_active_runs_conflict_in_both_directions(
+    aigc_repository: AigcRepositoryContract,
+    full_first: bool,
+) -> None:
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=disconnected_definition(),
+    )
+    first = (
+        {"mode": "full", "start_node_id": None}
+        if full_first
+        else {"mode": "from_node", "start_node_id": "flow-a-model"}
+    )
+    second = (
+        {"mode": "from_node", "start_node_id": "flow-b-model"}
+        if full_first
+        else {"mode": "full", "start_node_id": None}
+    )
+    create_scoped_run(
+        aigc_repository,
+        pipeline,
+        idempotency_key="first-request",
+        **first,
+    )
+
+    with pytest.raises(ActiveRunConflictError):
+        create_scoped_run(
+            aigc_repository,
+            pipeline,
+            idempotency_key="second-request",
+            **second,
+        )
+
+
+def test_run_idempotency_takes_precedence_over_active_scope_conflict(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=disconnected_definition(),
+    )
+    created = create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="flow-a-model",
+        idempotency_key="same-request",
+    )
+
+    duplicate = create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="flow-b-model",
+        idempotency_key="same-request",
+    )
+
+    assert duplicate.run.id == created.run.id
+    assert duplicate.run.start_node_id == "flow-a-model"
+
+
+def test_older_run_completion_does_not_replace_latest_status(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=disconnected_definition(),
+    )
+    older = create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="flow-a-model",
+        idempotency_key="flow-a-request",
+    )
+    newer = create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="flow-b-model",
+        idempotency_key="flow-b-request",
+    )
+
+    aigc_repository.update_aigc_run(
+        newer.run.id,
+        status=AigcPipelineRunStatus.RUNNING,
+    )
+    latest_pipeline = aigc_repository.get_aigc_pipeline(pipeline.id)
+    aigc_repository.update_aigc_run(
+        older.run.id,
+        status=AigcPipelineRunStatus.SUCCEEDED,
+    )
+
+    unchanged_pipeline = aigc_repository.get_aigc_pipeline(pipeline.id)
+    assert unchanged_pipeline.latest_run_status == AigcPipelineRunStatus.RUNNING
+    assert unchanged_pipeline.updated_at == latest_pipeline.updated_at
+
+
+def test_mysql_update_locks_pipeline_before_latest_run_query(
+    mysql_repository: MySQLRepository,
+) -> None:
+    """SQLite checks order; MySQL atomicity relies on pipeline FOR UPDATE."""
+    pipeline = create_pipeline(
+        mysql_repository,
+        pipeline_definition=disconnected_definition(),
+    )
+    detail = create_scoped_run(
+        mysql_repository,
+        pipeline,
+        start_node_id="flow-a-model",
+        idempotency_key="lock-order-flow-a",
+    )
+    statements: list[tuple[str, bool]] = []
+
+    def record_statement(state: ORMExecuteState) -> None:
+        statement = state.statement
+        statements.append(
+            (
+                str(statement).lower(),
+                getattr(statement, "_for_update_arg", None) is not None,
+            )
+        )
+
+    session_class = mysql_repository._session_factory.class_
+    event.listen(session_class, "do_orm_execute", record_statement)
+    try:
+        mysql_repository.update_aigc_run(
+            detail.run.id,
+            status=AigcPipelineRunStatus.RUNNING,
+        )
+    finally:
+        event.remove(session_class, "do_orm_execute", record_statement)
+
+    run_read = next(
+        index
+        for index, (statement, _locked) in enumerate(statements)
+        if "from pipeline_runs" in statement
+        and "pipeline_runs.id =" in statement
+        and "order by" not in statement
+    )
+    pipeline_lock = next(
+        index
+        for index, (statement, locked) in enumerate(statements)
+        if "from pipelines" in statement and locked
+    )
+    latest_run_query = next(
+        index
+        for index, (statement, _locked) in enumerate(statements)
+        if "from pipeline_runs" in statement
+        and "order by pipeline_runs.run_number desc" in statement
+    )
+
+    assert run_read < pipeline_lock < latest_run_query
 
 
 def test_terminal_task_asset_links_are_removed_on_asset_delete(

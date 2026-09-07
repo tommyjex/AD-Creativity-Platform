@@ -17,18 +17,28 @@ import {
   bboxReferences,
   eligibleBboxTextTargets
 } from "@/lib/aigc/bbox-references";
+import { deriveAigcNodeDisplayNames } from "@/lib/aigc/node-display-name";
 import { useAigcEditorStore } from "@/components/workspace/aigc/providers/aigc-editor-store-provider";
-import type { AigcBbox, AigcNode } from "@/lib/aigc/types";
-import type { Asset } from "@/lib/api-types";
+import type {
+  AigcBbox,
+  AigcPipelineDefinitionV2,
+  AigcV2Node
+} from "@/lib/aigc/types";
 import { cn } from "@/lib/utils";
 
 export function AigcPreciseEditDialog({
-  asset,
+  assetId,
+  assetName,
+  bboxState,
+  sourceMode,
   node,
   url
 }: {
-  asset: Asset | undefined;
-  node: Extract<AigcNode, { type: "image_input" }>;
+  assetId: string | null;
+  assetName: string;
+  bboxState: "none" | "stale" | "valid";
+  sourceMode: "local" | "upstream";
+  node: Extract<AigcV2Node, { type: "image" }>;
   url: string | null;
 }) {
   const definition = useAigcEditorStore((state) => state.definition);
@@ -41,22 +51,46 @@ export function AigcPreciseEditDialog({
   const [selectedTextNodeIds, setSelectedTextNodeIds] = useState<Set<string>>(
     new Set()
   );
-  const textNodes = definition.nodes.filter(
-    (candidate): candidate is Extract<AigcNode, { type: "text_input" }> =>
-      candidate.type === "text_input"
+  const [openedAssetId, setOpenedAssetId] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const graphNodes = (
+    definition as unknown as AigcPipelineDefinitionV2
+  ).nodes;
+  const textNodes = graphNodes.filter(
+    (
+      candidate
+    ): candidate is Extract<AigcV2Node, { type: "text" }> =>
+      candidate.type === "text"
   );
+  const displayNames = deriveAigcNodeDisplayNames(definition.nodes);
   const eligibleIds = new Set(
-    eligibleBboxTextTargets(definition, node.id).map((candidate) => candidate.id)
+    eligibleBboxTextTargets(
+      definition,
+      node.id,
+      sourceMode === "upstream" ? assetId : undefined
+    ).map((candidate) => candidate.id)
   );
-  const canOpen = mode === "pipeline" && Boolean(asset && url);
+  const canOpen = mode === "pipeline" && Boolean(assetId && url);
+  const configuredBbox =
+    sourceMode === "upstream"
+      ? node.config.upstream_bbox ?? null
+      : node.config.bbox;
   const canConfirm =
-    node.config.bbox && draftBbox === null
+    configuredBbox && draftBbox === null
       ? true
       : Boolean(draftBbox && selectedTextNodeIds.size > 0);
 
   function openEditor() {
     if (!canOpen) return;
-    setDraftBbox(node.config.bbox ?? null);
+    setOpenedAssetId(assetId);
+    setSubmitError(null);
+    setDraftBbox(
+      bboxState === "valid"
+        ? sourceMode === "upstream"
+          ? node.config.upstream_bbox ?? null
+          : node.config.bbox
+        : null
+    );
     setSelectedTextNodeIds(
       new Set(
         textNodes
@@ -71,7 +105,7 @@ export function AigcPreciseEditDialog({
     setOpen(true);
   }
 
-  function toggleTarget(textNode: Extract<AigcNode, { type: "text_input" }>) {
+  function toggleTarget(textNode: (typeof textNodes)[number]) {
     setSelectedTextNodeIds((current) => {
       const next = new Set(current);
       if (next.has(textNode.id)) next.delete(textNode.id);
@@ -82,21 +116,35 @@ export function AigcPreciseEditDialog({
 
   function confirm() {
     if (!canConfirm) return;
-    setBindings(node.id, draftBbox, [...selectedTextNodeIds]);
+    if (!assetId || openedAssetId !== assetId) {
+      setDraftBbox(null);
+      setSubmitError("上游图片已更新，请重新框选");
+      return;
+    }
+    setBindings(node.id, draftBbox, [...selectedTextNodeIds], {
+      assetId,
+      mode: sourceMode
+    });
     setOpen(false);
   }
 
   return (
     <>
       <button
-        aria-label={`精准编辑：${assetName(asset)}`}
+        aria-label={`精准编辑：${assetName}`}
         className="nodrag grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-card hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
         disabled={!canOpen}
         onClick={(event) => {
           event.stopPropagation();
           openEditor();
         }}
-        title={canOpen ? "精准编辑" : "选择图片后可精准编辑"}
+        title={
+          canOpen
+            ? "精准编辑"
+            : sourceMode === "local"
+              ? "选择图片后可精准编辑"
+              : "等待可用的上游图片结果"
+        }
         type="button"
       >
         <ScanSearch className="h-3.5 w-3.5" />
@@ -104,7 +152,7 @@ export function AigcPreciseEditDialog({
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent className="grid h-[92dvh] w-[96vw] max-w-[96vw] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:rounded-lg">
           <DialogHeader className="border-b border-border px-5 py-4 pr-14">
-            <DialogTitle>精准编辑 · {assetName(asset)}</DialogTitle>
+            <DialogTitle>精准编辑 · {assetName}</DialogTitle>
             <DialogDescription>
               框选一个主体，并引用到与该图片共享图生图下游的文本节点。
             </DialogDescription>
@@ -126,7 +174,7 @@ export function AigcPreciseEditDialog({
               </div>
               <div className="min-h-0 flex-1 p-4">
                 <BboxCanvas
-                  alt={`精准编辑：${assetName(asset)}`}
+                  alt={`精准编辑：${assetName}`}
                   bbox={draftBbox}
                   className="h-full min-h-[20rem] w-full border-slate-700"
                   disabled={false}
@@ -137,6 +185,22 @@ export function AigcPreciseEditDialog({
               </div>
             </div>
             <aside className="border-t border-border bg-card p-4 lg:overflow-y-auto lg:border-l lg:border-t-0">
+              {bboxState === "stale" ? (
+                <p
+                  className="mb-4 border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-200"
+                  role="status"
+                >
+                  上游图片已更新，请重新框选
+                </p>
+              ) : null}
+              {submitError ? (
+                <p
+                  className="mb-4 border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive"
+                  role="alert"
+                >
+                  {submitError}
+                </p>
+              ) : null}
               <div className="mb-4">
                 <p className="text-xs font-semibold text-foreground">当前框选</p>
                 <p className="mt-1 font-mono text-[10px] text-muted-foreground">
@@ -180,8 +244,14 @@ export function AigcPreciseEditDialog({
                         />
                         <span className="min-w-0">
                           <span className="block truncate font-semibold">
-                            {textNode.config.text.trim() || "未命名文本输入"}
+                            {displayNames.get(textNode.id)?.displayName ??
+                              "文本节点"}
                           </span>
+                          {textNode.config.text.trim() ? (
+                            <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                              {textNode.config.text.trim()}
+                            </span>
+                          ) : null}
                           <span className="mt-0.5 block text-[10px] text-muted-foreground">
                             {!eligible
                               ? "不满足共同图生图下游规则"
@@ -201,11 +271,11 @@ export function AigcPreciseEditDialog({
               </div>
             </aside>
           </div>
-          <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
+          <div className="flex flex-col items-stretch gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[11px] text-muted-foreground">
               坐标由框选生成，保存后自动同步到所有引用。
             </p>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 justify-end gap-2">
               <Button onClick={() => setOpen(false)} type="button" variant="outline">
                 取消
               </Button>
@@ -218,9 +288,4 @@ export function AigcPreciseEditDialog({
       </Dialog>
     </>
   );
-}
-
-function assetName(asset: Asset | undefined): string {
-  const name = asset?.metadata.name;
-  return typeof name === "string" && name.trim() ? name.trim() : "图片输入";
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -74,28 +75,23 @@ def get_aigc_node_registry(
     "/prompts/optimize",
     response_model=AigcPromptOptimizeResponse,
 )
-async def optimize_aigc_image_prompt(
+async def optimize_aigc_prompt(
     payload: AigcPromptOptimizeRequest,
     generation: ModelArkGenerationService = Depends(
         get_modelark_generation_service
     ),
 ) -> AigcPromptOptimizeResponse:
     try:
-        return await generation.optimize_aigc_image_prompt(
-            text=payload.text,
-            reference_instructions=payload.reference_instructions,
-            generation_modes=payload.generation_modes,
-            reference_image_count=payload.reference_image_count,
-        )
+        return await generation.optimize_aigc_prompt(payload)
     except (ModelArkProviderError, ModelArkTextParseError) as exc:
         logger.warning(
-            "AIGC image prompt optimization failed",
+            "AIGC prompt optimization failed",
             extra=exc.safe_log_fields(),
         )
         raise _error(
             status.HTTP_502_BAD_GATEWAY,
             ErrorCode.EXTERNAL_SERVICE_ERROR,
-            "AIGC image prompt optimization failed",
+            "AIGC prompt optimization failed",
         ) from exc
 
 
@@ -337,7 +333,7 @@ def save_aigc_pipeline_as_template(
     status_code=status.HTTP_201_CREATED,
 )
 async def upload_aigc_media(
-    media_kind: Literal["images", "videos", "audios"],
+    media_kind: Literal["images", "videos", "audios", "subtitles"],
     filename: str | None = Query(default=None),
     mime_type: str | None = Query(default=None),
     content: bytes = Body(..., media_type="application/octet-stream"),
@@ -346,6 +342,47 @@ async def upload_aigc_media(
     media_inspector: MediaInspector = Depends(get_media_inspector_service),
     video_normalizer: VideoNormalizer = Depends(get_video_normalizer_service),
 ) -> Asset:
+    upload_label = media_kind.removesuffix("s")
+    if media_kind == "subtitles":
+        try:
+            _validate_aigc_subtitle(content, filename=filename, mime_type=mime_type)
+            asset = asset_storage.upload_asset(
+                repository,
+                StoredAssetInput(
+                    type=AssetType.SUBTITLE,
+                    tool_asset_role=ToolAssetRole.INPUT,
+                    status=Status.SUCCEEDED,
+                    mime_type="application/x-subrip",
+                    size_bytes=len(content),
+                    filename=filename,
+                    metadata={
+                        "origin": "aigc",
+                        "aigc_role": "input",
+                        "name": filename or "aigc-subtitle.srt",
+                    },
+                ),
+                content=content,
+            )
+            return asset_storage.with_access_url(asset)
+        except ValueError as exc:
+            raise _error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                ErrorCode.VALIDATION_ERROR,
+                str(exc),
+            ) from exc
+        except ConfigurationError as exc:
+            raise _error(
+                status.HTTP_502_BAD_GATEWAY,
+                ErrorCode.EXTERNAL_SERVICE_ERROR,
+                "AIGC subtitle upload is unavailable",
+            ) from exc
+        except Exception as exc:
+            raise _error(
+                status.HTTP_502_BAD_GATEWAY,
+                ErrorCode.EXTERNAL_SERVICE_ERROR,
+                "AIGC subtitle upload failed",
+            ) from exc
+
     kind = {
         "images": ReferenceAssetKind.IMAGE,
         "videos": ReferenceAssetKind.VIDEO,
@@ -414,14 +451,44 @@ async def upload_aigc_media(
         raise _error(
             status.HTTP_502_BAD_GATEWAY,
             ErrorCode.EXTERNAL_SERVICE_ERROR,
-            f"AIGC {kind.value} upload is unavailable",
+            f"AIGC {upload_label} upload is unavailable",
         ) from exc
     except Exception as exc:
         raise _error(
             status.HTTP_502_BAD_GATEWAY,
             ErrorCode.EXTERNAL_SERVICE_ERROR,
-            f"AIGC {kind.value} upload failed",
+            f"AIGC {upload_label} upload failed",
         ) from exc
+
+
+def _validate_aigc_subtitle(
+    content: bytes,
+    *,
+    filename: str | None,
+    mime_type: str | None,
+) -> None:
+    if not content:
+        raise ValueError("subtitle file is empty")
+    if len(content) > 5 * 1024 * 1024:
+        raise ValueError("subtitle file exceeds maximum size")
+    if not filename or Path(filename).suffix.lower() != ".srt":
+        raise ValueError("subtitle file must use the .srt extension")
+    normalized_mime = (mime_type or "").split(";", 1)[0].strip().lower()
+    if normalized_mime not in {
+        "application/x-subrip",
+        "text/plain",
+        "text/srt",
+    }:
+        raise ValueError("subtitle file MIME type is not supported")
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ValueError("subtitle file must be UTF-8 encoded") from exc
+    if not re.search(
+        r"\d{2}:\d{2}:\d{2},\d{3}\s+-->\s+\d{2}:\d{2}:\d{2},\d{3}",
+        text,
+    ):
+        raise ValueError("subtitle file does not contain a valid SRT timecode")
 
 
 @router.post(
