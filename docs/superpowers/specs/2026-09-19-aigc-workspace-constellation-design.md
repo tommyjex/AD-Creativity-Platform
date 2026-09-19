@@ -4,13 +4,13 @@
 
 将 AIGC 画布列表页从浅色、低信息密度的卡片目录升级为深色“星图创作台”。页面应让用户快速识别模板与个人画布、定位目标画布，并进入创建或编辑流程。
 
-本次仅改造列表页视觉与其展示组件；不改变已有模板实例化、新建、搜索、删除、分页、路由和数据模型。
+本次改造列表页视觉与缩略图接口；不改变已有模板实例化、新建、搜索、删除、分页、画布定义、编辑路由和生成执行语义。
 
 ## 范围与约束
 
-- 改造 `frontend/components/workspace/aigc/aigc-workspace.tsx` 及其现有测试。
+- 改造 `frontend/components/workspace/aigc/aigc-workspace.tsx` 及其现有测试，并为个人画布增加缩略图元数据和接口。
 - 保留 `initialView` 的既有语义：无效或缺失 URL 参数仍默认显示模板，`?view=pipelines` 显示我的画布。
-- 继续使用现有的 `AigcPipeline` 和 `AigcPipelineTemplate` 字段。标题、描述、定义、更新时间、运行状态和总数均不引入额外请求。
+- 标题、描述、定义、更新时间、运行状态和总数继续使用现有字段；个人画布列表额外返回已解析的缩略图预览，不为每张卡片单独请求产物。
 - 不新增活动流、协作者、运行统计或“最近继续”专用数据区，因为这些都没有稳定的数据来源。
 - 维持大屏五列、平板四列、手机两列的内容网格；窄屏下控件可换行，文本不得溢出。
 - 不使用图片资产、渐变球或装饰性卡片嵌套。星图装饰以 CSS 实现，且不拦截前景交互。
@@ -43,13 +43,13 @@
 
 每张卡片从上到下包含：
 
-1. 固定高度的流程预览区：网格底纹、按画布定义渲染的节点和连线。
+1. 固定高度的预览区：个人画布优先显示已选的图片或视频缩略图；没有可用产物时显示网格底纹、按画布定义渲染的节点和连线。
 2. 类型与状态区域：模板显示“模板 / r{revision}”，个人画布显示当前运行状态。
 3. 画布名称和描述：没有描述时显示“未填写说明”，避免空白视觉断层。
 4. 节点数量、模型数量和格式化更新时间。
 5. 底部主操作：模板显示“使用模板”，个人画布显示“打开画布”；删除仍是独立图标按钮，保留可访问名称和确认弹窗。
 
-预览不尝试模拟真实画布缩放，也不添加不可用的缩略图。它仅从 `definition.nodes` 与 `definition.edges` 生成稳定且有差异的结构性概览。
+预览不尝试模拟真实画布缩放。图片使用等比 `object-contain`，视频显示可访问封面而不自动播放；当无缩略图、资产不可用或其 URL 获取失败时，稳定回退到结构性流程概览。
 
 ### 4. 模态色彩与星链
 
@@ -77,7 +77,115 @@
 - `AigcCard`：预览、元信息和按类型分支的操作。
 - `TopologyPreview`：从已有 `definition` 计算节点位置、连线和模态颜色。
 
-这些组件不拥有数据请求或导航状态，回调仍由 `AigcWorkspace` 传入。`page.tsx`、API 客户端、类型定义和后端接口不变。
+这些组件不拥有数据请求或导航状态，回调仍由 `AigcWorkspace` 传入。`page.tsx` 保持初始并行加载；API 客户端、类型定义和后端接口按下文的缩略图契约扩展。
+
+## 画布缩略图接口
+
+### 数据模型与列表响应
+
+仅 `AigcPipeline`（个人画布）新增以下响应字段；`AigcPipelineTemplate` 不新增缩略图字段，也不允许选择运行产物。
+
+```ts
+type AigcThumbnailMediaKind = "image" | "video";
+type AigcPipelineThumbnailSource = "pinned" | "latest_output";
+
+interface AigcPipelineThumbnail {
+  asset_id: string;
+  mime_type: string;
+  kind: AigcThumbnailMediaKind;
+  source: AigcPipelineThumbnailSource;
+  url: string;
+}
+
+interface AigcPipeline {
+  // Existing fields remain unchanged.
+  thumbnail_asset_id: string | null;
+  thumbnail: AigcPipelineThumbnail | null;
+}
+```
+
+`thumbnail_asset_id` 保存用户明确固定的资产 ID。`thumbnail` 是服务端解析后的可展示对象，始终只包含可访问的图片或视频；它不作为写入输入。
+
+`GET /api/aigc/pipelines` 和 `GET /api/aigc/pipelines/{pipeline_id}` 均返回以上字段。列表查询必须按当前页的画布 ID 批量加载候选资产并签发 URL，不能为每个画布进行独立查询。
+
+缩略图解析优先级固定为：
+
+1. 用户固定的 `thumbnail_asset_id`，前提是资产仍属于该画布、仍可访问，且为图片或视频。
+2. 该画布最新成功运行中的最新可访问图片或视频输出。
+3. `null`，由客户端渲染现有的流程拓扑预览。
+
+失效或删除的固定资产不导致列表请求失败；该次响应按以上规则回退。原始 `thumbnail_asset_id` 保留，直到用户设置其他资产或显式清除。
+
+### 缩略图候选接口
+
+```http
+GET /api/aigc/pipelines/{pipeline_id}/thumbnail-candidates?page=1&page_size=50
+```
+
+响应：
+
+```json
+{
+  "items": [
+    {
+      "asset_id": "asset-image-01",
+      "run_id": "run-01",
+      "node_id": "image-output",
+      "mime_type": "image/png",
+      "kind": "image",
+      "url": "https://signed.example/asset-image-01",
+      "created_at": "2026-09-19T04:20:00Z"
+    }
+  ],
+  "page": 1,
+  "page_size": 50,
+  "total": 1
+}
+```
+
+候选仅来自该画布成功运行的输出资产，按产物创建时间倒序排列。服务端只返回 `image/*`、`video/*` 且当前可访问的资产；文本、音频、字幕、内部图层、输入引用、失败产物和其他画布资产一律排除。
+
+不存在的画布返回现有的 `404 NOT_FOUND`。空候选列表返回 `200` 和空分页结果，不视为错误。
+
+### 设置与清除接口
+
+```http
+PUT /api/aigc/pipelines/{pipeline_id}/thumbnail
+Content-Type: application/json
+
+{ "asset_id": "asset-image-01" }
+```
+
+```http
+PUT /api/aigc/pipelines/{pipeline_id}/thumbnail
+Content-Type: application/json
+
+{ "asset_id": null }
+```
+
+请求体：
+
+```ts
+interface AigcPipelineThumbnailUpdate {
+  asset_id: string | null;
+}
+```
+
+响应为更新后的完整 `AigcPipeline`。此接口只更新 `thumbnail_asset_id` 和 `updated_at`，不修改 `definition`、`revision` 或节点资产引用，因此不会与编辑器的定义自动保存发生版本冲突。并发设置采用最后一次成功写入生效。
+
+当 `asset_id` 非空时，服务端必须验证资产同时满足以下条件：
+
+- 是当前画布某次成功运行的输出，而非输入或内部资产。
+- MIME 类型以 `image/` 或 `video/` 开头。
+- 资产状态可访问，且能为当前请求签发访问 URL。
+
+不满足任一条件时返回 `422 INVALID_INPUT`，不得写入字段。画布不存在返回 `404 NOT_FOUND`。设置成功后，列表与详情查询立即按 `pinned` 返回该资产；清除后按 `latest_output` 或 `null` 回退。
+
+### 存储与服务边界
+
+MySQL 的画布记录新增可空 `thumbnail_asset_id` 列；内存仓储保存同一字段。仓储负责原子读写字段，并提供按页画布 ID 批量解析候选资产的查询。服务层负责“成功运行输出 + 可访问图片/视频”的资格校验；路由层不直接信任客户端传入的资产 ID。
+
+签名 URL 只在响应中生成，不持久化。资产 URL 过期或存储不可用时，列表和候选接口跳过该资产；单个不可用资产不能使其他画布的列表项失败。
 
 ## 可访问性与交互
 
@@ -85,6 +193,7 @@
 - 装饰性星图及连线必须使用 `aria-hidden` 或伪元素，不能进入读屏顺序。
 - 焦点态与悬停态均有可见对比，不能仅依赖颜色区分模板、运行状态或节点类型。
 - 删除仍要求确认；进行中的删除不可重复触发。
+- 选择缩略图的入口只出现在个人画布中。候选弹窗必须让用户分辨图片与视频，使用缩略图而不是自动播放视频；“清除缩略图”明确回退到自动预览。
 
 ## 验收与测试
 
@@ -96,11 +205,21 @@
 - 未填写描述时展示确定的占位文案，不影响操作。
 - 模态颜色映射覆盖文本、图片、视频、音频及未知节点的中性回退。
 - 新建、实例化、搜索、删除成功和删除失败的既有测试继续通过。
+- 有 `thumbnail` 的个人画布优先展示等比媒体；`thumbnail: null` 或媒体加载失败时展示流程拓扑。
+
+新增后端契约、服务与仓储测试：
+
+- 图片与视频成功运行输出可出现在候选列表；文本、音频、内部资产、输入资产、失败资产和跨画布资产不会出现。
+- 设置缩略图拒绝不存在、跨画布、非输出、非成功、不可访问和非图片/视频资产，且不改变原有设置。
+- 清除缩略图后返回 `thumbnail_asset_id: null`，列表回退到最新可访问图片/视频或 `null`。
+- 列表对同一页画布以批量查询解析缩略图，不产生按卡片数量增长的资产读取。
+- MySQL 和内存仓储都持久化固定缩略图；旧记录在迁移后默认为 `null`。
 
 实现后运行工作区相关的 Vitest 测试、前端 lint，并用 Playwright 在桌面、平板、手机视口检查：页面无横向溢出，五/四/两列断点生效，控件可操作，星图背景不遮挡内容。
 
 ## 非目标
 
-- 不改变全局导航栏、画布编辑器、生成执行链路或媒体资产库。
+- 不改变全局导航栏、模板数据模型、画布定义、生成执行链路或媒体资产库。
 - 不增加新模板、排序、收藏、标签、团队协作、运行历史或数据分析。
+- 不允许从其他画布、上传素材、输入引用、音频或文本结果选择缩略图。
 - 不替换现有组件库，也不引入图表、图片生成或第三方视觉依赖。
