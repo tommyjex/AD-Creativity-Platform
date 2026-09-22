@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.api.dependencies import get_modelark_generation_service
 from backend.app.repositories import InMemoryRepository, MySQLRepository
 from backend.app.schemas import (
     AigcAssetDirection,
@@ -19,6 +22,7 @@ from backend.app.schemas import (
     AigcResultAsset,
     AigcResultKind,
     AigcRunNodeStatus,
+    AigcSeedreamPromptOptimizationResult,
     AigcTaskResult,
     AigcTaskStatus,
     AigcTaskType,
@@ -27,6 +31,11 @@ from backend.app.schemas import (
     AssetType,
     Status,
     ToolAssetRole,
+)
+from backend.app.services.generation import ModelArkGenerationService
+from backend.app.services.modelark import (
+    ModelArkProviderError,
+    ModelArkTextParseError,
 )
 from backend.app.services.video_normalizer import NormalizedVideo
 
@@ -110,6 +119,136 @@ def definition(
         "nodes": nodes,
         "edges": edges,
         "viewport": {"x": 0, "y": 0, "zoom": 1},
+    }
+
+
+def image_edit_definition(
+    asset_id: str | None,
+    *,
+    operation: str = "image_edit",
+    aspect_ratio: str = "1:1",
+) -> dict[str, object]:
+    target_handle = "edit_image" if operation == "image_edit" else "image"
+    return {
+        "schemaVersion": 2,
+        "nodes": [
+            {
+                "id": "prompt",
+                "type": "text",
+                "position": {"x": 0, "y": 0},
+                "size": {"width": 240, "height": 160},
+                "config": {"text": "把外套改为蓝色，其他内容保持不变"},
+            },
+            {
+                "id": "source-image",
+                "type": "image",
+                "position": {"x": 0, "y": 220},
+                "size": {"width": 240, "height": 180},
+                "config": {"asset_id": asset_id},
+            },
+            {
+                "id": "image-model",
+                "type": "image_to_image",
+                "position": {"x": 320, "y": 0},
+                "size": {"width": 280, "height": 200},
+                "config": {
+                    "operation": operation,
+                    "aspect_ratio": aspect_ratio,
+                    "size": "2K",
+                },
+            },
+        ],
+        "edges": [
+            {
+                "id": "prompt-edge",
+                "sourceNodeId": "prompt",
+                "sourceHandle": "text",
+                "targetNodeId": "image-model",
+                "targetHandle": "prompt",
+            },
+            {
+                "id": "image-edge",
+                "sourceNodeId": "source-image",
+                "sourceHandle": "image",
+                "targetNodeId": "image-model",
+                "targetHandle": target_handle,
+            },
+        ],
+        "viewport": {"x": 0, "y": 0, "zoom": 1},
+    }
+
+
+def image_edit_optimize_payload(
+    pipeline: dict[str, object],
+    asset_id: str,
+) -> dict[str, object]:
+    return {
+        "target_node_id": "image-model",
+        "target_type": "image_to_image",
+        "target_config": {
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_edit",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        "optimization_direction": "",
+        "text": "把人物外套改为蓝色，其他内容保持不变",
+        "reference_instructions": [],
+        "pipeline_context": {
+            "pipeline_id": pipeline["id"],
+            "base_revision": pipeline["revision"],
+            "definition_snapshot": pipeline["definition"],
+            "source_image": {
+                "source_node_id": "source-image",
+                "source_handle": "image",
+                "target_handle": "edit_image",
+                "asset_id": asset_id,
+                "run_id": None,
+            },
+        },
+    }
+
+
+def multitrack_font_definition(font_type: object = "SY_Black") -> dict[str, object]:
+    return {
+        "schemaVersion": 2,
+        "nodes": [
+            {
+                "id": "multitrack",
+                "type": "multi_track_edit",
+                "position": {"x": 0, "y": 0},
+                "size": {"width": 320, "height": 240},
+                "config": {
+                    "tracks": [
+                        {
+                            "id": "text-track",
+                            "name": "文字",
+                            "type": "text",
+                            "elements": [
+                                {
+                                    "id": "text-1",
+                                    "type": "text",
+                                    "target_time": {
+                                        "start_ms": 0,
+                                        "end_ms": 2000,
+                                    },
+                                    "inline_text": "标题",
+                                    "transform": {
+                                        "x": 0,
+                                        "y": 0,
+                                        "width": 800,
+                                        "height": 200,
+                                    },
+                                    "style": {"font_type": font_type},
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        ],
+        "edges": [],
     }
 
 
@@ -202,6 +341,7 @@ def test_node_registry_exposes_only_schema_version_two_nodes(
         "video_generation",
         "video_enhancement",
         "video_face_blur",
+        "video_subtitle_extraction",
         "layer_canvas",
         "layer_composite",
         "multi_track_edit",
@@ -228,6 +368,56 @@ def test_pipeline_api_round_trip_and_defaults_are_canonical_v2(
     readback = aigc_client.get(f"/api/aigc/pipelines/{pipeline['id']}")
     assert readback.status_code == 200
     assert readback.json()["definition"] == pipeline["definition"]
+
+
+def test_pipeline_api_persists_valid_multitrack_font_and_defaults_legacy(
+    aigc_client: TestClient,
+) -> None:
+    created = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={
+            "name": "字体契约",
+            "definition": multitrack_font_definition(),
+        },
+    )
+
+    assert created.status_code == 201
+    style = created.json()["definition"]["nodes"][0]["config"]["tracks"][0][
+        "elements"
+    ][0]["style"]
+    assert style["font_type"] == "SY_Black"
+
+    legacy = multitrack_font_definition()
+    del legacy["nodes"][0]["config"]["tracks"][0]["elements"][0]["style"][
+        "font_type"
+    ]
+    legacy_created = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={"name": "旧字体契约", "definition": legacy},
+    )
+
+    assert legacy_created.status_code == 201
+    legacy_style = legacy_created.json()["definition"]["nodes"][0]["config"][
+        "tracks"
+    ][0]["elements"][0]["style"]
+    assert legacy_style["font_type"] is None
+
+
+def test_pipeline_api_rejects_invalid_multitrack_font(
+    aigc_client: TestClient,
+) -> None:
+    response = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={
+            "name": "非法字体",
+            "definition": multitrack_font_definition(
+                "https://fonts.example.com/font.woff2"
+            ),
+        },
+    )
+
+    assert response.status_code == 422
+    assert "invalid_font_type" in response.text
 
 
 def test_v1_pipeline_save_upgrades_and_template_instance_remains_v2(
@@ -522,8 +712,13 @@ def test_prompt_optimization_preserves_reference_cardinality(
 
     assert response.status_code == 200
     payload = response.json()
-    assert "明确编辑对象" in payload["optimized_text"]
-    assert len(payload["optimized_reference_instructions"]) == 2
+    assert payload["generation_type"] == "参考图生图"
+    assert payload["optimization_explanation"]
+    assert "sections" not in payload
+    assert payload["optimized_reference_instructions"] == [
+        "保留商标位置",
+        "使用背景色调",
+    ]
     assert all(
         "<bbox>" not in value
         for value in [
@@ -531,6 +726,372 @@ def test_prompt_optimization_preserves_reference_cardinality(
             *payload["optimized_reference_instructions"],
         ]
     )
+
+
+def test_prompt_optimization_uses_validated_local_source_image(
+    aigc_client: TestClient,
+) -> None:
+    asset = upload_image(aigc_client)
+    pipeline = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={
+            "name": "局部编辑",
+            "definition": image_edit_definition(asset["id"]),
+        },
+    ).json()
+
+    response = aigc_client.post(
+        "/api/aigc/prompts/optimize",
+        json=image_edit_optimize_payload(pipeline, asset["id"]),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    optimized = payload["optimized_text"]
+    assert "\n" not in optimized
+    assert "仅执行上述编辑" in optimized
+    assert payload["generation_type"] == "图像编辑"
+    assert "蓝色" in optimized
+    assert "Composition:" not in optimized
+
+
+def test_prompt_optimization_accepts_equivalent_autosave_and_rejects_conflict(
+    aigc_client: TestClient,
+) -> None:
+    asset = upload_image(aigc_client)
+    pipeline = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={
+            "name": "自动保存竞态",
+            "definition": image_edit_definition(asset["id"]),
+        },
+    ).json()
+    payload = image_edit_optimize_payload(pipeline, asset["id"])
+    saved = aigc_client.put(
+        f"/api/aigc/pipelines/{pipeline['id']}",
+        json={
+            "expected_revision": pipeline["revision"],
+            "name": pipeline["name"],
+            "description": pipeline["description"],
+            "definition": pipeline["definition"],
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["revision"] == pipeline["revision"] + 1
+
+    equivalent = aigc_client.post(
+        "/api/aigc/prompts/optimize",
+        json=payload,
+    )
+    assert equivalent.status_code == 200
+
+    changed_definition = image_edit_definition(
+        asset["id"],
+        aspect_ratio="16:9",
+    )
+    changed = aigc_client.put(
+        f"/api/aigc/pipelines/{pipeline['id']}",
+        json={
+            "expected_revision": saved.json()["revision"],
+            "name": pipeline["name"],
+            "description": pipeline["description"],
+            "definition": changed_definition,
+        },
+    )
+    assert changed.status_code == 200
+
+    conflict = aigc_client.post(
+        "/api/aigc/prompts/optimize",
+        json=payload,
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["code"] == "invalid_state"
+
+
+def test_prompt_optimization_rejects_forged_local_asset_before_provider(
+    aigc_client: TestClient,
+) -> None:
+    source = upload_image(aigc_client)
+    forged = upload_image(aigc_client)
+    pipeline = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={
+            "name": "来源校验",
+            "definition": image_edit_definition(source["id"]),
+        },
+    ).json()
+    generation = SimpleNamespace(
+        optimize_aigc_prompt=AsyncMock(
+            side_effect=AssertionError("provider must not be called")
+        )
+    )
+    aigc_client.app.dependency_overrides[get_modelark_generation_service] = (
+        lambda: generation
+    )
+
+    response = aigc_client.post(
+        "/api/aigc/prompts/optimize",
+        json=image_edit_optimize_payload(pipeline, forged["id"]),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "validation_error"
+    generation.optimize_aigc_prompt.assert_not_awaited()
+
+
+def test_prompt_optimization_rejects_conflicting_image_ports_before_provider(
+    aigc_client: TestClient,
+) -> None:
+    source = upload_image(aigc_client)
+    definition = image_edit_definition(
+        source["id"],
+        operation="image_to_image",
+    )
+    pipeline = aigc_client.post(
+        "/api/aigc/pipelines",
+        json={"name": "冲突图片端口", "definition": definition},
+    ).json()
+    payload = image_edit_optimize_payload(pipeline, source["id"])
+    payload["target_config"]["operation"] = "image_to_image"
+    payload["target_config"]["reference_image_count"] = 1
+    payload["pipeline_context"]["source_image"]["target_handle"] = "image"
+    payload["pipeline_context"]["definition_snapshot"]["edges"].append(
+        {
+            "id": "conflicting-edit-edge",
+            "sourceNodeId": "source-image",
+            "sourceHandle": "image",
+            "targetNodeId": "image-model",
+            "targetHandle": "edit_image",
+        }
+    )
+    generation = SimpleNamespace(
+        optimize_aigc_prompt=AsyncMock(
+            side_effect=AssertionError("provider must not be called")
+        )
+    )
+    aigc_client.app.dependency_overrides[get_modelark_generation_service] = (
+        lambda: generation
+    )
+
+    response = aigc_client.post(
+        "/api/aigc/prompts/optimize",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "validation_error"
+    generation.optimize_aigc_prompt.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "source_status",
+    [AigcRunNodeStatus.SUCCEEDED, AigcRunNodeStatus.REUSED],
+)
+def test_prompt_optimization_accepts_successful_run_node_asset(
+    aigc_client_and_repository: tuple[
+        TestClient,
+        InMemoryRepository | MySQLRepository,
+    ],
+    source_status: AigcRunNodeStatus,
+) -> None:
+    client, repository = aigc_client_and_repository
+    asset = upload_image(client)
+    pipeline = client.post(
+        "/api/aigc/pipelines",
+        json={
+            "name": "上游结果来源",
+            "definition": image_edit_definition(None),
+        },
+    ).json()
+    persisted = repository.get_aigc_pipeline(pipeline["id"])
+    result = AigcTaskResult(
+        kind=AigcResultKind.ASSETS,
+        assets=[
+            AigcResultAsset(
+                asset_id=asset["id"],
+                ordinal=0,
+                mime_type="image/png",
+            )
+        ],
+    )
+    run_detail = repository.create_aigc_run(
+        AigcPipelineRun(
+            pipeline_id=persisted.id,
+            run_number=1,
+            pipeline_revision=persisted.revision,
+            mode="full",
+            definition_snapshot=persisted.definition,
+        ),
+        idempotency_key="prompt-source-run",
+        nodes=[
+            AigcPipelineRunNode(
+                node_id=node.id,
+                included_in_plan=True,
+                status=(
+                    source_status
+                    if node.id == "source-image"
+                    else AigcRunNodeStatus.IDLE
+                ),
+                result=(
+                    result
+                    if node.id == "source-image"
+                    else AigcTaskResult()
+                ),
+            )
+            for node in persisted.definition.nodes
+        ],
+    )
+    payload = image_edit_optimize_payload(pipeline, asset["id"])
+    payload["pipeline_context"]["source_image"]["run_id"] = run_detail.run.id
+
+    response = client.post(
+        "/api/aigc/prompts/optimize",
+        json=payload,
+    )
+
+    assert response.status_code == 200
+    assert "仅执行上述编辑" in response.json()["optimized_text"]
+    assert response.json()["generation_type"] == "图像编辑"
+    assert "Composition:" not in response.json()["optimized_text"]
+
+
+def test_prompt_optimization_falls_back_to_full_design_for_unreadable_asset(
+    aigc_client_and_repository: tuple[
+        TestClient,
+        InMemoryRepository | MySQLRepository,
+    ],
+) -> None:
+    client, repository = aigc_client_and_repository
+    asset = repository.create_asset(
+        AssetCreate(
+            id="missing-prompt-source",
+            tool_asset_role=ToolAssetRole.INPUT,
+            type=AssetType.UPLOADED_IMAGE,
+            asset_role=AssetRole.PUBLIC,
+            status=Status.SUCCEEDED,
+            object_key="aigc/missing-prompt-source.png",
+            mime_type="image/png",
+        )
+    )
+    pipeline = client.post(
+        "/api/aigc/pipelines",
+        json={
+            "name": "不可读来源",
+            "definition": image_edit_definition(asset.id),
+        },
+    ).json()
+
+    response = client.post(
+        "/api/aigc/prompts/optimize",
+        json=image_edit_optimize_payload(pipeline, asset.id),
+    )
+
+    assert response.status_code == 200
+    assert "把人物外套改为蓝色" in response.json()["optimized_text"]
+    assert response.json()["generation_type"] == "文生图"
+    assert response.json()["optimization_explanation"]
+
+
+def test_prompt_optimization_has_no_pipeline_or_image_generation_side_effects(
+    aigc_client_and_repository: tuple[
+        TestClient,
+        InMemoryRepository | MySQLRepository,
+    ],
+) -> None:
+    client, repository = aigc_client_and_repository
+    pipeline = client.post(
+        "/api/aigc/pipelines",
+        json={"name": "优化副作用审计", "definition": {}},
+    ).json()
+    optimize = AsyncMock(
+        return_value=AigcSeedreamPromptOptimizationResult(
+            generation_type="文生图",
+            optimized_text="生成清晰的红色产品主图。",
+            optimization_explanation="明确了产品主体和颜色。",
+        )
+    )
+    generate_image = AsyncMock(
+        side_effect=AssertionError("prompt optimization must not generate images")
+    )
+    adapter = type(
+        "PromptOnlyAdapter",
+        (),
+        {
+            "optimize_aigc_prompt": optimize,
+            "generate_project_image": generate_image,
+        },
+    )()
+    client.app.dependency_overrides[get_modelark_generation_service] = (
+        lambda: ModelArkGenerationService(adapter=adapter)
+    )
+    runs_before = repository.list_aigc_runs(pipeline["id"])
+    tasks_before = repository.list_aigc_task_attempts()
+
+    response = client.post(
+        "/api/aigc/prompts/optimize",
+        json={
+            "target_node_id": "image-model",
+            "target_type": "text_to_image",
+            "target_config": {
+                "model": "doubao-seedream-5-0-pro-260628",
+                "aspect_ratio": "1:1",
+                "size": "2K",
+                "reference_image_count": 0,
+            },
+            "optimization_direction": "",
+            "text": "红色产品主图",
+            "reference_instructions": [],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["generation_type"] == "文生图"
+    assert response.json()["optimization_explanation"] == (
+        "明确了产品主体和颜色。"
+    )
+    assert repository.list_aigc_runs(pipeline["id"]) == runs_before
+    assert repository.list_aigc_task_attempts() == tasks_before
+    optimize.assert_awaited_once()
+    generate_image.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ModelArkProviderError("provider unavailable"),
+        ModelArkTextParseError("invalid discriminated response"),
+    ],
+)
+def test_prompt_optimization_reports_provider_or_parse_failures(
+    aigc_client: TestClient,
+    error: Exception,
+) -> None:
+    generation = SimpleNamespace(
+        optimize_aigc_prompt=AsyncMock(side_effect=error)
+    )
+    aigc_client.app.dependency_overrides[get_modelark_generation_service] = (
+        lambda: generation
+    )
+
+    response = aigc_client.post(
+        "/api/aigc/prompts/optimize",
+        json={
+            "target_node_id": "image-model",
+            "target_type": "text_to_image",
+            "target_config": {
+                "model": "doubao-seedream-5-0-pro-260628",
+                "aspect_ratio": "1:1",
+                "size": "2K",
+                "reference_image_count": 0,
+            },
+            "optimization_direction": "",
+            "text": "红色产品主图",
+            "reference_instructions": [],
+        },
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"]["code"] == "external_service_error"
 
 
 def test_prompt_optimization_supports_llm_and_rejects_legacy_payload(

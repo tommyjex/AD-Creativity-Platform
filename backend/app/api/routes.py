@@ -36,6 +36,8 @@ from backend.app.repositories import (
     RevisionConflictError,
 )
 from backend.app.schemas import (
+    AigcAssetDirection,
+    AigcNodeType,
     Asset,
     AssetCategory,
     AssetRenameRequest,
@@ -112,7 +114,13 @@ from backend.app.schemas import (
     USER_DEFINED_ASSET_NAME_SCHEME,
     validate_visible_selling_copy,
 )
-from backend.app.services.aigc_asset_naming import AIGC_ASSET_NAME_SCHEME
+from backend.app.services.aigc_asset_naming import (
+    AIGC_ASSET_NAME_SCHEME,
+    AIGC_GENERATED_ASSET_NAME_SCHEME,
+    aigc_generated_media_name_target_node_ids,
+    aigc_node_display_name,
+    build_aigc_download_filename,
+)
 from backend.app.services.assets import AssetStorageService, StoredAssetInput
 from backend.app.services.background import BackgroundTaskRunner
 from backend.app.services.composer import (
@@ -1298,7 +1306,11 @@ async def get_asset_content(
     if content_type:
         headers["Content-Type"] = content_type
     if download:
-        download_filename = _asset_download_filename(asset, preferred=filename)
+        download_filename = _asset_download_filename(
+            asset,
+            preferred=filename,
+            repository=repository,
+        )
         headers["Content-Disposition"] = _asset_content_disposition(
             download_filename
         )
@@ -1997,14 +2009,44 @@ def _fail_tool_task(
     )
 
 
-def _asset_download_filename(asset: Asset, *, preferred: str | None = None) -> str:
+def _asset_download_filename(
+    asset: Asset,
+    *,
+    preferred: str | None = None,
+    repository: Repository | None = None,
+) -> str:
     metadata_name = asset.metadata.get("name")
-    if preferred and preferred.strip():
+    name_scheme = asset.metadata.get("name_scheme")
+    if (
+        name_scheme == USER_DEFINED_ASSET_NAME_SCHEME
+        and isinstance(metadata_name, str)
+        and metadata_name.strip()
+    ):
+        candidate = _aigc_download_filename(
+            asset,
+            metadata_name,
+            output_ordinal=None,
+        )
+        if candidate is not None:
+            return candidate
+        candidate = metadata_name.strip()
+        preserve_unicode = True
+    elif _is_traceable_aigc_generated_media(asset):
+        candidate = _traceable_aigc_download_filename(
+            asset,
+            repository=repository,
+            preferred=preferred,
+        )
+        if candidate is not None:
+            return candidate
+        candidate = asset.id
+        preserve_unicode = False
+    elif preferred and preferred.strip():
         candidate = preferred.strip()
         preserve_unicode = True
     elif isinstance(metadata_name, str) and metadata_name.strip():
         candidate = metadata_name.strip()
-        preserve_unicode = asset.metadata.get("name_scheme") in {
+        preserve_unicode = name_scheme in {
             AIGC_ASSET_NAME_SCHEME,
             USER_DEFINED_ASSET_NAME_SCHEME,
         }
@@ -2031,6 +2073,176 @@ def _asset_download_filename(asset: Asset, *, preferred: str | None = None) -> s
     elif not stem:
         candidate = f"{asset.id}{extension}"
     return candidate
+
+
+def _is_traceable_aigc_generated_media(asset: Asset) -> bool:
+    metadata = asset.metadata
+    mime_type = (asset.mime_type or "").split(";", 1)[0].strip().lower()
+    return (
+        metadata.get("origin") == "aigc"
+        and mime_type.startswith(("image/", "video/"))
+        and isinstance(metadata.get("pipeline_id"), str)
+        and bool(str(metadata["pipeline_id"]).strip())
+        and isinstance(metadata.get("node_id"), str)
+        and bool(str(metadata["node_id"]).strip())
+        and (
+            metadata.get("name_scheme")
+            in {
+                AIGC_ASSET_NAME_SCHEME,
+                AIGC_GENERATED_ASSET_NAME_SCHEME,
+            }
+            or metadata.get("operation")
+            in {
+                "text_to_image",
+                "image_to_image",
+                "image_edit",
+                "video_generation",
+            }
+        )
+    )
+
+
+def _traceable_aigc_download_filename(
+    asset: Asset,
+    *,
+    repository: Repository | None,
+    preferred: str | None,
+) -> str | None:
+    metadata = asset.metadata
+    ordinal = _aigc_asset_output_ordinal(asset, repository=repository)
+    pipeline_id = str(metadata["pipeline_id"]).strip()
+    display_node_id = metadata.get("display_node_id")
+    trace_node_id = str(metadata["node_id"]).strip()
+    node_id = (
+        display_node_id.strip()
+        if isinstance(display_node_id, str) and display_node_id.strip()
+        else trace_node_id
+    )
+    if repository is not None:
+        try:
+            pipeline = repository.get_aigc_pipeline(pipeline_id)
+        except NotFoundError:
+            pipeline = None
+        if pipeline is not None:
+            if (
+                not (
+                    isinstance(display_node_id, str)
+                    and display_node_id.strip()
+                )
+                and metadata.get("name_scheme")
+                == AIGC_GENERATED_ASSET_NAME_SCHEME
+            ):
+                node_id = aigc_generated_media_name_target_node_ids(
+                    pipeline.definition,
+                    node_id,
+                )[0]
+            node = next(
+                (item for item in pipeline.definition.nodes if item.id == node_id),
+                None,
+            )
+            if node is not None and (
+                _is_generated_media_node(node)
+                or (
+                    metadata.get("name_scheme")
+                    == AIGC_GENERATED_ASSET_NAME_SCHEME
+                    and (
+                        node_id != trace_node_id
+                        or (
+                            isinstance(display_node_id, str)
+                            and bool(display_node_id.strip())
+                        )
+                    )
+                )
+            ):
+                current_name = aigc_node_display_name(
+                    pipeline.definition,
+                    node_id,
+                )
+                filename = _aigc_download_filename(
+                    asset,
+                    current_name,
+                    output_ordinal=ordinal,
+                )
+                if filename is not None:
+                    return filename
+
+    generated_name = metadata.get("generated_name")
+    if isinstance(generated_name, str) and generated_name.strip():
+        filename = _aigc_download_filename(
+            asset,
+            generated_name,
+            output_ordinal=ordinal,
+        )
+        if filename is not None:
+            return filename
+    metadata_name = metadata.get("name")
+    if isinstance(metadata_name, str) and metadata_name.strip():
+        filename = _aigc_download_filename(
+            asset,
+            metadata_name,
+            output_ordinal=None,
+        )
+        if filename is not None:
+            return filename
+    if preferred and preferred.strip():
+        return _aigc_download_filename(
+            asset,
+            preferred,
+            output_ordinal=None,
+        )
+    return None
+
+
+def _is_generated_media_node(node: object) -> bool:
+    node_type = getattr(node, "type", None)
+    if node_type in {
+        AigcNodeType.TEXT_TO_IMAGE,
+        AigcNodeType.VIDEO_GENERATION,
+    }:
+        return True
+    if node_type != AigcNodeType.IMAGE_TO_IMAGE:
+        return False
+    operation = getattr(getattr(node, "config", None), "operation", None)
+    operation_value = getattr(operation, "value", operation)
+    return operation_value != "layer_decomposition"
+
+
+def _aigc_asset_output_ordinal(
+    asset: Asset,
+    *,
+    repository: Repository | None,
+) -> int:
+    ordinal = asset.metadata.get("output_ordinal")
+    if isinstance(ordinal, int) and not isinstance(ordinal, bool) and ordinal >= 0:
+        return ordinal
+    task_id = asset.metadata.get("task_id")
+    if repository is None or not isinstance(task_id, str) or not task_id.strip():
+        return 0
+    for reference in repository.list_aigc_task_assets(task_id.strip()):
+        if (
+            reference.asset_id == asset.id
+            and reference.direction == AigcAssetDirection.OUTPUT
+        ):
+            return reference.ordinal
+    return 0
+
+
+def _aigc_download_filename(
+    asset: Asset,
+    basename: str | None,
+    *,
+    output_ordinal: int | None,
+) -> str | None:
+    if not asset.mime_type:
+        return None
+    try:
+        return build_aigc_download_filename(
+            basename=basename,
+            mime_type=asset.mime_type,
+            output_ordinal=output_ordinal,
+        )
+    except ValueError:
+        return None
 
 
 def _asset_content_disposition(filename: str) -> str:
@@ -4109,6 +4321,8 @@ def _fail_active_stream_task(
 
 
 def _safe_stream_error_detail(exc: Exception) -> str:
+    if isinstance(exc, ModelArkTextParseError):
+        return "phase=response_validation"
     if isinstance(exc, ModelArkProviderError):
         return exc.safe_detail()
     if isinstance(exc, WorkflowError):

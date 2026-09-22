@@ -61,7 +61,46 @@ def aigc_connected_node_ids(
     return frozenset(visited)
 
 
-def aigc_run_scope_node_ids(
+def aigc_downstream_node_ids(
+    definition: AigcGraphDefinition,
+    start_node_id: str,
+) -> frozenset[str]:
+    definition = _canonical_graph(definition)
+    node_ids = {node.id for node in definition.nodes}
+    _require_start_node(node_ids, start_node_id)
+
+    children = {node_id: set() for node_id in node_ids}
+    for edge in definition.edges:
+        children[edge.source_node_id].add(edge.target_node_id)
+    return _walk(start_node_id, children)
+
+
+def aigc_projection_node_ids(
+    definition: AigcGraphDefinition,
+    start_node_id: str,
+) -> frozenset[str]:
+    definition = _canonical_graph(definition)
+    node_ids = {node.id for node in definition.nodes}
+    _require_start_node(node_ids, start_node_id)
+
+    children = {node_id: set() for node_id in node_ids}
+    parents = {node_id: set() for node_id in node_ids}
+    for edge in definition.edges:
+        children[edge.source_node_id].add(edge.target_node_id)
+        parents[edge.target_node_id].add(edge.source_node_id)
+
+    downstream = _walk(start_node_id, children)
+    projected = set(downstream)
+    pending = deque(downstream)
+    while pending:
+        current = pending.popleft()
+        for parent in parents[current] - projected:
+            projected.add(parent)
+            pending.append(parent)
+    return frozenset(projected)
+
+
+def aigc_run_conflict_node_ids(
     definition: AigcGraphDefinition,
     *,
     mode: AigcPipelineRunMode,
@@ -75,7 +114,61 @@ def aigc_run_scope_node_ids(
             "start_node_missing",
             "incremental execution requires a valid start node",
         )
-    return aigc_connected_node_ids(definition, start_node_id)
+    return aigc_downstream_node_ids(definition, start_node_id)
+
+
+def aigc_run_projection_node_ids(
+    definition: AigcGraphDefinition,
+    *,
+    mode: AigcPipelineRunMode,
+    start_node_id: str | None,
+) -> frozenset[str]:
+    definition = _canonical_graph(definition)
+    if mode == AigcPipelineRunMode.FULL:
+        return frozenset(node.id for node in definition.nodes)
+    if start_node_id is None:
+        raise AigcDagValidationError(
+            "start_node_missing",
+            "incremental execution requires a valid start node",
+        )
+    return aigc_projection_node_ids(definition, start_node_id)
+
+
+def aigc_run_scope_node_ids(
+    definition: AigcGraphDefinition,
+    *,
+    mode: AigcPipelineRunMode,
+    start_node_id: str | None,
+) -> frozenset[str]:
+    """Compatibility alias for the Run projection scope."""
+    return aigc_run_projection_node_ids(
+        definition,
+        mode=mode,
+        start_node_id=start_node_id,
+    )
+
+
+def _require_start_node(node_ids: set[str], start_node_id: str) -> None:
+    if start_node_id not in node_ids:
+        raise AigcDagValidationError(
+            "start_node_missing",
+            "incremental execution requires a valid start node",
+            node_id=start_node_id,
+        )
+
+
+def _walk(
+    start_node_id: str,
+    adjacency: dict[str, set[str]],
+) -> frozenset[str]:
+    visited = {start_node_id}
+    pending = deque([start_node_id])
+    while pending:
+        current = pending.popleft()
+        for neighbor in adjacency[current] - visited:
+            visited.add(neighbor)
+            pending.append(neighbor)
+    return frozenset(visited)
 
 
 def _canonical_graph(

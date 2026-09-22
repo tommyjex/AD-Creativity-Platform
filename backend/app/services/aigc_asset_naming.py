@@ -12,15 +12,19 @@ from backend.app.schemas.aigc_definition_migration import (
 )
 
 AIGC_ASSET_NAME_SCHEME = "aigc_canvas_node_v1"
+AIGC_GENERATED_ASSET_NAME_SCHEME = "aigc_generated_node_v2"
 AIGC_ASSET_NAME_MAX_BYTES = 180
 
 _MIME_NAME_PARTS = {
     "image/png": ("图片", ".png"),
     "image/jpeg": ("图片", ".jpg"),
+    "image/jpg": ("图片", ".jpg"),
     "image/webp": ("图片", ".webp"),
     "video/mp4": ("视频", ".mp4"),
     "video/quicktime": ("视频", ".mov"),
     "video/mov": ("视频", ".mov"),
+    "video/mpeg": ("视频", ".mpeg"),
+    "video/webm": ("视频", ".webm"),
 }
 _NODE_BASE_NAMES = {
     "llm": "LLM",
@@ -28,6 +32,7 @@ _NODE_BASE_NAMES = {
     "video_generation": "生视频",
     "video_enhancement": "视频画质增强",
     "video_face_blur": "视频人脸打码",
+    "video_subtitle_extraction": "视频字幕提取",
     "multi_track_edit": "多轨剪辑",
     "layer_canvas": "图层画布",
     "layer_composite": "图层合成",
@@ -112,6 +117,141 @@ def aigc_output_name_metadata(
     }
 
 
+def build_aigc_generated_asset_name(
+    *,
+    node_name: str | None,
+    mime_type: str,
+    output_ordinal: int,
+) -> str:
+    if (
+        isinstance(output_ordinal, bool)
+        or not isinstance(output_ordinal, int)
+        or output_ordinal < 0
+    ):
+        raise ValueError("output ordinal must be a non-negative integer")
+    try:
+        _, extension = _MIME_NAME_PARTS[mime_type.strip().lower()]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported AIGC output MIME type: {mime_type!r}"
+        ) from exc
+    basename = _sanitize_filename_part(node_name, fallback="AIGC节点")
+    suffix = extension if output_ordinal == 0 else f"-{output_ordinal + 1}{extension}"
+    return _truncate_basename(basename, suffix)
+
+
+def build_aigc_download_filename(
+    *,
+    basename: str | None,
+    mime_type: str,
+    output_ordinal: int | None = None,
+) -> str:
+    """Build a MIME-correct, Unicode-safe AIGC download filename."""
+    try:
+        _, extension = _MIME_NAME_PARTS[
+            mime_type.split(";", 1)[0].strip().lower()
+        ]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported AIGC output MIME type: {mime_type!r}"
+        ) from exc
+    sanitized = _sanitize_filename_part(basename, fallback="AIGC节点")
+    for known_extension in {
+        name_extension
+        for _, name_extension in _MIME_NAME_PARTS.values()
+    }:
+        if sanitized.lower().endswith(known_extension):
+            sanitized = sanitized[: -len(known_extension)].rstrip(" .-")
+            break
+    ordinal_suffix = (
+        ""
+        if output_ordinal in {None, 0}
+        else f"-{output_ordinal + 1}"
+    )
+    return _truncate_basename(
+        sanitized or "AIGC节点",
+        f"{ordinal_suffix}{extension}",
+    )
+
+
+def aigc_generated_output_metadata(
+    *,
+    node_name: str | None,
+    generated_name: str | None,
+    display_node_id: str | None = None,
+    naming_model: str,
+    naming_status: str,
+    mime_type: str,
+    output_ordinal: int,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "name": build_aigc_generated_asset_name(
+            node_name=node_name,
+            mime_type=mime_type,
+            output_ordinal=output_ordinal,
+        ),
+        "name_scheme": AIGC_GENERATED_ASSET_NAME_SCHEME,
+        "generated_name": generated_name,
+        "name_source": "ai" if generated_name is not None else "fallback",
+        "naming_model": naming_model,
+        "naming_status": naming_status,
+        "output_ordinal": output_ordinal,
+    }
+    if display_node_id is not None:
+        metadata["display_node_id"] = display_node_id
+    return metadata
+
+
+def aigc_node_display_name(
+    definition: Mapping[str, Any] | BaseModel,
+    node_id: str,
+) -> str | None:
+    snapshot = (
+        definition.model_dump(mode="json", by_alias=True)
+        if isinstance(definition, BaseModel)
+        else definition
+    )
+    return _node_display_name(migrate_aigc_run_snapshot_v2(snapshot), node_id)
+
+
+def aigc_generated_media_name_target_node_ids(
+    definition: Mapping[str, Any] | BaseModel,
+    source_node_id: str,
+) -> tuple[str, ...]:
+    """Return direct media output nodes, falling back to the generator node."""
+    snapshot = (
+        definition.model_dump(mode="json", by_alias=True)
+        if isinstance(definition, BaseModel)
+        else definition
+    )
+    migrated = migrate_aigc_run_snapshot_v2(snapshot)
+    raw_nodes = migrated.get("nodes")
+    raw_edges = migrated.get("edges")
+    if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
+        return (source_node_id,)
+    media_node_ids = {
+        node.get("id")
+        for node in raw_nodes
+        if isinstance(node, Mapping)
+        and node.get("type") in {"image", "video"}
+        and isinstance(node.get("id"), str)
+    }
+    targets: list[str] = []
+    for edge in raw_edges:
+        if not isinstance(edge, Mapping):
+            continue
+        source_id = edge.get("sourceNodeId", edge.get("source_node_id"))
+        target_id = edge.get("targetNodeId", edge.get("target_node_id"))
+        if (
+            source_id == source_node_id
+            and isinstance(target_id, str)
+            and target_id in media_node_ids
+            and target_id not in targets
+        ):
+            targets.append(target_id)
+    return tuple(targets) or (source_node_id,)
+
+
 def _node_display_name(
     definition: Mapping[str, Any],
     node_id: str,
@@ -131,6 +271,9 @@ def _node_display_name(
         index = seen.get(base_name, 0) + 1
         seen[base_name] = index
         if node.get("id") == node_id:
+            custom_name = node.get("custom_name")
+            if isinstance(custom_name, str) and custom_name.strip():
+                return custom_name.strip()
             return base_name if counts[base_name] == 1 else f"{base_name}{index}"
     return None
 
@@ -187,6 +330,12 @@ def _truncate_name(canvas_name: str, node_name: str, suffix: str) -> str:
     )
     node_name = _utf8_prefix(node_name, node_budget)
     return f"{canvas_name}-{node_name}{suffix}"
+
+
+def _truncate_basename(basename: str, suffix: str) -> str:
+    budget = AIGC_ASSET_NAME_MAX_BYTES - len(suffix.encode("utf-8"))
+    truncated = _utf8_prefix(basename, max(1, budget)).rstrip(" .-")
+    return f"{truncated or 'AIGC节点'}{suffix}"
 
 
 def _utf8_prefix(value: str, max_bytes: int) -> str:

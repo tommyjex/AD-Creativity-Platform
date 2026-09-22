@@ -15,8 +15,10 @@ const apiMocks = vi.hoisted(() => ({
   deleteAigcPipeline: vi.fn(),
   deleteAigcTemplate: vi.fn(),
   instantiateAigcTemplate: vi.fn(),
+  listAigcPipelineThumbnailCandidates: vi.fn(),
   listAigcPipelines: vi.fn(),
-  listAigcTemplates: vi.fn()
+  listAigcTemplates: vi.fn(),
+  updateAigcPipelineThumbnail: vi.fn()
 }));
 const navigationMocks = vi.hoisted(() => ({
   push: vi.fn()
@@ -85,6 +87,8 @@ const pipeline: AigcPipeline = {
   source_template_revision: template.revision,
   revision: 1,
   latest_run_status: "succeeded",
+  thumbnail_asset_id: null,
+  thumbnail: null,
   created_at: "2026-08-29T01:00:00Z",
   updated_at: "2026-08-29T03:00:00Z"
 };
@@ -123,10 +127,34 @@ describe("AIGC workspace list", () => {
     vi.clearAllMocks();
     apiMocks.listAigcTemplates.mockResolvedValue(page([template]));
     apiMocks.listAigcPipelines.mockResolvedValue(page([pipeline]));
+    apiMocks.listAigcPipelineThumbnailCandidates.mockResolvedValue(
+      page([
+        {
+          asset_id: "asset-image-1",
+          run_id: "run-1",
+          node_id: "model-1",
+          mime_type: "image/png",
+          kind: "image",
+          url: "https://example.test/image.png",
+          created_at: "2026-08-29T03:00:00Z"
+        }
+      ])
+    );
     apiMocks.instantiateAigcTemplate.mockResolvedValue(pipeline);
     apiMocks.createAigcPipeline.mockResolvedValue(pipeline);
     apiMocks.deleteAigcTemplate.mockResolvedValue(undefined);
     apiMocks.deleteAigcPipeline.mockResolvedValue(undefined);
+    apiMocks.updateAigcPipelineThumbnail.mockResolvedValue({
+      ...pipeline,
+      thumbnail_asset_id: "asset-image-1",
+      thumbnail: {
+        asset_id: "asset-image-1",
+        mime_type: "image/png",
+        kind: "image",
+        source: "pinned",
+        url: "https://example.test/image.png"
+      }
+    });
   });
 
   it("defaults to templates and uses a five-column wide layout", () => {
@@ -136,10 +164,37 @@ describe("AIGC workspace list", () => {
       screen.getByRole("tab", { name: "画布模板" })
     ).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("商品主图模板")).toBeInTheDocument();
-    expect(screen.getByTestId("aigc-card-grid")).toHaveClass("xl:grid-cols-5");
+    expect(screen.getByTestId("aigc-card-grid")).toHaveClass(
+      "grid-cols-2",
+      "md:grid-cols-4",
+      "xl:grid-cols-5"
+    );
     expect(
       screen.getByRole("link", { name: "编辑模板：商品主图模板" })
     ).toHaveAttribute("href", "/workspace/aigc/templates/template-1");
+  });
+
+  it("renders the constellation workspace shell and current view total", () => {
+    renderWorkspace();
+
+    expect(screen.getByTestId("aigc-workspace")).toHaveClass(
+      "bg-[#0b0f14]",
+      "text-slate-100"
+    );
+    expect(screen.getByText("星图创作台")).toBeInTheDocument();
+    expect(screen.getByText("1 个模板")).toBeInTheDocument();
+  });
+
+  it("renders preview metadata and a missing-description fallback", () => {
+    renderWorkspace({
+      initialTemplates: page([{ ...template, description: "" }])
+    });
+
+    expect(screen.getByText("未填写说明")).toBeInTheDocument();
+    expect(screen.getByText(/2 节点/)).toBeInTheDocument();
+    expect(screen.getByText(/1 模型/)).toBeInTheDocument();
+    expect(screen.getByTestId("aigc-topology-preview")).toBeInTheDocument();
+    expect(screen.getByTestId("aigc-preview-node-image")).toBeInTheDocument();
   });
 
   it("starts on my pipelines when requested by the URL view", () => {
@@ -169,6 +224,31 @@ describe("AIGC workspace list", () => {
     expect(screen.getByText("秋季活动画布")).toBeInTheDocument();
     expect(screen.getByText("已完成")).toBeInTheDocument();
     expect(apiMocks.listAigcPipelines).not.toHaveBeenCalled();
+  });
+
+  it("chooses a pipeline thumbnail from eligible candidates", async () => {
+    renderWorkspace({ initialView: "pipelines" });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择缩略图：秋季活动画布" })
+    );
+
+    expect(await screen.findByRole("dialog", { name: "选择缩略图" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(apiMocks.listAigcPipelineThumbnailCandidates).toHaveBeenCalledWith(
+        "pipeline-1",
+        { page: 1, pageSize: 50 }
+      );
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /图片 · model-1/ }));
+    fireEvent.click(screen.getByRole("button", { name: "使用所选缩略图" }));
+
+    await waitFor(() => {
+      expect(apiMocks.updateAigcPipelineThumbnail).toHaveBeenCalledWith(
+        "pipeline-1",
+        { asset_id: "asset-image-1" }
+      );
+    });
   });
 
   it("filters templates by name and resets to the first page", async () => {

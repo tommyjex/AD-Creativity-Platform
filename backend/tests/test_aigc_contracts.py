@@ -106,6 +106,7 @@ def test_multi_track_node_contract_and_draft_default() -> None:
         ("images", AigcPortType.IMAGE_ASSET, True, 50),
         ("audios", AigcPortType.AUDIO_ASSET, True, 30),
         ("texts", AigcPortType.TEXT, True, 30),
+        ("subtitles", AigcPortType.SUBTITLE_ASSET, True, 10),
     ]
     assert [(port.id, port.type) for port in registration.outputs] == [
         ("video", AigcPortType.VIDEO_ASSET)

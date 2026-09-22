@@ -333,8 +333,7 @@ export function getSafeAssetContentUrl(value: string | null): string | null {
 export function getAssetDownloadUrl(asset: Asset): string | null {
   const nameScheme = getMetadataText(asset.metadata.name_scheme);
   const filename =
-    nameScheme === "user_defined_v1" ||
-    nameScheme === "aigc_canvas_node_v1"
+    nameScheme === "user_defined_v1"
       ? getMetadataText(asset.metadata.name) ?? undefined
       : undefined;
   return getAssetDownloadUrlById(asset.id, filename);

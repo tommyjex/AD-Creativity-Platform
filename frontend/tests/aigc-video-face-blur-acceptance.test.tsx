@@ -69,13 +69,10 @@ describe("AIGC video face blur acceptance fixture", () => {
       screen.getByRole("link", { name: "下载打码视频" })
     ).toHaveAttribute("download", "人脸打码-Mock-输出.mp4");
 
-    fireEvent.click(
-      screen.getByRole("button", {
+    expect(
+      screen.queryByRole("button", {
         name: "放大预览：人脸打码 Mock 输出.mp4"
       })
-    );
-    expect(
-      screen.getByRole("dialog", { name: "视频预览" })
-    ).toBeInTheDocument();
+    ).toBeNull();
   });
 });

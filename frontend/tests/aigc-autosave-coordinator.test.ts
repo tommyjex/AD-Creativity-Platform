@@ -480,6 +480,34 @@ describe("AutosaveCoordinator", () => {
     coordinator.dispose();
   });
 
+  it("does not cancel a pending save when ignoring a duplicate revision", async () => {
+    const save = vi.fn().mockResolvedValue({ revision: 2 });
+    const coordinator = createCoordinator(save);
+
+    coordinator.update(draft("AI 产物名称"));
+    await expect(
+      coordinator.rebase({
+        merge: (_base, local) => local,
+        revision: 1,
+        snapshot: draft("stale server")
+      })
+    ).resolves.toMatchObject({
+      applied: false,
+      dirty: true,
+      revision: 1,
+      snapshot: draft("AI 产物名称")
+    });
+
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRevision: 1,
+        snapshot: draft("AI 产物名称")
+      })
+    );
+    coordinator.dispose();
+  });
+
   it("waits for an in-flight save before rebasing and resumes serially after conflict", async () => {
     const firstSave = deferred<{ revision: number }>();
     const save = vi

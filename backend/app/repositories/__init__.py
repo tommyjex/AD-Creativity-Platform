@@ -1,5 +1,6 @@
 from .base import (
     ActiveRunConflictError,
+    AigcPipelineThumbnailOutput,
     AssetReferenceConflictError,
     NotFoundError,
     PipelineRunConflictError,
@@ -13,6 +14,7 @@ __all__ = [
     "InMemoryRepository",
     "MySQLRepository",
     "ActiveRunConflictError",
+    "AigcPipelineThumbnailOutput",
     "AssetReferenceConflictError",
     "NotFoundError",
     "PipelineRunConflictError",

@@ -1316,8 +1316,14 @@ describe("createApiClient", () => {
 describe("AIGC API client", () => {
   it("posts structured image prompt optimization requests", async () => {
     const response = {
-      optimized_text: "优化后的产品主图",
-      optimized_reference_instructions: ["保持商标位置"]
+      optimized_text: [
+        "Product: Premium household cleaner",
+        "Composition: Centered pack shot",
+        "Negative Prompt: No altered logo"
+      ].join("\n"),
+      optimized_reference_instructions: [
+        "Preserve the logo position: keep its original scale"
+      ]
     };
     const fetcher = vi.fn<FetchFunction>(async () => jsonResponse(response));
     const api = createApiClient({ baseUrl: "http://backend.local", fetcher });
@@ -1336,7 +1342,13 @@ describe("AIGC API client", () => {
       text: "产品图"
     };
 
-    await expect(api.optimizeAigcPrompt(payload)).resolves.toEqual(response);
+    const result = await api.optimizeAigcPrompt(payload);
+
+    expect(result).toEqual(response);
+    expect(Object.keys(result)).toEqual([
+      "optimized_text",
+      "optimized_reference_instructions"
+    ]);
     expect(fetcher).toHaveBeenCalledWith(
       "http://backend.local/api/aigc/prompts/optimize",
       expect.objectContaining({
@@ -1418,6 +1430,44 @@ describe("AIGC API client", () => {
       2,
       "http://backend.local/api/aigc/pipelines/pipeline%2Fwith%20space",
       expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("lists and updates encoded AIGC pipeline thumbnail resources", async () => {
+    const fetcher = vi.fn<FetchFunction>(async () => jsonResponse({}));
+    const api = createApiClient({ baseUrl: "http://backend.local", fetcher });
+
+    await api.listAigcPipelineThumbnailCandidates("pipeline/with space", {
+      page: 2,
+      pageSize: 50
+    });
+    await api.updateAigcPipelineThumbnail("pipeline/with space", {
+      asset_id: "asset-1"
+    });
+    await api.updateAigcPipelineThumbnail("pipeline/with space", {
+      asset_id: null
+    });
+
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      "http://backend.local/api/aigc/pipelines/pipeline%2Fwith%20space/thumbnail-candidates?page=2&page_size=50",
+      expect.any(Object)
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      "http://backend.local/api/aigc/pipelines/pipeline%2Fwith%20space/thumbnail",
+      expect.objectContaining({
+        body: JSON.stringify({ asset_id: "asset-1" }),
+        method: "PUT"
+      })
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      3,
+      "http://backend.local/api/aigc/pipelines/pipeline%2Fwith%20space/thumbnail",
+      expect.objectContaining({
+        body: JSON.stringify({ asset_id: null }),
+        method: "PUT"
+      })
     );
   });
 

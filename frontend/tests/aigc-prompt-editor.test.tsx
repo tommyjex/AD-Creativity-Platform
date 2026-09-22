@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +21,7 @@ import type {
   AigcPipelineDefinition,
   AigcPipelineDefinitionV2,
   AigcPipelineRunDetail,
+  AigcPromptOptimizeRequest,
   AigcV2Node
 } from "@/lib/aigc/types";
 import type { AigcRunProjection } from "@/lib/aigc/run-scope";
@@ -122,7 +130,9 @@ describe("AIGC structured prompt editor", () => {
     } as unknown as Asset);
     apiMocks.optimizeAigcPrompt.mockResolvedValue({
       optimized_text: "将包装优化为鲜明红色，保持产品结构不变",
-      optimized_reference_instructions: ["保持商标位置与比例不变"]
+      optimized_reference_instructions: ["保持商标位置与比例不变"],
+      generation_type: null,
+      optimization_explanation: ""
     });
     store = createAigcEditorStore({
       definition: promptDefinition(),
@@ -220,12 +230,14 @@ describe("AIGC structured prompt editor", () => {
     );
     const rendered = render(view());
 
-    expect(screen.getByRole("textbox", { name: "基础文本" })).toHaveValue(
+    expect(screen.getByTestId("aigc-prompt-preview")).toHaveTextContent(
       "节点所属 Run 文本"
     );
 
     rendered.rerender(view(null));
-    expect(screen.getByRole("textbox", { name: "基础文本" })).toHaveValue("");
+    expect(screen.getByTestId("aigc-prompt-preview")).toHaveTextContent(
+      "（空）"
+    );
     expect(screen.queryByDisplayValue("节点所属 Run 文本")).toBeNull();
   });
 
@@ -285,9 +297,9 @@ describe("AIGC structured prompt editor", () => {
 
     const editor = screen.getByRole("group", { name: "提示词编辑面" });
     expect(screen.queryByRole("group", { name: "框选引用" })).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("textbox", { name: "基础文本" })
-    ).toBe(editor.querySelector("textarea"));
+    expect(editor).toContainElement(
+      screen.getByTestId("aigc-prompt-preview")
+    );
     const tokens = screen.getAllByRole("group", { name: /BBox 引用/ });
     expect(tokens).toHaveLength(2);
     expect(tokens[0]).toHaveAccessibleName(
@@ -343,15 +355,17 @@ describe("AIGC structured prompt editor", () => {
     prompt = getV2Node(store, "prompt", "text");
     expect(prompt.config.bbox_references?.[0]?.instruction).toBe("保留商标位置");
 
-    const baseText = screen.getByRole("textbox", { name: "基础文本" });
-    fireEvent.change(baseText, {
+    fireEvent.click(screen.getByTestId("aigc-prompt-preview"));
+    fireEvent.change(screen.getByRole("textbox", { name: "完整基础文本" }), {
       target: { value: "伪造 <bbox>1 2 3 4</bbox>" }
     });
+    fireEvent.click(screen.getByRole("button", { name: "应用" }));
     expect(
       screen.getByRole("alert", { name: "" })
     ).toHaveTextContent("坐标标签由框选生成，不能手工输入。");
     prompt = getV2Node(store, "prompt", "text");
     expect(prompt.config.text).toBe("将");
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
     fireEvent.click(
       screen.getByRole("button", { name: "移除框选引用：图片节点" })
@@ -369,6 +383,208 @@ describe("AIGC structured prompt editor", () => {
       x2: 700,
       y2: 800
     });
+  });
+
+  it("opens the complete prompt editor from both inspector affordances", () => {
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByTestId("aigc-prompt-preview"));
+    expect(
+      screen.getByRole("dialog", { name: "编辑基础文本" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "展开编辑基础文本" })[1]
+    );
+    expect(
+      screen.getByRole("textbox", { name: "完整基础文本" })
+    ).toHaveValue("将");
+  });
+
+  it("applies a full prompt only from the dialog and supports Cmd or Ctrl Enter", () => {
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByTestId("aigc-prompt-preview"));
+    const dialog = screen.getByRole("dialog", { name: "编辑基础文本" });
+    const textarea = within(dialog).getByRole("textbox", {
+      name: "完整基础文本"
+    });
+    const nextText = "第一行完整提示词\n第二行保留镜头和品牌信息";
+    fireEvent.change(textarea, { target: { value: nextText } });
+
+    expect(getV2Node(store, "prompt", "text").config.text).toBe("将");
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+
+    expect(getV2Node(store, "prompt", "text").config.text).toBe(nextText);
+    expect(screen.queryByRole("dialog", { name: "编辑基础文本" })).toBeNull();
+    expect(screen.getByTestId("aigc-prompt-preview").textContent).toBe(
+      nextText
+    );
+  });
+
+  it("discards fullscreen editor drafts on cancel, close, and Escape", () => {
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    for (const close of [
+      "cancel",
+      "icon",
+      "escape"
+    ] as const) {
+      fireEvent.click(screen.getByTestId("aigc-prompt-preview"));
+      const dialog = screen.getByRole("dialog", { name: "编辑基础文本" });
+      fireEvent.change(
+        within(dialog).getByRole("textbox", { name: "完整基础文本" }),
+        { target: { value: `未应用草稿-${close}` } }
+      );
+      if (close === "cancel") {
+        fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+      } else if (close === "icon") {
+        fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+      } else {
+        fireEvent.keyDown(
+          within(dialog).getByRole("textbox", { name: "完整基础文本" }),
+          { key: "Escape" }
+        );
+      }
+      expect(getV2Node(store, "prompt", "text").config.text).toBe("将");
+    }
+  });
+
+  it("does not create history when applying an unchanged fullscreen draft", () => {
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByTestId("aigc-prompt-preview"));
+    fireEvent.click(screen.getByRole("button", { name: "应用" }));
+
+    expect(store.getState().past).toHaveLength(0);
+    expect(screen.queryByRole("dialog", { name: "编辑基础文本" })).toBeNull();
+  });
+
+  it("keeps fullscreen optimization results in the draft until applied", async () => {
+    const optimizedText = "优化后的完整提示词，保留镜头、品牌和画面主体。";
+    apiMocks.optimizeAigcPrompt.mockResolvedValueOnce({
+      optimized_text: optimizedText,
+      optimized_reference_instructions: ["保持商标位置与比例不变"],
+      generation_type: null,
+      optimization_explanation: ""
+    });
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByTestId("aigc-prompt-preview"));
+    const editor = screen.getByRole("dialog", { name: "编辑基础文本" });
+    fireEvent.change(
+      within(editor).getByRole("textbox", { name: "完整基础文本" }),
+      { target: { value: "仅存在于全屏草稿中的修改" } }
+    );
+    fireEvent.click(
+      within(editor).getByRole("button", { name: "优化提示词" })
+    );
+    expect(screen.getByTestId("aigc-prompt-optimization-dialog")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "开始优化" }));
+
+    await waitFor(() => {
+      expect(
+        within(editor).getByRole("textbox", { name: "完整基础文本" })
+      ).toHaveValue(optimizedText);
+    });
+    expect(getV2Node(store, "prompt", "text").config.text).toBe("将");
+    expect(screen.getByTestId("aigc-prompt-preview")).toHaveTextContent("将");
+
+    fireEvent.click(within(editor).getByRole("button", { name: "应用" }));
+    expect(getV2Node(store, "prompt", "text").config.text).toBe(optimizedText);
+  });
+
+  it("opens unavailable upstream text as a read-only fullscreen preview", () => {
+    const definition: AigcPipelineDefinitionV2 = {
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: "producer",
+          type: "llm",
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 160 },
+          config: {
+            model: "doubao-seed-evolving",
+            system_prompt: "",
+            temperature: 0.7
+          }
+        },
+        {
+          id: "target",
+          type: "text",
+          position: { x: 320, y: 0 },
+          size: { width: 240, height: 160 },
+          config: { text: "本地备用文本", bbox_references: [], title: null }
+        }
+      ],
+      edges: [
+        {
+          id: "producer-target",
+          sourceNodeId: "producer",
+          sourceHandle: "text",
+          targetNodeId: "target",
+          targetHandle: "text"
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
+    store.getState().initialize({
+      definition,
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "只读上游文本",
+      revision: 1
+    });
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={getV2Node(store, "target", "text")} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByTestId("aigc-prompt-preview"));
+    expect(
+      screen.getByRole("textbox", { name: "完整基础文本" })
+    ).toHaveAttribute("readonly");
+    expect(screen.queryByRole("button", { name: "应用" })).toBeNull();
   });
 
   it("keeps an invalid reference in place as a compact removable token", () => {
@@ -534,7 +750,60 @@ describe("AIGC structured prompt editor", () => {
     expect(apiMocks.optimizeAigcPrompt).not.toHaveBeenCalled();
   });
 
+  it("keeps the optimization actions outside the scrollable dialog body", () => {
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+
+    const dialog = screen.getByTestId("aigc-prompt-optimization-dialog");
+    const body = screen.getByTestId("aigc-prompt-optimization-body");
+    const footer = screen.getByTestId("aigc-prompt-optimization-footer");
+    const direction = screen.getByRole("textbox", { name: "优化方向" });
+    const cancel = screen.getByRole("button", { name: "取消" });
+
+    expect(dialog).toHaveClass(
+      "flex",
+      "max-h-[calc(100dvh-1rem)]",
+      "flex-col",
+      "sm:max-h-[calc(100dvh-3rem)]",
+      "sm:max-w-xl"
+    );
+    expect(body).toHaveClass(
+      "min-h-0",
+      "flex-1",
+      "overflow-y-auto",
+      "overscroll-contain"
+    );
+    expect(footer).toHaveClass("shrink-0");
+    expect(body).toContainElement(direction);
+    expect(body).not.toContainElement(cancel);
+    expect(footer).toContainElement(cancel);
+
+    fireEvent.change(direction, { target: { value: "保留品牌文字" } });
+    expect(direction).toHaveValue("保留品牌文字");
+    fireEvent.click(cancel);
+    expect(
+      screen.queryByTestId("aigc-prompt-optimization-dialog")
+    ).not.toBeInTheDocument();
+  });
+
   it("optimizes the structured prompt as one undoable update", async () => {
+    const optimizedText =
+      "参考原图中的产品包装，保留商标和产品结构，将包装调整为鲜明红色。";
+    apiMocks.optimizeAigcPrompt.mockResolvedValueOnce({
+      optimized_text: optimizedText,
+      optimized_reference_instructions: ["替换为红色包装"],
+      generation_type: "参考图生图",
+      optimization_explanation: "明确了参考对象、颜色变化和保持不变项。"
+    });
+    const requestDefinition = structuredClone(store.getState().definition);
     const node = getV2Node(store, "prompt", "text");
     render(
       <StrictMode>
@@ -556,6 +825,18 @@ describe("AIGC structured prompt editor", () => {
       expect(apiMocks.optimizeAigcPrompt).toHaveBeenCalledWith(
         {
           optimization_direction: "强化商品质感",
+          pipeline_context: {
+            base_revision: 1,
+            definition_snapshot: requestDefinition,
+            pipeline_id: "pipeline-1",
+            source_image: {
+              asset_id: "asset-1",
+              run_id: null,
+              source_handle: "image",
+              source_node_id: "image",
+              target_handle: "image"
+            }
+          },
           reference_instructions: ["替换为红色包装"],
           target_config: {
             aspect_ratio: "1:1",
@@ -571,17 +852,24 @@ describe("AIGC structured prompt editor", () => {
         { signal: expect.anything() }
       );
     });
-    await screen.findByText("提示词已优化，可撤销恢复。");
+    await screen.findByText(
+      "提示词已优化（参考图生图）：明确了参考对象、颜色变化和保持不变项。"
+    );
     let prompt = getV2Node(store, "prompt", "text");
     expect(prompt.config).toMatchObject({
-      text: "将包装优化为鲜明红色，保持产品结构不变",
+      text: optimizedText,
       bbox_references: [
         {
           source_node_id: "image",
-          instruction: "保持商标位置与比例不变"
+          instruction: "替换为红色包装"
         }
       ]
     });
+    expect(screen.getByTestId("aigc-prompt-preview").textContent).toBe(
+      optimizedText
+    );
+    expect(store.getState().past).toHaveLength(1);
+    expect(store.getState().dirty).toBe(true);
     expect(
       screen.getAllByRole("group", { name: /BBox 引用/ })
     ).toHaveLength(1);
@@ -607,6 +895,150 @@ describe("AIGC structured prompt editor", () => {
         { source_node_id: "image", instruction: "替换为红色包装" }
       ]
     });
+  });
+
+  it("writes a local-edit paragraph without parsing an internal mode", async () => {
+    const optimizedText =
+      "Change only the package color to vivid red while preserving all other subjects, text, layout, lighting, textures, and visual content from the input image unchanged.";
+    apiMocks.optimizeAigcPrompt.mockResolvedValueOnce({
+      optimized_text: optimizedText,
+      optimized_reference_instructions: [
+        "Preserve the logo position and original scale."
+      ]
+    });
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始优化" }));
+
+    await screen.findByText("提示词已优化，可撤销恢复。");
+    expect(screen.getByTestId("aigc-prompt-preview").textContent).toBe(
+      optimizedText
+    );
+    expect(getV2Node(store, "prompt", "text").config.text).toBe(optimizedText);
+  });
+
+  it("keeps the legacy image request shape in the template editor", async () => {
+    store.getState().initialize({
+      definition: promptDefinition(),
+      description: "",
+      entityId: "template-1",
+      mode: "template",
+      name: "模板",
+      revision: 3
+    });
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={getV2Node(store, "prompt", "text")} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始优化" }));
+
+    await waitFor(() => {
+      expect(apiMocks.optimizeAigcPrompt).toHaveBeenCalledTimes(1);
+    });
+    const request = apiMocks.optimizeAigcPrompt.mock.calls[0]?.[0];
+    expect(request).not.toHaveProperty("pipeline_context");
+  });
+
+  it("writes a multiline text-to-image result without exposing sections", async () => {
+    const definition: AigcPipelineDefinition = {
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: "prompt",
+          type: "text_input",
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 160 },
+          config: { text: "生成极简背景", bbox_references: [] }
+        },
+        {
+          id: "model",
+          type: "text_to_image",
+          position: { x: 320, y: 0 },
+          size: { width: 240, height: 160 },
+          config: {
+            model: "doubao-seedream-5-0-pro-260628",
+            aspect_ratio: "16:9",
+            size: "2K",
+            format: "png"
+          }
+        }
+      ],
+      edges: [
+        {
+          id: "prompt-edge",
+          sourceNodeId: "prompt",
+          sourceHandle: "text",
+          targetNodeId: "model",
+          targetHandle: "prompt"
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
+    store.getState().initialize({
+      definition,
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "文生图",
+      revision: 1
+    });
+    const optimizedText = [
+      "Background: Minimal warm gray studio backdrop",
+      "Lighting: Soft even illumination",
+      "Composition: Wide 16:9 layout with generous negative space",
+      "Negative Prompt: No subjects, text, logos, or visual clutter"
+    ].join("\n");
+    apiMocks.optimizeAigcPrompt.mockResolvedValueOnce({
+      optimized_text: optimizedText,
+      optimized_reference_instructions: []
+    });
+
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={getV2Node(store, "prompt", "text")} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始优化" }));
+
+    await waitFor(() => {
+      expect(apiMocks.optimizeAigcPrompt).toHaveBeenCalledWith(
+        {
+          optimization_direction: "",
+          reference_instructions: [],
+          target_config: {
+            aspect_ratio: "16:9",
+            model: "doubao-seedream-5-0-pro-260628",
+            reference_image_count: 0,
+            size: "2K"
+          },
+          target_node_id: "model",
+          target_type: "text_to_image",
+          text: "生成极简背景"
+        },
+        { signal: expect.anything() }
+      );
+    });
+    expect(screen.getByTestId("aigc-prompt-preview").textContent).toBe(
+      optimizedText
+    );
+    expect(getV2Node(store, "prompt", "text").config.text).toBe(optimizedText);
   });
 
   it("lists direct model targets individually and sends the selected LLM context", async () => {
@@ -677,6 +1109,91 @@ describe("AIGC structured prompt editor", () => {
     );
   });
 
+  it("shows the reference marker hint only for video optimization targets", () => {
+    const definition: AigcPipelineDefinition = {
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: "prompt",
+          type: "text_input",
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 160 },
+          config: { text: "主体出现（参考@图1）", bbox_references: [] }
+        },
+        {
+          id: "video-target",
+          type: "video_generation",
+          position: { x: 320, y: 0 },
+          size: { width: 240, height: 180 },
+          config: {
+            model: "doubao-seedance-2-5-260628",
+            generation_mode: "text_to_video",
+            resolution: "720p",
+            aspect_ratio: "16:9",
+            duration_seconds: 5,
+            generate_audio: false
+          }
+        },
+        {
+          id: "llm-target",
+          type: "llm",
+          position: { x: 640, y: 0 },
+          size: { width: 240, height: 160 },
+          config: {
+            model: "doubao-seed-evolving",
+            system_prompt: "只输出 JSON",
+            temperature: 0.2
+          }
+        }
+      ],
+      edges: [
+        {
+          id: "prompt-video",
+          sourceNodeId: "prompt",
+          sourceHandle: "text",
+          targetNodeId: "video-target",
+          targetHandle: "prompt"
+        },
+        {
+          id: "prompt-llm",
+          sourceNodeId: "prompt",
+          sourceHandle: "text",
+          targetNodeId: "llm-target",
+          targetHandle: "prompt"
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
+    store.getState().initialize({
+      definition,
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "视频参考标记",
+      revision: 1
+    });
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={getV2Node(store, "prompt", "text")} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    expect(
+      screen.getByText("优化会尽量保留提示词中的参考媒体标记。")
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "目标模型" }), {
+      target: { value: "llm-target" }
+    });
+
+    expect(
+      screen.queryByText("优化会尽量保留提示词中的参考媒体标记。")
+    ).not.toBeInTheDocument();
+  });
+
   it("does not overwrite prompt changes made while optimization is pending", async () => {
     let resolveOptimization:
       | ((value: {
@@ -722,6 +1239,102 @@ describe("AIGC structured prompt editor", () => {
     );
     const prompt = getV2Node(store, "prompt", "text");
     expect(prompt.config.text).toBe("用户在等待时更新");
+  });
+
+  it("does not apply a response after the source image identity changes", async () => {
+    let resolveOptimization:
+      | ((value: {
+          optimized_text: string;
+          optimized_reference_instructions: string[];
+        }) => void)
+      | undefined;
+    apiMocks.optimizeAigcPrompt.mockReturnValue(
+      new Promise((resolve) => {
+        resolveOptimization = resolve;
+      })
+    );
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始优化" }));
+    await act(async () => {
+      const image = getV2Node(store, "image", "image");
+      store.getState().updateNodeConfig(image.id, {
+        ...image.config,
+        asset_id: "asset-replaced"
+      });
+      resolveOptimization?.({
+        optimized_text: "This stale result must not be applied.",
+        optimized_reference_instructions: ["Stale reference."]
+      });
+    });
+
+    await screen.findByText(
+      "文本、Run、目标配置或连线已变化，本次优化结果未应用。"
+    );
+    const submitted = apiMocks.optimizeAigcPrompt.mock.calls[0]?.[0] as
+      | AigcPromptOptimizeRequest
+      | undefined;
+    if (submitted?.target_type !== "image_to_image") {
+      throw new Error("expected an image-to-image optimization request");
+    }
+    expect(submitted.pipeline_context?.source_image).toMatchObject({
+      asset_id: "asset-1",
+      run_id: null
+    });
+    expect(
+      submitted.pipeline_context?.definition_snapshot.nodes.find(
+        (candidate) => candidate.id === "image"
+      )
+    ).toMatchObject({ config: { asset_id: "asset-1" } });
+    expect(JSON.stringify(submitted)).not.toContain("download_url");
+    expect(JSON.stringify(submitted)).not.toContain("signature");
+    expect(getV2Node(store, "prompt", "text").config.text).toBe("将");
+  });
+
+  it("accepts a response after an equivalent autosave advances only the revision", async () => {
+    let resolveOptimization:
+      | ((value: {
+          optimized_text: string;
+          optimized_reference_instructions: string[];
+        }) => void)
+      | undefined;
+    apiMocks.optimizeAigcPrompt.mockReturnValue(
+      new Promise((resolve) => {
+        resolveOptimization = resolve;
+      })
+    );
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始优化" }));
+    await act(async () => {
+      store.getState().markSaved(2);
+      resolveOptimization?.({
+        optimized_text:
+          "Change only the package color while preserving everything else.",
+        optimized_reference_instructions: ["Preserve the logo."]
+      });
+    });
+
+    await screen.findByText("提示词已优化，可撤销恢复。");
+    expect(getV2Node(store, "prompt", "text").config.text).toBe(
+      "Change only the package color while preserving everything else."
+    );
   });
 
   it("cancels an in-flight optimization and ignores its late result", async () => {
@@ -771,6 +1384,8 @@ describe("AIGC structured prompt editor", () => {
     apiMocks.optimizeAigcPrompt.mockRejectedValueOnce(
       new Error("request timed out")
     );
+    const before = structuredClone(store.getState().definition);
+    const historyLength = store.getState().past.length;
     const node = getV2Node(store, "prompt", "text");
     render(
       <AigcQueryProvider>
@@ -788,5 +1403,30 @@ describe("AIGC structured prompt editor", () => {
     ).toHaveLength(2);
     expect(screen.getByRole("button", { name: "开始优化" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "取消" })).toBeEnabled();
+    expect(store.getState().definition).toEqual(before);
+    expect(store.getState().past).toHaveLength(historyLength);
+    expect(store.getState().dirty).toBe(false);
+  });
+
+  it("does not create history or dirty state when optimization is unchanged", async () => {
+    apiMocks.optimizeAigcPrompt.mockResolvedValueOnce({
+      optimized_text: "将",
+      optimized_reference_instructions: ["替换为红色包装"]
+    });
+    const node = getV2Node(store, "prompt", "text");
+    render(
+      <AigcQueryProvider>
+        <AigcEditorStoreProvider store={store}>
+          <AigcPromptEditor node={node} />
+        </AigcEditorStoreProvider>
+      </AigcQueryProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始优化" }));
+
+    expect(await screen.findByText("当前提示词无需调整。")).toBeInTheDocument();
+    expect(store.getState().past).toHaveLength(0);
+    expect(store.getState().dirty).toBe(false);
   });
 });

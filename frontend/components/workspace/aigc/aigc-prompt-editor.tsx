@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueries } from "@tanstack/react-query";
-import { LoaderCircle, WandSparkles, X } from "lucide-react";
+import { Expand, LoaderCircle, WandSparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import {
   projectAigcImageBboxBinding,
   projectAigcModalityRunResult
 } from "@/lib/aigc/result-projection";
+import { resolvePromptOptimizationSourceImage } from "@/lib/aigc/prompt-optimization-context";
 import { SEEDANCE_DEFAULT_TASK_TYPE } from "@/lib/seedance";
 import type {
   AigcPromptOptimizeRequest,
@@ -84,11 +85,19 @@ export function AigcPromptEditor({
   } | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [fullscreenEditorOpen, setFullscreenEditorOpen] = useState(false);
+  const [fullscreenDraft, setFullscreenDraft] = useState("");
+  const [fullscreenOpeningValue, setFullscreenOpeningValue] = useState("");
+  const [optimizationOrigin, setOptimizationOrigin] = useState<
+    "inspector" | "fullscreen"
+  >("inspector");
   const [direction, setDirection] = useState("");
   const [targetNodeId, setTargetNodeId] = useState("");
   const mountedRef = useRef(true);
   const runDetailRef = useRef(runDetail);
   const optimizationAbortRef = useRef<AbortController | null>(null);
+  const fullscreenEditorTriggerRef = useRef<HTMLElement | null>(null);
+  const fullscreenOpeningValueRef = useRef("");
   useEffect(() => {
     runDetailRef.current = runDetail;
   }, [runDetail]);
@@ -196,6 +205,11 @@ export function AigcPromptEditor({
     ? (effectiveProjection?.text ?? "")
     : activeNode.config.text;
   const targets = promptOptimizationTargets(graphDefinition, activeNode.id);
+  const selectedOptimizationTarget = targets.find(
+    (target) => target.id === targetNodeId
+  );
+  const showsVideoReferenceMarkerHint =
+    selectedOptimizationTarget?.node.type === "video_generation";
   const canEditText =
     !upstream ||
     Boolean(
@@ -210,10 +224,10 @@ export function AigcPromptEditor({
         references.some((reference) => reference.instruction.trim())
     );
 
-  function updateText(value: string) {
+  function updateText(value: string): boolean {
     if (AIGC_COORDINATE_TAG_PATTERN.test(value)) {
       setValidationMessage("坐标标签由框选生成，不能手工输入。");
-      return;
+      return false;
     }
     setValidationMessage(null);
     setOptimizationMessage(null);
@@ -223,6 +237,31 @@ export function AigcPromptEditor({
         ? { upstream_text_override: value }
         : { text: value })
     });
+    return true;
+  }
+
+  function openFullscreenEditor(trigger: HTMLElement) {
+    fullscreenEditorTriggerRef.current = trigger;
+    fullscreenOpeningValueRef.current = effectiveText;
+    setFullscreenOpeningValue(effectiveText);
+    setFullscreenDraft(effectiveText);
+    setFullscreenEditorOpen(true);
+  }
+
+  function closeFullscreenEditor() {
+    setFullscreenEditorOpen(false);
+    window.setTimeout(() => {
+      fullscreenEditorTriggerRef.current?.focus();
+    }, 0);
+  }
+
+  function applyFullscreenText(value: string, expectedValue: string): boolean {
+    if (effectiveText !== expectedValue) {
+      setValidationMessage("提示词内容已变化，请重新打开编辑器后再应用。");
+      return false;
+    }
+    if (value === effectiveText) return true;
+    return updateText(value);
   }
 
   function updateReferenceInstruction(sourceNodeId: string, value: string) {
@@ -239,13 +278,26 @@ export function AigcPromptEditor({
     );
   }
 
-  function openOptimizationDialog() {
-    if (!canOptimize) return;
+  function openOptimizationDialog(
+    origin: "inspector" | "fullscreen" = "inspector"
+  ) {
+    const optimizationText =
+      origin === "fullscreen" ? fullscreenDraft : effectiveText;
+    if (
+      targets.length === 0 ||
+      !(
+        optimizationText.trim() ||
+        references.some((reference) => reference.instruction.trim())
+      )
+    ) {
+      return;
+    }
     setTargetNodeId((current) =>
       targets.some((target) => target.id === current)
         ? current
         : (targets[0]?.id ?? "")
     );
+    setOptimizationOrigin(origin);
     setOptimizationMessage(null);
     setDialogOpen(true);
   }
@@ -254,7 +306,22 @@ export function AigcPromptEditor({
     const selectedTarget = targets.find(
       (target) => target.id === targetNodeId
     );
-    if (!canOptimize || !selectedTarget || isOptimizing) return;
+    const sourceText =
+      optimizationOrigin === "fullscreen" ? fullscreenDraft : effectiveText;
+    const expectedEffectiveText =
+      optimizationOrigin === "fullscreen"
+        ? fullscreenOpeningValueRef.current
+        : effectiveText;
+    const canOptimizeSource =
+      targets.length > 0 &&
+      Boolean(
+        sourceText.trim() ||
+          references.some((reference) => reference.instruction.trim())
+      );
+    if (!canOptimizeSource || !selectedTarget || isOptimizing) return;
+    const editorState = store.getState();
+    const requestDefinition =
+      editorState.definition as AigcPipelineDefinitionV2;
     const expected: TextConfig = {
       bbox_references: references.map((reference) => ({ ...reference })),
       text: activeNode.config.text,
@@ -263,14 +330,21 @@ export function AigcPromptEditor({
         activeNode.config.upstream_text_override ?? null
     };
     const request = buildPromptOptimizationRequest(
-      graphDefinition,
+      requestDefinition,
       selectedTarget.node,
-      effectiveText,
+      sourceText,
       direction,
-      references.map((reference) => reference.instruction)
+      references.map((reference) => reference.instruction),
+      editorState.mode === "pipeline" && editorState.entityId
+        ? {
+            baseRevision: editorState.revision,
+            pipelineId: editorState.entityId,
+            runDetail
+          }
+        : null
     );
     const requestSnapshot = promptOptimizationSnapshot(
-      graphDefinition,
+      requestDefinition,
       activeNode.id,
       runDetail?.run.id ?? null,
       request,
@@ -287,8 +361,9 @@ export function AigcPromptEditor({
         signal: controller.signal
       });
       if (!mountedRef.current || controller.signal.aborted) return;
-      const latestDefinition = store.getState()
-        .definition as AigcPipelineDefinitionV2;
+      const latestState = store.getState();
+      const latestDefinition =
+        latestState.definition as AigcPipelineDefinitionV2;
       const latestNode = latestDefinition.nodes.find(
         (candidate) => candidate.id === activeNode.id
       );
@@ -305,18 +380,26 @@ export function AigcPromptEditor({
           buildPromptOptimizationRequest(
             latestDefinition,
             latestTarget,
-            effectiveTextForSnapshot(
-              latestDefinition,
-              latestNode,
-              runDetailRef.current
-            ),
+            sourceText,
             direction,
             bboxReferences(latestNode).map(
               (reference) => reference.instruction
-            )
+            ),
+            latestState.mode === "pipeline" && latestState.entityId
+              ? {
+                  baseRevision: latestState.revision,
+                  pipelineId: latestState.entityId,
+                  runDetail: runDetailRef.current
+                }
+              : null
           ),
           latestNode.config
-        ) !== requestSnapshot
+        ) !== requestSnapshot ||
+        effectiveTextForSnapshot(
+          latestDefinition,
+          latestNode,
+          runDetailRef.current
+        ) !== expectedEffectiveText
       ) {
         setOptimizationMessage({
           kind: "info",
@@ -324,14 +407,19 @@ export function AigcPromptEditor({
         });
         return;
       }
-      const status = applyOptimizedPrompt(
-        activeNode.id,
-        expected,
-        result.optimized_text,
-        result.optimized_reference_instructions,
-        request.target_type === "text_to_image" ||
-          request.target_type === "image_to_image"
-      );
+      const status =
+        optimizationOrigin === "fullscreen"
+          ? result.optimized_text === sourceText
+            ? "unchanged"
+            : "updated"
+          : applyOptimizedPrompt(
+              activeNode.id,
+              expected,
+              result.optimized_text,
+              result.optimized_reference_instructions,
+              request.target_type === "text_to_image" ||
+                request.target_type === "image_to_image"
+            );
       if (status === "stale") {
         setOptimizationMessage({
           kind: "info",
@@ -342,10 +430,21 @@ export function AigcPromptEditor({
           kind: "info",
           text: "当前提示词无需调整。"
         });
+        if (optimizationOrigin === "fullscreen") setDialogOpen(false);
       } else {
+        if (optimizationOrigin === "fullscreen") {
+          setFullscreenDraft(result.optimized_text);
+        }
+        const generationType = result.generation_type;
+        const explanation = result.optimization_explanation?.trim();
         setOptimizationMessage({
           kind: "success",
-          text: "提示词已优化，可撤销恢复。"
+          text:
+            generationType || explanation
+              ? `提示词已优化${generationType ? `（${generationType}）` : ""}${
+                  explanation ? `：${explanation}` : ""
+                }`
+              : "提示词已优化，可撤销恢复。"
         });
         setDialogOpen(false);
       }
@@ -377,7 +476,7 @@ export function AigcPromptEditor({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <Label htmlFor={`node-text-${activeNode.id}`}>基础文本</Label>
+        <Label>基础文本</Label>
         <div className="flex items-center gap-2">
           {references.length > 0 ? (
             <span className="font-mono text-[10px] text-muted-foreground">
@@ -387,7 +486,7 @@ export function AigcPromptEditor({
           <Button
             aria-label="优化提示词"
             disabled={!canOptimize || isOptimizing}
-            onClick={openOptimizationDialog}
+            onClick={() => openOptimizationDialog()}
             size="sm"
             title={
               targets.length === 0
@@ -411,13 +510,33 @@ export function AigcPromptEditor({
         className="max-h-96 overflow-y-auto rounded-lg border border-input bg-card shadow-sm transition focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15"
         role="group"
       >
-        <Textarea
-          className="min-h-24 resize-y border-0 bg-transparent shadow-none focus-visible:ring-0"
-          disabled={isOptimizing || !canEditText}
-          id={`node-text-${activeNode.id}`}
-          onChange={(event) => updateText(event.target.value)}
-          value={effectiveText}
-        />
+        <div className="relative border-b border-border/70">
+          <button
+            aria-label="展开编辑基础文本"
+            className="min-h-24 max-h-40 w-full overflow-y-auto whitespace-pre-wrap px-3 py-2 pr-12 text-left font-mono text-sm leading-6 text-foreground outline-none transition hover:bg-secondary/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-60"
+            data-testid="aigc-prompt-preview"
+            disabled={isOptimizing}
+            onClick={(event) => openFullscreenEditor(event.currentTarget)}
+            type="button"
+          >
+            {effectiveText || "（空）"}
+          </button>
+          <Button
+            aria-label="展开编辑基础文本"
+            className="absolute right-2 top-2 border-border/70 bg-card/90"
+            disabled={isOptimizing}
+            onClick={(event) => openFullscreenEditor(event.currentTarget)}
+            size="icon"
+            title="展开编辑基础文本"
+            type="button"
+            variant="ghost"
+          >
+            <Expand aria-hidden="true" className="h-4 w-4" />
+          </Button>
+          <span className="absolute bottom-2 right-3 rounded bg-card/90 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            {Array.from(effectiveText).length} 字符
+          </span>
+        </div>
         {references.length > 0 ? (
           <div className="space-y-2 border-t border-border/70 p-2">
             {references.map((reference, index) => {
@@ -520,6 +639,31 @@ export function AigcPromptEditor({
           {optimizationMessage.text}
         </p>
       ) : null}
+      <PromptFullscreenEditor
+        editable={canEditText && !isOptimizing}
+        canOptimize={
+          canEditText &&
+          targets.length > 0 &&
+          Boolean(
+            fullscreenDraft.trim() ||
+              references.some((reference) => reference.instruction.trim())
+          )
+        }
+        draft={fullscreenDraft}
+        isOptimizing={isOptimizing}
+        nodeName={
+          displayNames.get(activeNode.id)?.displayName ??
+          activeNode.config.title ??
+          "文本节点"
+        }
+        onApply={applyFullscreenText}
+        onClose={closeFullscreenEditor}
+        onDraftChange={setFullscreenDraft}
+        onOptimize={() => openOptimizationDialog("fullscreen")}
+        open={fullscreenEditorOpen}
+        validationMessage={validationMessage}
+        valueAtOpen={fullscreenOpeningValue}
+      />
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
@@ -527,8 +671,9 @@ export function AigcPromptEditor({
         }}
       >
         <DialogContent
-          className="border-[#343a43] bg-[#171a1f] text-zinc-100 sm:max-w-xl [&_label]:text-zinc-200"
+          className="flex max-h-[calc(100dvh-1rem)] flex-col border-[#343a43] bg-[#171a1f] text-zinc-100 sm:max-h-[calc(100dvh-3rem)] sm:max-w-xl [&_label]:text-zinc-200"
           closeButtonClassName="border-[#3d444e] bg-[#20242a] text-zinc-400 hover:bg-[#2a3038] hover:text-zinc-100"
+          data-testid="aigc-prompt-optimization-dialog"
           hideCloseButton={isOptimizing}
           onEscapeKeyDown={(event) => {
             if (isOptimizing) event.preventDefault();
@@ -537,17 +682,25 @@ export function AigcPromptEditor({
             if (isOptimizing) event.preventDefault();
           }}
         >
-          <DialogHeader className="px-5 pt-5">
+          <DialogHeader className="shrink-0 px-5 pt-5">
             <DialogTitle className="text-zinc-100">优化提示词</DialogTitle>
             <DialogDescription className="text-zinc-400">
-              选择直接下游目标，优化结果将写回当前文本节点。
+              选择直接下游目标，优化结果将
+              {optimizationOrigin === "fullscreen"
+                ? "更新当前全屏草稿。"
+                : "写回当前文本节点。"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 overflow-y-auto px-5 py-2">
+          <div
+            className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-2"
+            data-testid="aigc-prompt-optimization-body"
+          >
             <div>
               <Label>当前文本</Label>
               <p className="mt-1.5 max-h-24 overflow-y-auto whitespace-pre-wrap rounded-md border border-[#343a43] bg-[#101318] px-3 py-2 text-xs leading-5 text-zinc-400">
-                {effectiveText || "（空）"}
+                {optimizationOrigin === "fullscreen"
+                  ? fullscreenDraft || "（空）"
+                  : effectiveText || "（空）"}
               </p>
             </div>
             <div>
@@ -569,6 +722,11 @@ export function AigcPromptEditor({
                 ))}
               </select>
             </div>
+            {showsVideoReferenceMarkerHint ? (
+              <p className="text-xs leading-5 text-zinc-400" role="status">
+                优化会尽量保留提示词中的参考媒体标记。
+              </p>
+            ) : null}
             <div>
               <Label htmlFor={`prompt-direction-${activeNode.id}`}>
                 优化方向
@@ -596,7 +754,10 @@ export function AigcPromptEditor({
               </p>
             ) : null}
           </div>
-          <DialogFooter className="border-t border-[#343a43] px-5 py-4">
+          <DialogFooter
+            className="shrink-0 border-t border-[#343a43] px-5 py-4"
+            data-testid="aigc-prompt-optimization-footer"
+          >
             <Button
               className="border-[#3d444e] bg-[#20242a] text-zinc-200 hover:bg-[#2a3038]"
               onClick={() =>
@@ -625,6 +786,128 @@ export function AigcPromptEditor({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function PromptFullscreenEditor({
+  editable,
+  canOptimize,
+  draft,
+  isOptimizing,
+  nodeName,
+  onApply,
+  onClose,
+  onDraftChange,
+  onOptimize,
+  open,
+  validationMessage,
+  valueAtOpen
+}: {
+  editable: boolean;
+  canOptimize: boolean;
+  draft: string;
+  isOptimizing: boolean;
+  nodeName: string;
+  onApply: (value: string, expectedValue: string) => boolean;
+  onClose: () => void;
+  onDraftChange: (value: string) => void;
+  onOptimize: () => void;
+  open: boolean;
+  validationMessage: string | null;
+  valueAtOpen: string;
+}) {
+  function apply() {
+    if (onApply(draft, valueAtOpen)) onClose();
+  }
+
+  return (
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+      open={open}
+    >
+      <DialogContent
+        className="grid h-[94dvh] w-[calc(100vw-1rem)] max-w-[96rem] grid-rows-[auto_minmax(0,1fr)_auto] border-[#343a43] bg-[#171a1f] p-0 text-zinc-100 sm:h-[92dvh] sm:w-[96vw] sm:max-w-[96rem] sm:rounded-xl [&_label]:text-zinc-200"
+        closeButtonClassName="border-[#3d444e] bg-[#20242a] text-zinc-400 hover:bg-[#2a3038] hover:text-zinc-100"
+        data-testid="aigc-fullscreen-prompt-editor"
+      >
+        <DialogHeader className="border-b border-[#343a43] px-5 py-4 pr-16">
+          <div className="flex items-start justify-between gap-3 pr-10">
+            <div className="min-w-0">
+              <DialogTitle className="text-zinc-100">编辑基础文本</DialogTitle>
+              <DialogDescription className="sr-only">
+                完整查看和编辑{nodeName}的提示词
+              </DialogDescription>
+              <p className="mt-1 truncate text-xs text-zinc-400">
+                {nodeName}
+              </p>
+              <p className="mt-2 font-mono text-xs text-zinc-500">
+                {Array.from(draft).length} 字符
+              </p>
+            </div>
+            <Button
+              disabled={!canOptimize || isOptimizing}
+              onClick={onOptimize}
+              size="sm"
+              title="根据目标模型优化当前草稿"
+              type="button"
+              variant="outline"
+            >
+              {isOptimizing ? (
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <WandSparkles className="h-3.5 w-3.5" />
+              )}
+              {isOptimizing ? "优化中" : "优化提示词"}
+            </Button>
+          </div>
+        </DialogHeader>
+        <div className="min-h-0 p-4 sm:p-5">
+          <Textarea
+            aria-label="完整基础文本"
+            autoFocus
+            className="h-full min-h-0 resize-none border-[#343a43] bg-[#101318] font-mono text-sm leading-6 text-zinc-100 placeholder:text-zinc-600 focus-visible:border-primary/55"
+            onChange={(event) => onDraftChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (
+                editable &&
+                event.key === "Enter" &&
+                (event.metaKey || event.ctrlKey)
+              ) {
+                event.preventDefault();
+                apply();
+              }
+            }}
+            readOnly={!editable}
+            value={draft}
+          />
+          {validationMessage ? (
+            <p className="mt-2 text-xs text-destructive" role="alert">
+              {validationMessage}
+            </p>
+          ) : null}
+        </div>
+        <DialogFooter
+          className="border-t border-[#343a43] px-5 py-4"
+          data-testid="aigc-fullscreen-prompt-editor-footer"
+        >
+          <Button
+            className="border-[#3d444e] bg-[#20242a] text-zinc-200 hover:bg-[#2a3038]"
+            onClick={onClose}
+            type="button"
+            variant="outline"
+          >
+            取消
+          </Button>
+          {editable ? (
+            <Button onClick={apply} type="button">
+              应用
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -682,7 +965,14 @@ function buildPromptOptimizationRequest(
   target: AigcV2Node,
   text: string,
   optimizationDirection: string,
-  referenceInstructions: string[]
+  referenceInstructions: string[],
+  pipeline:
+    | {
+        baseRevision: number;
+        pipelineId: string;
+        runDetail: AigcPipelineRunDetail | null;
+      }
+    | null = null
 ): AigcPromptOptimizeRequest {
   const common = {
     optimization_direction: optimizationDirection,
@@ -716,6 +1006,20 @@ function buildPromptOptimizationRequest(
   if (target.type === "image_to_image") {
     return {
       ...common,
+      ...(pipeline
+        ? {
+            pipeline_context: {
+              base_revision: pipeline.baseRevision,
+              definition_snapshot: structuredClone(definition),
+              pipeline_id: pipeline.pipelineId,
+              source_image: resolvePromptOptimizationSourceImage(
+                definition,
+                target.id,
+                pipeline.runDetail
+              )
+            }
+          }
+        : {}),
       reference_instructions: referenceInstructions,
       target_config: {
         aspect_ratio: target.config.aspect_ratio,
@@ -805,9 +1109,28 @@ function promptOptimizationSnapshot(
         edge.targetNodeId === textNodeId ||
         edge.targetNodeId === request.target_node_id
     ),
-    request,
+    request: promptOptimizationSemanticRequest(request),
     runId
   });
+}
+
+function promptOptimizationSemanticRequest(
+  request: AigcPromptOptimizeRequest
+): unknown {
+  if (
+    request.target_type !== "image_to_image" ||
+    !request.pipeline_context
+  ) {
+    return request;
+  }
+  return {
+    ...request,
+    pipeline_context: {
+      definition_snapshot: request.pipeline_context.definition_snapshot,
+      pipeline_id: request.pipeline_context.pipeline_id,
+      source_image: request.pipeline_context.source_image
+    }
+  };
 }
 
 function effectiveTextForSnapshot(

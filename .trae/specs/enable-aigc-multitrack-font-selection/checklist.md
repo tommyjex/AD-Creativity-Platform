@@ -1,0 +1,36 @@
+# AIGC 多轨剪辑字体选择验收清单
+
+- [x] 文字元素可在预置字体与自定义 URL 模式间切换
+- [x] 字幕元素可在预置字体与自定义 URL 模式间切换
+- [x] 默认字体保存为 `font_type: null`
+- [x] 10 个官方预置字体名称和 ID 正确
+- [x] 站酷意大利体显示不支持中文提示
+- [x] 预置字体显示 MediaKit 最终效果提示
+- [x] 预置字体选择可撤销、重做、保存和恢复
+- [x] 示例 Century Gothic TTF URL 可保存和恢复
+- [x] HTTPS OTF URL 可通过校验
+- [x] 带查询参数和片段的字体 URL 可通过校验
+- [x] HTTP 字体 URL 被拒绝
+- [x] 相对字体 URL 被拒绝
+- [x] 含用户名或密码的 URL 被拒绝
+- [x] 非 TTF/OTF URL 被拒绝
+- [x] 超过 2048 字符的字体值被拒绝
+- [x] 非官方预置字体 ID 被拒绝
+- [x] 自定义字体成功加载后应用于文字预览
+- [x] 相同自定义字体 URL 只加载一次
+- [x] 自定义字体加载失败时回退系统字体并显示软提示
+- [x] 字体加载失败不阻止保存或执行
+- [x] 旧草稿缺少 `font_type` 时正常加载
+- [x] 定义清洗和持久化保留 `style.font_type`
+- [x] Provider 文字元素顶层包含正确 `font_type`
+- [x] Provider 字幕元素顶层包含正确 `font_type`
+- [x] Provider 默认字体元素不包含 `font_type`
+- [x] Provider 嵌套 `style` 不重复包含 `font_type`
+- [x] 诊断日志不记录完整自定义字体 URL
+- [x] 前端相关 Vitest 全部通过
+- [x] 后端相关 pytest 全部通过
+- [x] TypeScript、ESLint 和 production build 通过
+- [x] Playwright 桌面、平板和移动端验收通过
+- [x] 验收过程未触发真实 MediaKit 请求
+- [x] FontFace Mock 可读取 family、source 和 load 次数，并按 fail.ttf 拒绝
+- [x] 验收路由阻断任意非本地 HTTP(S) TTF/OTF 与 MediaKit 请求

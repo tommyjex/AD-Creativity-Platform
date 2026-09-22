@@ -4,8 +4,9 @@ from datetime import datetime, timedelta
 from threading import RLock
 from typing import Iterable, TypeVar
 
-from backend.app.aigc_run_scope import aigc_run_scope_node_ids
+from backend.app.aigc_run_scope import aigc_run_conflict_node_ids
 from backend.app.schemas import (
+    AIGC_GENERATED_MEDIA_NAMING_MODEL,
     AigcAssetDirection,
     AigcPipeline,
     AigcPipelineAssetReference,
@@ -73,6 +74,11 @@ from backend.app.schemas import (
     VideoInputNode,
     VideoNode,
 )
+from backend.app.services.aigc_asset_naming import (
+    aigc_generated_media_name_target_node_ids,
+    aigc_generated_output_metadata,
+    aigc_node_display_name,
+)
 from backend.app.schemas.brief import Brief
 from backend.app.schemas.common import utc_now
 from backend.app.schemas.enums import Stage, ToolTaskType
@@ -83,6 +89,7 @@ from backend.app.video_prompt import (
 
 from .base import (
     ActiveRunConflictError,
+    AigcPipelineThumbnailOutput,
     AssetReferenceConflictError,
     NotFoundError,
     PipelineRunConflictError,
@@ -303,6 +310,124 @@ class InMemoryRepository:
             self._replace_aigc_pipeline_assets(pipeline_id, references)
             return self._copy(updated)
 
+    def update_aigc_pipeline_thumbnail(
+        self,
+        pipeline_id: str,
+        *,
+        asset_id: str | None,
+    ) -> AigcPipeline:
+        with self._lock:
+            current = self._aigc_pipelines.get(pipeline_id)
+            if (
+                current is None
+                or self._aigc_pipeline_deleted_at.get(pipeline_id) is not None
+            ):
+                raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+            updated = current.model_copy(
+                update={
+                    "thumbnail_asset_id": asset_id,
+                    "updated_at": utc_now(),
+                },
+                deep=True,
+            )
+            self._aigc_pipelines[pipeline_id] = updated
+            return self._copy(updated)
+
+    def list_aigc_pipeline_thumbnail_outputs(
+        self,
+        pipeline_ids: Iterable[str],
+    ) -> dict[str, list[AigcPipelineThumbnailOutput]]:
+        with self._lock:
+            requested_ids = set(pipeline_ids)
+            outputs = {
+                pipeline_id: []
+                for pipeline_id in requested_ids
+                if pipeline_id in self._aigc_pipelines
+                and self._aigc_pipeline_deleted_at.get(pipeline_id) is None
+            }
+            for reference in self._aigc_task_assets.values():
+                if reference.direction != AigcAssetDirection.OUTPUT:
+                    continue
+                task = self._aigc_tasks.get(reference.task_id)
+                if task is None or task.pipeline_id not in outputs:
+                    continue
+                run = self._aigc_runs.get(task.run_id)
+                asset = self._assets.get(reference.asset_id)
+                if (
+                    run is None
+                    or run.status != AigcPipelineRunStatus.SUCCEEDED
+                    or asset is None
+                    or not _is_thumbnail_eligible_asset(asset)
+                ):
+                    continue
+                outputs[task.pipeline_id].append(
+                    AigcPipelineThumbnailOutput(
+                        pipeline_id=task.pipeline_id,
+                        run_id=run.id,
+                        node_id=task.node_id,
+                        asset=self._copy(asset),
+                    )
+                )
+            for candidates in outputs.values():
+                candidates.sort(
+                    key=lambda item: (item.asset.created_at, item.asset.id),
+                    reverse=True,
+                )
+            return outputs
+
+    def patch_aigc_pipeline_node_custom_name(
+        self,
+        pipeline_id: str,
+        node_id: str,
+        custom_name: str,
+    ) -> AigcPipeline:
+        with self._lock:
+            updated = self._aigc_pipeline_with_node_custom_names_locked(
+                pipeline_id,
+                (node_id,),
+                custom_name,
+            )
+            self._aigc_pipelines[pipeline_id] = updated
+            return self._copy(updated)
+
+    def _aigc_pipeline_with_node_custom_names_locked(
+        self,
+        pipeline_id: str,
+        node_ids: Iterable[str],
+        custom_name: str,
+    ) -> AigcPipeline:
+        current = self._aigc_pipelines.get(pipeline_id)
+        if (
+            current is None
+            or self._aigc_pipeline_deleted_at.get(pipeline_id) is not None
+        ):
+            raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+        target_ids = set(node_ids)
+        nodes = [
+            node.model_copy(update={"custom_name": custom_name}, deep=True)
+            if node.id in target_ids
+            else node
+            for node in current.definition.nodes
+        ]
+        missing_ids = target_ids.difference(node.id for node in current.definition.nodes)
+        if missing_ids:
+            raise NotFoundError(
+                f"AIGC pipeline nodes not found: {sorted(missing_ids)!r}"
+            )
+        definition = current.definition.model_copy(
+            update={"nodes": nodes},
+            deep=True,
+        )
+        updated = current.model_copy(
+            update={
+                "definition": definition,
+                "revision": current.revision + 1,
+                "updated_at": utc_now(),
+            },
+            deep=True,
+        )
+        return updated
+
     def delete_aigc_pipeline(self, pipeline_id: str) -> None:
         with self._lock:
             if (
@@ -378,7 +503,7 @@ class InMemoryRepository:
                 and run.mode != AigcPipelineRunMode.RETRY_NODE
             ):
                 raise RevisionConflictError("AIGC pipeline revision conflict")
-            candidate_scope = aigc_run_scope_node_ids(
+            candidate_scope = aigc_run_conflict_node_ids(
                 run.definition_snapshot,
                 mode=run.mode,
                 start_node_id=run.start_node_id,
@@ -389,7 +514,7 @@ class InMemoryRepository:
                     or active_run.status not in ACTIVE_AIGC_RUN_STATUSES
                 ):
                     continue
-                active_scope = aigc_run_scope_node_ids(
+                active_scope = aigc_run_conflict_node_ids(
                     active_run.definition_snapshot,
                     mode=active_run.mode,
                     start_node_id=active_run.start_node_id,
@@ -757,6 +882,113 @@ class InMemoryRepository:
                 deep=True,
             )
             return self._copy(committed), accepted
+
+    def commit_aigc_generated_media_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+        result: AigcTaskResult,
+        metrics: AigcTaskMetrics,
+    ) -> tuple[AigcPipelineTaskAttempt, bool]:
+        with self._lock:
+            task = self._aigc_tasks.get(task_id)
+            if task is None:
+                raise NotFoundError(f"AIGC task not found: {task_id}")
+            lease = self._aigc_worker_lease
+            if (
+                lease is None
+                or lease.fencing_token != fencing_token
+                or self._aigc_task_fencing.get(task_id) != fencing_token
+                or task.status != AigcTaskStatus.RUNNING
+            ):
+                return self._copy(task), False
+            run = self._aigc_runs[task.run_id]
+            if run.cancellation_requested:
+                return self.commit_aigc_task_attempt(
+                    task_id,
+                    fencing_token=fencing_token,
+                    status=AigcTaskStatus.SUCCEEDED,
+                    result=result,
+                    error=None,
+                    metrics=metrics,
+                )
+            naming = result.naming
+            if naming is None:
+                raise ValueError("generated media result requires naming metadata")
+            pipeline = self._aigc_pipelines.get(task.pipeline_id)
+            if (
+                pipeline is None
+                or self._aigc_pipeline_deleted_at.get(task.pipeline_id) is not None
+            ):
+                raise NotFoundError(
+                    f"AIGC pipeline not found: {task.pipeline_id}"
+                )
+            generated_name = naming.name
+            target_node_ids = aigc_generated_media_name_target_node_ids(
+                run.definition_snapshot,
+                task.node_id,
+            )
+            if generated_name is not None:
+                pipeline = self._aigc_pipeline_with_node_custom_names_locked(
+                    task.pipeline_id,
+                    target_node_ids,
+                    generated_name,
+                )
+            node_name = aigc_node_display_name(
+                pipeline.definition,
+                target_node_ids[0],
+            )
+            output_references = sorted(
+                (
+                    reference
+                    for reference in self._aigc_task_assets.values()
+                    if reference.task_id == task_id
+                    and reference.direction == AigcAssetDirection.OUTPUT
+                ),
+                key=lambda reference: (reference.slot, reference.ordinal),
+            )
+            assets: list[Asset] = []
+            for reference in output_references:
+                asset = self._assets.get(reference.asset_id)
+                if asset is None or asset.mime_type is None:
+                    raise NotFoundError(f"asset not found: {reference.asset_id}")
+                assets.append(
+                    asset.model_copy(
+                        update={
+                            "status": Status.SUCCEEDED,
+                            "metadata": {
+                                **asset.metadata,
+                                **aigc_generated_output_metadata(
+                                    node_name=node_name,
+                                    generated_name=generated_name,
+                                    display_node_id=target_node_ids[0],
+                                    naming_model=AIGC_GENERATED_MEDIA_NAMING_MODEL,
+                                    naming_status=naming.status.value,
+                                    mime_type=asset.mime_type,
+                                    output_ordinal=reference.ordinal,
+                                ),
+                            },
+                            "updated_at": utc_now(),
+                        },
+                        deep=True,
+                    )
+                )
+            committed, accepted = self.commit_aigc_task_attempt(
+                task_id,
+                fencing_token=fencing_token,
+                status=AigcTaskStatus.SUCCEEDED,
+                result=result,
+                error=None,
+                metrics=metrics,
+            )
+            if not accepted:
+                return committed, False
+            if generated_name is not None:
+                self._aigc_pipelines[pipeline.id] = pipeline
+            for asset in assets:
+                self._assets[asset.id] = asset
+            return committed, True
 
     def commit_aigc_json_parser_task_attempt(
         self,
@@ -2752,6 +2984,15 @@ class InMemoryRepository:
     @staticmethod
     def _copy(model: ModelT) -> ModelT:
         return model.model_copy(deep=True)
+
+
+def _is_thumbnail_eligible_asset(asset: Asset) -> bool:
+    mime_type = (asset.mime_type or "").casefold()
+    return (
+        asset.status == Status.SUCCEEDED
+        and asset.asset_role == AssetRole.PUBLIC
+        and (mime_type.startswith("image/") or mime_type.startswith("video/"))
+    )
 
 
 def _reference_field_name(kind: ReferenceAssetKind) -> str:

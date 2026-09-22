@@ -141,7 +141,31 @@ def _input(source_url: str) -> AigcMultiTrackAssetInput:
                     }
                 ],
                 "provider_only": "drop",
-            }
+            },
+            {
+                "id": "track-text",
+                "name": "Text",
+                "type": "text",
+                "order": 1,
+                "hidden": False,
+                "muted": False,
+                "elements": [
+                    {
+                        "id": "element-text",
+                        "type": "text",
+                        "target_time": {"start_ms": 0, "end_ms": 5000},
+                        "inline_text": "Title",
+                        "style": {
+                            "font_type": (
+                                "https://fonts.example.com/title.ttf?version=1"
+                            ),
+                            "font_size": 48,
+                            "color": "#FFFFFFFF",
+                            "provider_only": "drop",
+                        },
+                    }
+                ],
+            },
         ],
         duration_ms=5000,
         width=1920,
@@ -233,8 +257,8 @@ def test_store_aigc_multitrack_video_streams_registers_and_traces_all_inputs(
         "task_id": "task-1",
         "provider_task_id": "mediakit-task-1",
         "provider_request_id": "mediakit-request-1",
-        "track_count": 1,
-        "element_count": 1,
+        "track_count": 2,
+        "element_count": 2,
         "canvas": {
             "mode": "custom",
             "width": 1920,
@@ -260,7 +284,30 @@ def test_store_aigc_multitrack_video_streams_registers_and_traces_all_inputs(
                         "target_time": {"start_ms": 0, "end_ms": 5000},
                     }
                 ],
-            }
+            },
+            {
+                "id": "track-text",
+                "name": "Text",
+                "type": "text",
+                "order": 1,
+                "hidden": False,
+                "muted": False,
+                "elements": [
+                    {
+                        "id": "element-text",
+                        "type": "text",
+                        "target_time": {"start_ms": 0, "end_ms": 5000},
+                        "inline_text": "Title",
+                        "style": {
+                            "font_type": (
+                                "https://fonts.example.com/title.ttf?version=1"
+                            ),
+                            "font_size": 48,
+                            "color": "#FFFFFFFF",
+                        },
+                    }
+                ],
+            },
         ],
         "duration_ms": 5000,
         "width": 1920,

@@ -20,6 +20,7 @@ import {
 import {
   aigcNodeDefaultSize,
   aigcNodeInitialPosition,
+  aigcNodePositionFromCenter,
   normalizeAigcNodeSize
 } from "@/lib/aigc/node-layout";
 import {
@@ -58,6 +59,7 @@ export interface AigcServerRevision extends AigcEditorSnapshot {
 export interface AigcResolvedServerRevision {
   draft: AigcEditorSnapshot;
   dirty: boolean;
+  authoritativeNodeNames?: ReadonlyMap<string, string>;
 }
 
 export interface AigcEditorState extends AigcEditorSnapshot {
@@ -66,9 +68,11 @@ export interface AigcEditorState extends AigcEditorSnapshot {
   future: AigcEditorSnapshot[];
   mode: "pipeline" | "template";
   past: AigcEditorSnapshot[];
+  renamingNodeId: string | null;
   revision: number;
   selectedNodeId: string | null;
-  addNode: (type: AigcV2NodeType) => void;
+  addNode: (type: AigcV2NodeType, centerPosition?: AigcPoint) => void;
+  applyGeneratedNodeNames: (names: ReadonlyMap<string, string>) => void;
   applyOptimizedTextPrompt: (
     nodeId: string,
     expected: TextConfig,
@@ -95,9 +99,11 @@ export interface AigcEditorState extends AigcEditorSnapshot {
   removeEdge: (edgeId: string) => void;
   removeNode: (nodeId: string) => void;
   resizeNode: (nodeId: string, size: AigcSize) => void;
+  setRenamingNodeId: (nodeId: string | null) => void;
   selectNode: (nodeId: string | null) => void;
   setDescription: (description: string) => void;
   setName: (name: string) => void;
+  setNodeCustomName: (nodeId: string, customName: string | null) => void;
   setViewport: (viewport: AigcPipelineDefinition["viewport"]) => void;
   setImageBboxBindings: (
     imageNodeId: string,
@@ -161,6 +167,7 @@ export function createAigcEditorStore(
   mode: initialState.mode,
   name: initialState.name,
   past: [],
+  renamingNodeId: null,
   revision: initialState.revision,
   selectedNodeId: null,
 
@@ -172,6 +179,7 @@ export function createAigcEditorStore(
       dirty: false,
       future: [],
       past: [],
+      renamingNodeId: null,
       selectedNodeId: null
     });
   },
@@ -187,7 +195,12 @@ export function createAigcEditorStore(
         : remote);
     const dirty = resolved?.dirty ?? state.dirty;
     const rebaseHistory = (item: AigcEditorSnapshot) =>
-      mergeAigcServerRevision(serverSnapshot, item, remote);
+      mergeAigcServerRevision(
+        serverSnapshot,
+        item,
+        remote,
+        resolved?.authoritativeNodeNames
+      );
     serverSnapshot = remote;
     set({
       ...structuredClone(next),
@@ -204,6 +217,7 @@ export function createAigcEditorStore(
     return "applied";
   },
   selectNode: (selectedNodeId) => set({ selectedNodeId }),
+  setRenamingNodeId: (renamingNodeId) => set({ renamingNodeId }),
   markSaved: (revision) => {
     const state = get();
     serverSnapshot = snapshot(state);
@@ -225,15 +239,63 @@ export function createAigcEditorStore(
         dirty: true
       };
     }),
-  addNode: (type) => {
+  addNode: (type, centerPosition) => {
     const state = get();
-    const node = createNode(type, state.definition.nodes.length);
+    const node = createNode(
+      type,
+      state.definition.nodes.length,
+      centerPosition
+    );
     commit(set, get, {
       definition: {
         ...state.definition,
         nodes: [...state.definition.nodes, node]
       },
       selectedNodeId: node.id
+    });
+  },
+  applyGeneratedNodeNames: (names) => {
+    if (names.size === 0) return;
+    const state = get();
+    const applyNames = (definition: AigcPipelineDefinitionV2) => ({
+      ...definition,
+      nodes: definition.nodes.map((node) => {
+        const name = names.get(node.id);
+        return name === undefined ? node : { ...node, custom_name: name };
+      })
+    });
+    const definition = applyNames(state.definition);
+    if (definition.nodes.every(
+      (node, index) =>
+        node.custom_name === state.definition.nodes[index]?.custom_name
+    )) {
+      return;
+    }
+    set({
+      definition,
+      dirty: true,
+      future: state.future.map((item) => ({
+        ...item,
+        definition: applyNames(item.definition)
+      })),
+      past: state.past.map((item) => ({
+        ...item,
+        definition: applyNames(item.definition)
+      }))
+    });
+  },
+  setNodeCustomName: (nodeId, customName) => {
+    const state = get();
+    const normalized = normalizeCustomName(customName);
+    const current = state.definition.nodes.find((node) => node.id === nodeId);
+    if (!current || (current.custom_name ?? null) === normalized) return;
+    commit(set, get, {
+      definition: {
+        ...state.definition,
+        nodes: state.definition.nodes.map((node) =>
+          node.id === nodeId ? { ...node, custom_name: normalized } : node
+        )
+      }
     });
   },
   moveNode: (nodeId, position) => {
@@ -633,13 +695,15 @@ function normalizeEditorSnapshot(source: {
 export function mergeAigcServerRevision(
   base: Readonly<AigcEditorSnapshot>,
   local: Readonly<AigcEditorSnapshot>,
-  server: Readonly<AigcEditorSnapshot>
+  server: Readonly<AigcEditorSnapshot>,
+  authoritativeNodeNames: ReadonlyMap<string, string> = new Map()
 ): AigcEditorSnapshot {
   return {
     definition: mergeAigcServerDefinition(
       base.definition,
       local.definition,
-      server.definition
+      server.definition,
+      authoritativeNodeNames
     ),
     description: local.description,
     name: local.name
@@ -649,7 +713,8 @@ export function mergeAigcServerRevision(
 function mergeAigcServerDefinition(
   base: Readonly<AigcPipelineDefinitionV2>,
   local: Readonly<AigcPipelineDefinitionV2>,
-  server: Readonly<AigcPipelineDefinitionV2>
+  server: Readonly<AigcPipelineDefinitionV2>,
+  authoritativeNodeNames: ReadonlyMap<string, string>
 ): AigcPipelineDefinitionV2 {
   const baseManaged = new Map(
     base.nodes.flatMap((node) => {
@@ -664,6 +729,7 @@ function mergeAigcServerDefinition(
     })
   );
   const localById = new Map(local.nodes.map((node) => [node.id, node]));
+  const serverById = new Map(server.nodes.map((node) => [node.id, node]));
   const deletedManagedKeys = new Set(
     [...baseManaged].flatMap(([key]) =>
       localManaged.has(key) ? [] : [key]
@@ -686,7 +752,20 @@ function mergeAigcServerDefinition(
   const managedIdRemap = new Map<string, string>();
   const nodes = local.nodes.flatMap((node) => {
     const key = managedNodeKey(node);
-    if (!key) return [structuredClone(node)];
+    if (!key) {
+      const remoteNode = serverById.get(node.id);
+      return [
+        {
+          ...structuredClone(node),
+          custom_name:
+            authoritativeNodeNames.get(node.id) ??
+            (authoritativeNodeNames.has(node.id) && remoteNode
+              ? remoteNode.custom_name ?? null
+              : node.custom_name ?? null
+            )
+        } as AigcV2Node
+      ];
+    }
     const remoteNode = serverManaged.get(key);
     if (!remoteNode || deletedManagedKeys.has(key)) return [];
     consumedManagedKeys.add(key);
@@ -695,6 +774,11 @@ function mergeAigcServerDefinition(
     return [
       {
         ...structuredClone(remoteNode),
+        custom_name: authoritativeNodeNames.has(node.id)
+          ? authoritativeNodeNames.get(node.id) ??
+            remoteNode.custom_name ??
+            null
+          : node.custom_name ?? null,
         position: structuredClone(
           baseNode && pointsEqual(node.position, baseNode.position)
             ? remoteNode.position
@@ -882,13 +966,17 @@ function normalizeDefinition(
 
 function createNode(
   type: AigcV2NodeType,
-  index: number
+  index: number,
+  centerPosition?: AigcPoint
 ): AigcV2Node {
   const nodeType = type;
   const id = `${nodeType}-${globalThis.crypto.randomUUID()}`;
   const common = {
     id,
-    position: aigcNodeInitialPosition(nodeType, index),
+    custom_name: null,
+    position: centerPosition
+      ? aigcNodePositionFromCenter(nodeType, centerPosition)
+      : aigcNodeInitialPosition(nodeType, index),
     size: aigcNodeDefaultSize(nodeType)
   };
 
@@ -957,6 +1045,13 @@ function createNode(
       config: structuredClone(AIGC_DEFAULT_VIDEO_FACE_BLUR_CONFIG)
     };
   }
+  if (nodeType === "video_subtitle_extraction") {
+    return {
+      ...common,
+      type: nodeType,
+      config: { mode: "Subtitle" }
+    };
+  }
   if (nodeType === "multi_track_edit") {
     return {
       ...common,
@@ -998,6 +1093,19 @@ function createNode(
         : {})
     }
   } as AigcV2Node;
+}
+
+function normalizeCustomName(value: string | null): string | null {
+  if (value === null) return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (
+    normalized.length > 120 ||
+    /[\u0000-\u001f\u007f]/.test(normalized)
+  ) {
+    throw new Error("节点名称必须为不超过 120 个字符的单行文本");
+  }
+  return normalized;
 }
 
 export function deriveAigcModalityNodeMode(

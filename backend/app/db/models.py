@@ -683,6 +683,11 @@ class AigcPipelineORM(Base):
         nullable=True,
         index=True,
     )
+    thumbnail_asset_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

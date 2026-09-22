@@ -5,7 +5,10 @@ import pytest
 from backend.app.aigc_run_scope import (
     AigcDagValidationError as ScopeValidationError,
     aigc_connected_node_ids as scope_connected_node_ids,
-    aigc_run_scope_node_ids as scope_run_node_ids,
+    aigc_downstream_node_ids as scope_downstream_node_ids,
+    aigc_projection_node_ids as scope_projection_node_ids,
+    aigc_run_conflict_node_ids as scope_run_conflict_node_ids,
+    aigc_run_projection_node_ids as scope_run_projection_node_ids,
 )
 from backend.app.schemas import (
     AigcNodeType,
@@ -19,7 +22,10 @@ from backend.app.services.aigc_dag import (
     AigcPlanAction,
     AigcUpstreamDigest,
     aigc_connected_node_ids,
-    aigc_run_scope_node_ids,
+    aigc_downstream_node_ids,
+    aigc_projection_node_ids,
+    aigc_run_conflict_node_ids,
+    aigc_run_projection_node_ids,
     build_aigc_execution_plan,
     canonical_aigc_input_hash,
     validate_aigc_dag,
@@ -30,7 +36,10 @@ from backend.app.services.aigc_dag import (
 def test_aigc_dag_reexports_repository_neutral_scope_api() -> None:
     assert AigcDagValidationError is ScopeValidationError
     assert aigc_connected_node_ids is scope_connected_node_ids
-    assert aigc_run_scope_node_ids is scope_run_node_ids
+    assert aigc_downstream_node_ids is scope_downstream_node_ids
+    assert aigc_projection_node_ids is scope_projection_node_ids
+    assert aigc_run_conflict_node_ids is scope_run_conflict_node_ids
+    assert aigc_run_projection_node_ids is scope_run_projection_node_ids
 
 
 def node(node_id: str, node_type: str, x: int, *, config=None):
@@ -143,6 +152,26 @@ def disconnected_definition() -> AigcPipelineDefinitionV2:
     )
 
 
+def shared_upstream_branch_definition() -> AigcPipelineDefinitionV2:
+    return v2_definition(
+        [
+            node("root", "text", 0),
+            node("shared", "text", 200),
+            node("branch-a", "text", 400),
+            node("output-a", "text", 600),
+            node("branch-b", "text", 400),
+            node("output-b", "text", 600),
+        ],
+        [
+            edge("root-shared", "root", "text", "shared", "text"),
+            edge("shared-a", "shared", "text", "branch-a", "text"),
+            edge("a-output", "branch-a", "text", "output-a", "text"),
+            edge("shared-b", "shared", "text", "branch-b", "text"),
+            edge("b-output", "branch-b", "text", "output-b", "text"),
+        ],
+    )
+
+
 def test_aigc_connected_node_ids_handles_chains_branches_and_isolated_nodes() -> None:
     definition = disconnected_definition()
 
@@ -174,48 +203,108 @@ def test_aigc_connected_node_ids_canonicalizes_legacy_definition() -> None:
     ) == frozenset({"input", "llm", "image", "output"})
 
 
-@pytest.mark.parametrize(
-    ("mode", "start_node_id", "expected"),
-    [
-        (
-            AigcPipelineRunMode.FROM_NODE,
-            "flow-a-output",
-            frozenset(
-                {
-                    "flow-a-input",
-                    "flow-a-model",
-                    "flow-a-output",
-                    "flow-a-branch",
-                }
+def test_aigc_branch_scopes_separate_conflicts_from_projection() -> None:
+    definition = shared_upstream_branch_definition()
+
+    assert aigc_downstream_node_ids(
+        definition,
+        "branch-a",
+    ) == frozenset({"branch-a", "output-a"})
+    assert aigc_projection_node_ids(
+        definition,
+        "branch-a",
+    ) == frozenset({"root", "shared", "branch-a", "output-a"})
+    assert aigc_run_conflict_node_ids(
+        definition,
+        mode=AigcPipelineRunMode.FROM_NODE,
+        start_node_id="branch-b",
+    ) == frozenset({"branch-b", "output-b"})
+    assert aigc_run_projection_node_ids(
+        definition,
+        mode=AigcPipelineRunMode.RETRY_NODE,
+        start_node_id="branch-b",
+    ) == frozenset({"root", "shared", "branch-b", "output-b"})
+
+
+def test_aigc_shared_upstream_scope_conflicts_with_every_branch() -> None:
+    definition = shared_upstream_branch_definition()
+
+    assert aigc_run_conflict_node_ids(
+        definition,
+        mode=AigcPipelineRunMode.FROM_NODE,
+        start_node_id="shared",
+    ) == frozenset(
+        {"shared", "branch-a", "output-a", "branch-b", "output-b"}
+    )
+
+
+def test_local_validation_ignores_invalid_sibling_configuration() -> None:
+    definition = v2_definition(
+        [
+            node("root", "text", 0),
+            node("shared", "llm", 200),
+            node("branch-a", "llm", 400),
+            node("invalid-branch-b", "image_to_image", 400),
+        ],
+        [
+            edge("root-shared", "root", "text", "shared", "prompt"),
+            edge("shared-a", "shared", "text", "branch-a", "prompt"),
+            edge(
+                "shared-b",
+                "shared",
+                "text",
+                "invalid-branch-b",
+                "prompt",
             ),
-        ),
-        (
-            AigcPipelineRunMode.RETRY_NODE,
-            "flow-b-model",
-            frozenset({"flow-b-input", "flow-b-model"}),
-        ),
-    ],
-)
-def test_aigc_partial_run_scope_uses_undirected_connected_component(
-    mode: AigcPipelineRunMode,
-    start_node_id: str,
-    expected: frozenset[str],
-) -> None:
-    assert aigc_run_scope_node_ids(
-        disconnected_definition(),
-        mode=mode,
-        start_node_id=start_node_id,
-    ) == expected
+        ],
+    )
+
+    with pytest.raises(AigcDagValidationError) as error:
+        validate_aigc_dag(definition)
+    assert error.value.code == "required_input_missing"
+    assert error.value.node_id == "invalid-branch-b"
+
+    projection = aigc_projection_node_ids(definition, "branch-a")
+    assert validate_aigc_dag(
+        definition,
+        validation_node_ids=projection,
+    )[-1] == "invalid-branch-b"
+
+
+def test_local_validation_still_rejects_sibling_structure_errors() -> None:
+    definition = shared_upstream_branch_definition()
+    definition.edges[-1] = definition.edges[-1].model_copy(
+        update={"source_handle": "missing-output"}
+    )
+
+    with pytest.raises(AigcDagValidationError) as error:
+        validate_aigc_dag(
+            definition,
+            require_complete=False,
+            validation_node_ids=aigc_projection_node_ids(
+                definition,
+                "branch-a",
+            ),
+        )
+
+    assert error.value.code == "source_port_missing"
+    assert error.value.edge_id == "b-output"
 
 
 def test_aigc_full_run_scope_contains_every_node() -> None:
     definition = disconnected_definition()
+    expected = frozenset(node.id for node in definition.nodes)
 
-    assert aigc_run_scope_node_ids(
+    assert aigc_run_conflict_node_ids(
         definition,
         mode=AigcPipelineRunMode.FULL,
         start_node_id=None,
-    ) == frozenset(node.id for node in definition.nodes)
+    ) == expected
+    assert aigc_run_projection_node_ids(
+        definition,
+        mode=AigcPipelineRunMode.FULL,
+        start_node_id=None,
+    ) == expected
 
 
 @pytest.mark.parametrize(
@@ -227,12 +316,17 @@ def test_aigc_full_run_scope_contains_every_node() -> None:
         (AigcPipelineRunMode.RETRY_NODE, "missing"),
     ],
 )
+@pytest.mark.parametrize(
+    "scope",
+    [aigc_run_conflict_node_ids, aigc_run_projection_node_ids],
+)
 def test_aigc_run_scope_rejects_missing_start_node(
+    scope,
     mode: AigcPipelineRunMode,
     start_node_id: str | None,
 ) -> None:
     with pytest.raises(AigcDagValidationError) as error:
-        aigc_run_scope_node_ids(
+        scope(
             disconnected_definition(),
             mode=mode,
             start_node_id=start_node_id,
@@ -435,6 +529,62 @@ def test_validate_aigc_dag_rejects_invalid_ports_and_duplicate_inputs() -> None:
     with pytest.raises(AigcDagValidationError) as duplicate_error:
         validate_aigc_dag(duplicate)
     assert duplicate_error.value.code == "input_already_connected"
+
+
+def test_llm_accepts_one_optional_image_input_and_rejects_duplicates() -> None:
+    definition = AigcPipelineDefinition.model_validate(
+        {
+            "nodes": [
+                node("prompt", "text_input", 0, config={"text": "分析图片"}),
+                node(
+                    "image",
+                    "image_input",
+                    0,
+                    config={"asset_id": "asset-image"},
+                ),
+                node("llm", "llm", 300),
+            ],
+            "edges": [
+                edge("prompt-edge", "prompt", "text", "llm", "prompt"),
+                edge("image-edge", "image", "image", "llm", "image"),
+            ],
+        }
+    )
+
+    assert validate_aigc_dag(
+        definition,
+        available_asset_ids={"asset-image"},
+    ) == ("prompt", "image", "llm")
+
+    duplicate = AigcPipelineDefinition.model_validate(
+        {
+            "nodes": [
+                *[
+                    item.model_dump(mode="json", by_alias=True)
+                    for item in definition.nodes
+                ],
+                node(
+                    "image-two",
+                    "image_input",
+                    0,
+                    config={"asset_id": "asset-image-two"},
+                ),
+            ],
+            "edges": [
+                *[
+                    item.model_dump(mode="json", by_alias=True)
+                    for item in definition.edges
+                ],
+                edge("image-two-edge", "image-two", "image", "llm", "image"),
+            ],
+        }
+    )
+    with pytest.raises(AigcDagValidationError) as error:
+        validate_aigc_dag(
+            duplicate,
+            available_asset_ids={"asset-image", "asset-image-two"},
+        )
+    assert error.value.code == "input_already_connected"
 
 
 def test_v2_modality_nodes_participate_in_topology_but_not_execution() -> None:

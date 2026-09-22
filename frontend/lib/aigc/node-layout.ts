@@ -54,3 +54,15 @@ export function aigcNodeInitialPosition(
     y: 80 + Math.floor(index / columns) * rowGap
   };
 }
+
+export function aigcNodePositionFromCenter(
+  type: SupportedNodeType,
+  center: { x: number; y: number }
+): { x: number; y: number } {
+  const size = aigcNodeDefaultSize(type);
+  const snap = (value: number) => Math.round(value / 16) * 16;
+  return {
+    x: snap(center.x - size.width / 2),
+    y: snap(center.y - size.height / 2)
+  };
+}

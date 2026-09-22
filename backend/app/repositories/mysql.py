@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
-from backend.app.aigc_run_scope import aigc_run_scope_node_ids
+from backend.app.aigc_run_scope import aigc_run_conflict_node_ids
 from backend.app.db.models import (
     AigcPipelineAssetORM,
     AigcPipelineORM,
@@ -32,6 +32,7 @@ from backend.app.db.models import (
 )
 from backend.app.db.session import get_engine, make_session_factory
 from backend.app.schemas import (
+    AIGC_GENERATED_MEDIA_NAMING_MODEL,
     AigcAssetDirection,
     AigcPipeline,
     AigcPipelineAssetReference,
@@ -101,6 +102,11 @@ from backend.app.schemas import (
     VideoInputNode,
     VideoNode,
 )
+from backend.app.services.aigc_asset_naming import (
+    aigc_generated_media_name_target_node_ids,
+    aigc_generated_output_metadata,
+    aigc_node_display_name,
+)
 from backend.app.schemas.brief import Brief
 from backend.app.schemas.common import utc_now
 from backend.app.schemas.enums import Stage, Status, ToolTaskType
@@ -111,6 +117,7 @@ from backend.app.video_prompt import (
 
 from .base import (
     ActiveRunConflictError,
+    AigcPipelineThumbnailOutput,
     AssetReferenceConflictError,
     NotFoundError,
     PipelineRunConflictError,
@@ -256,6 +263,7 @@ class MySQLRepository:
                 schema_version=pipeline.definition.schema_version,
                 revision=pipeline.revision,
                 latest_run_status=pipeline.latest_run_status,
+                thumbnail_asset_id=pipeline.thumbnail_asset_id,
                 created_at=pipeline.created_at,
                 updated_at=pipeline.updated_at,
             )
@@ -348,6 +356,105 @@ class MySQLRepository:
                 session,
                 pipeline_id,
                 references,
+            )
+            session.flush()
+            return self._aigc_pipeline_from_orm(pipeline)
+
+    def update_aigc_pipeline_thumbnail(
+        self,
+        pipeline_id: str,
+        *,
+        asset_id: str | None,
+    ) -> AigcPipeline:
+        with self._session_factory.begin() as session:
+            pipeline = session.scalar(
+                select(AigcPipelineORM)
+                .where(
+                    AigcPipelineORM.id == pipeline_id,
+                    AigcPipelineORM.deleted_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if pipeline is None:
+                raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+            pipeline.thumbnail_asset_id = asset_id
+            pipeline.updated_at = utc_now()
+            session.flush()
+            return self._aigc_pipeline_from_orm(pipeline)
+
+    def list_aigc_pipeline_thumbnail_outputs(
+        self,
+        pipeline_ids: Iterable[str],
+    ) -> dict[str, list[AigcPipelineThumbnailOutput]]:
+        requested_ids = set(pipeline_ids)
+        if not requested_ids:
+            return {}
+        statement = (
+            select(
+                AigcPipelineRunORM.pipeline_id,
+                AigcPipelineRunORM.id,
+                AigcPipelineTaskORM.node_id,
+                AssetORM,
+            )
+            .join(
+                AigcPipelineTaskAssetORM,
+                AigcPipelineTaskAssetORM.asset_id == AssetORM.id,
+            )
+            .join(
+                AigcPipelineTaskORM,
+                AigcPipelineTaskORM.id == AigcPipelineTaskAssetORM.task_id,
+            )
+            .join(
+                AigcPipelineRunORM,
+                AigcPipelineRunORM.id == AigcPipelineTaskORM.run_id,
+            )
+            .join(
+                AigcPipelineORM,
+                AigcPipelineORM.id == AigcPipelineRunORM.pipeline_id,
+            )
+            .where(
+                AigcPipelineRunORM.pipeline_id.in_(requested_ids),
+                AigcPipelineORM.deleted_at.is_(None),
+                AigcPipelineTaskAssetORM.direction == AigcAssetDirection.OUTPUT,
+                AigcPipelineRunORM.status == AigcPipelineRunStatus.SUCCEEDED,
+                AssetORM.status == Status.SUCCEEDED,
+                AssetORM.asset_role == AssetRole.PUBLIC,
+                or_(
+                    AssetORM.mime_type.like("image/%"),
+                    AssetORM.mime_type.like("video/%"),
+                ),
+            )
+            .order_by(
+                AigcPipelineRunORM.pipeline_id,
+                AssetORM.created_at.desc(),
+                AssetORM.id.desc(),
+            )
+        )
+        outputs = {pipeline_id: [] for pipeline_id in requested_ids}
+        with self._session_factory() as session:
+            for pipeline_id, run_id, node_id, asset in session.execute(statement):
+                outputs[pipeline_id].append(
+                    AigcPipelineThumbnailOutput(
+                        pipeline_id=pipeline_id,
+                        run_id=run_id,
+                        node_id=node_id,
+                        asset=self._asset_from_orm(asset),
+                    )
+                )
+        return outputs
+
+    def patch_aigc_pipeline_node_custom_name(
+        self,
+        pipeline_id: str,
+        node_id: str,
+        custom_name: str,
+    ) -> AigcPipeline:
+        with self._session_factory.begin() as session:
+            pipeline = self._lock_aigc_pipeline(session, pipeline_id)
+            self._patch_aigc_pipeline_node_custom_names_orm(
+                pipeline,
+                (node_id,),
+                custom_name,
             )
             session.flush()
             return self._aigc_pipeline_from_orm(pipeline)
@@ -461,14 +568,14 @@ class MySQLRepository:
                     AigcPipelineRunORM.status.in_(ACTIVE_AIGC_RUN_STATUSES),
                 )
             ).all()
-            candidate_scope = aigc_run_scope_node_ids(
+            candidate_scope = aigc_run_conflict_node_ids(
                 run.definition_snapshot,
                 mode=run.mode,
                 start_node_id=run.start_node_id,
             )
             for active_orm in active_runs:
                 active_run = self._aigc_run_from_orm(active_orm)
-                active_scope = aigc_run_scope_node_ids(
+                active_scope = aigc_run_conflict_node_ids(
                     active_run.definition_snapshot,
                     mode=active_run.mode,
                     start_node_id=active_run.start_node_id,
@@ -916,6 +1023,132 @@ class MySQLRepository:
             run_node.updated_at = now
             session.flush()
             return self._aigc_task_from_orm(session, task), accepted
+
+    def commit_aigc_generated_media_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+        result: AigcTaskResult,
+        metrics: AigcTaskMetrics,
+    ) -> tuple[AigcPipelineTaskAttempt, bool]:
+        with self._session_factory.begin() as session:
+            lease = session.get(AigcPipelineWorkerLeaseORM, "aigc_scheduler")
+            task = session.scalar(
+                select(AigcPipelineTaskORM)
+                .where(AigcPipelineTaskORM.id == task_id)
+                .with_for_update()
+            )
+            if task is None:
+                raise NotFoundError(f"AIGC task not found: {task_id}")
+            if (
+                lease is None
+                or lease.fencing_token != fencing_token
+                or task.fencing_token != fencing_token
+                or task.status != AigcTaskStatus.RUNNING
+            ):
+                return self._aigc_task_from_orm(session, task), False
+            run = session.scalar(
+                select(AigcPipelineRunORM)
+                .where(AigcPipelineRunORM.id == task.run_id)
+                .with_for_update()
+            )
+            assert run is not None
+            if run.cancellation_requested:
+                now = utc_now()
+                task.status = AigcTaskStatus.CANCELED
+                task.result_json = AigcTaskResult().model_dump(mode="json")
+                task.error_json = None
+                task.metrics_json = metrics.model_dump(mode="json")
+                task.finished_at = now
+                task.updated_at = now
+                run_node = session.get(
+                    AigcPipelineRunNodeORM,
+                    (task.run_id, task.node_id),
+                )
+                assert run_node is not None
+                run_node.status = AigcRunNodeStatus.CANCELED
+                run_node.result_json = AigcTaskResult().model_dump(mode="json")
+                run_node.error_json = None
+                run_node.updated_at = now
+                session.flush()
+                return self._aigc_task_from_orm(session, task), False
+
+            naming = result.naming
+            if naming is None:
+                raise ValueError("generated media result requires naming metadata")
+            pipeline = self._lock_aigc_pipeline(session, run.pipeline_id)
+            generated_name = naming.name
+            target_node_ids = aigc_generated_media_name_target_node_ids(
+                run.definition_snapshot,
+                task.node_id,
+            )
+            if generated_name is not None:
+                self._patch_aigc_pipeline_node_custom_names_orm(
+                    pipeline,
+                    target_node_ids,
+                    generated_name,
+                )
+            current_pipeline = self._aigc_pipeline_from_orm(pipeline)
+            node_name = aigc_node_display_name(
+                current_pipeline.definition,
+                target_node_ids[0],
+            )
+            output_references = session.scalars(
+                select(AigcPipelineTaskAssetORM)
+                .where(
+                    AigcPipelineTaskAssetORM.task_id == task_id,
+                    AigcPipelineTaskAssetORM.direction
+                    == AigcAssetDirection.OUTPUT,
+                )
+                .order_by(
+                    AigcPipelineTaskAssetORM.slot,
+                    AigcPipelineTaskAssetORM.ordinal,
+                )
+                .with_for_update()
+            ).all()
+            for reference in output_references:
+                asset = session.scalar(
+                    select(AssetORM)
+                    .where(AssetORM.id == reference.asset_id)
+                    .with_for_update()
+                )
+                if asset is None or asset.mime_type is None:
+                    raise NotFoundError(f"asset not found: {reference.asset_id}")
+                asset.status = Status.SUCCEEDED
+                asset.metadata_json = {
+                    **(asset.metadata_json or {}),
+                    **aigc_generated_output_metadata(
+                        node_name=node_name,
+                        generated_name=generated_name,
+                        display_node_id=target_node_ids[0],
+                        naming_model=AIGC_GENERATED_MEDIA_NAMING_MODEL,
+                        naming_status=naming.status.value,
+                        mime_type=asset.mime_type,
+                        output_ordinal=reference.ordinal,
+                    ),
+                }
+                asset.updated_at = utc_now()
+
+            now = utc_now()
+            task.status = AigcTaskStatus.SUCCEEDED
+            task.progress = 100
+            task.result_json = result.model_dump(mode="json")
+            task.error_json = None
+            task.metrics_json = metrics.model_dump(mode="json")
+            task.finished_at = now
+            task.updated_at = now
+            run_node = session.get(
+                AigcPipelineRunNodeORM,
+                (task.run_id, task.node_id),
+            )
+            assert run_node is not None
+            run_node.status = AigcRunNodeStatus.SUCCEEDED
+            run_node.result_json = result.model_dump(mode="json")
+            run_node.error_json = None
+            run_node.updated_at = now
+            session.flush()
+            return self._aigc_task_from_orm(session, task), True
 
     def commit_aigc_json_parser_task_attempt(
         self,
@@ -3090,6 +3323,54 @@ class MySQLRepository:
         task.error_detail = error.detail if error is not None else None
 
     @staticmethod
+    def _lock_aigc_pipeline(
+        session: Session,
+        pipeline_id: str,
+    ) -> AigcPipelineORM:
+        pipeline = session.scalar(
+            select(AigcPipelineORM)
+            .where(
+                AigcPipelineORM.id == pipeline_id,
+                AigcPipelineORM.deleted_at.is_(None),
+            )
+            .with_for_update()
+        )
+        if pipeline is None:
+            raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+        return pipeline
+
+    @staticmethod
+    def _patch_aigc_pipeline_node_custom_names_orm(
+        pipeline: AigcPipelineORM,
+        node_ids: Iterable[str],
+        custom_name: str,
+    ) -> None:
+        current = MySQLRepository._aigc_pipeline_from_orm(pipeline)
+        target_ids = set(node_ids)
+        nodes = [
+            node.model_copy(update={"custom_name": custom_name}, deep=True)
+            if node.id in target_ids
+            else node
+            for node in current.definition.nodes
+        ]
+        missing_ids = target_ids.difference(node.id for node in current.definition.nodes)
+        if missing_ids:
+            raise NotFoundError(
+                f"AIGC pipeline nodes not found: {sorted(missing_ids)!r}"
+            )
+        definition = current.definition.model_copy(
+            update={"nodes": nodes},
+            deep=True,
+        )
+        pipeline.definition_json = definition.model_dump(
+            mode="json",
+            by_alias=True,
+        )
+        pipeline.schema_version = definition.schema_version
+        pipeline.revision += 1
+        pipeline.updated_at = utc_now()
+
+    @staticmethod
     def _aigc_template_from_orm(
         template: AigcPipelineTemplateORM,
     ) -> AigcPipelineTemplate:
@@ -3114,6 +3395,7 @@ class MySQLRepository:
             definition=pipeline.definition_json,
             revision=pipeline.revision,
             latest_run_status=pipeline.latest_run_status,
+            thumbnail_asset_id=pipeline.thumbnail_asset_id,
             created_at=pipeline.created_at,
             updated_at=pipeline.updated_at,
         )

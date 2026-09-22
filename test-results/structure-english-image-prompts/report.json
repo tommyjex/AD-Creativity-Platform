@@ -1,0 +1,1557 @@
+{
+  "fixture": {
+    "pipeline_id": "2f546851-43cf-48c4-8ad1-1e38d699a1d5",
+    "pipeline_name": "[临时验收 6.3-6.5] 2026-09-07T09:55:40+00:00",
+    "schema_version": 2,
+    "asset_id": "7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5",
+    "url": "http://127.0.0.1:3000/workspace/aigc/acceptance?pipelineId=2f546851-43cf-48c4-8ad1-1e38d699a1d5",
+    "deleted": true
+  },
+  "provider": {
+    "type": "MockModelArkAdapter",
+    "endpoint": "http://127.0.0.1:8001",
+    "real_billing_disabled": true
+  },
+  "viewports": {
+    "desktop": {
+      "size": [
+        1440,
+        900
+      ],
+      "reconnaissance": {
+        "node_titles": [
+          "文本节点1",
+          "文生图1",
+          "文本节点2",
+          "文生图2",
+          "图片节点1",
+          "文本节点3",
+          "图片编辑",
+          "图片节点2",
+          "文本节点4",
+          "图生图"
+        ],
+        "button_count": 26,
+        "textarea_count": 4
+      },
+      "assertions": {
+        "indoor_labels": [
+          "Product",
+          "People",
+          "Animals",
+          "Space",
+          "Environment",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "product_labels": [
+          "Product",
+          "Environment",
+          "Lighting",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "edit_labels": [
+          "Reference Usage",
+          "Edit Instructions",
+          "Preserve",
+          "Product",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "bbox_labels": [
+          "Reference Usage",
+          "Target Changes",
+          "Product",
+          "People",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "protected_literals": [
+          "“家庭清洁专家”",
+          "ACME",
+          "ZX-9",
+          "Image 1 <bbox> 100 200 700 800 </bbox>"
+        ],
+        "bbox_coordinates": [
+          100,
+          200,
+          700,
+          800
+        ],
+        "bbox_api_reference": "Reduce the selected subject; preserve its specified appearance and position; preserve the requested people; keep Image 1 <bbox> 100 200 700 800 </bbox> unchanged. Keep the specified blue color. Preserve Image 1 exactly.",
+        "mock_optimization_count": 5,
+        "line_counts": {
+          "indoor": 7,
+          "product": 5,
+          "image_edit": 6,
+          "bbox": 6
+        },
+        "product_people_absent": true,
+        "layouts": {
+          "indoor": {
+            "dialog_box": {
+              "x": 432,
+              "y": 221.5,
+              "width": 576,
+              "height": 457
+            },
+            "footer_box": {
+              "x": 433,
+              "y": 608.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 308,
+              "clientWidth": 574,
+              "scrollHeight": 308,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "product": {
+            "dialog_box": {
+              "x": 432,
+              "y": 211.5,
+              "width": 576,
+              "height": 477
+            },
+            "footer_box": {
+              "x": 433,
+              "y": 618.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 328,
+              "clientWidth": 574,
+              "scrollHeight": 328,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "image_edit": {
+            "dialog_box": {
+              "x": 432,
+              "y": 221.5,
+              "width": 576,
+              "height": 457
+            },
+            "footer_box": {
+              "x": 433,
+              "y": 608.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 308,
+              "clientWidth": 574,
+              "scrollHeight": 308,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "bbox": {
+            "dialog_box": {
+              "x": 432,
+              "y": 221.5,
+              "width": 576,
+              "height": 457
+            },
+            "footer_box": {
+              "x": 433,
+              "y": 608.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 308,
+              "clientWidth": 574,
+              "scrollHeight": 308,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "final_dialog": {
+            "dialog_box": {
+              "x": 432,
+              "y": 192.5,
+              "width": 576,
+              "height": 515
+            },
+            "footer_box": {
+              "x": 433,
+              "y": 637.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 366,
+              "clientWidth": 574,
+              "scrollHeight": 366,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          }
+        },
+        "generation_requests": [],
+        "optimization_requests": [
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          }
+        ],
+        "network_requests": [
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/workspace/aigc/acceptance?pipelineId=2f546851-43cf-48c4-8ad1-1e38d699a1d5"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/app_globals_0yg4wg8.css"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_%40xyflow_react_dist_style_0w-ra00.css"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1di75ot._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_1amofcm._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_%40swc_helpers_cjs_1r9vbqw._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1anvha4._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/turbopack-_08bm286._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1jg_de3._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_0ebjzjj._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1ocjlma._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1obhz50._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/components_07v6wvf._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/lib_063rxjm._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_021u3hf._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1mojsay._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/aigc/pipelines/2f546851-43cf-48c4-8ad1-1e38d699a1d5/runs?page=1&page_size=100"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/tools/assets"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets/7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets/7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5/content"
+          },
+          {
+            "method": "PUT",
+            "url": "http://localhost:8000/api/aigc/pipelines/2f546851-43cf-48c4-8ad1-1e38d699a1d5"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets/7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          }
+        ],
+        "console_errors": [],
+        "page_errors": [],
+        "http_errors": []
+      },
+      "screenshots": [
+        "desktop-reconnaissance.png",
+        "desktop-optimized-dialog.png"
+      ]
+    },
+    "tablet": {
+      "size": [
+        1024,
+        768
+      ],
+      "reconnaissance": {
+        "node_titles": [
+          "文本节点1",
+          "文生图1",
+          "文本节点2",
+          "文生图2",
+          "图片节点1",
+          "文本节点3",
+          "图片编辑",
+          "图片节点2",
+          "文本节点4",
+          "图生图"
+        ],
+        "button_count": 26,
+        "textarea_count": 4
+      },
+      "assertions": {
+        "indoor_labels": [
+          "Product",
+          "People",
+          "Animals",
+          "Space",
+          "Environment",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "product_labels": [
+          "Product",
+          "Environment",
+          "Lighting",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "edit_labels": [
+          "Reference Usage",
+          "Edit Instructions",
+          "Preserve",
+          "Product",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "bbox_labels": [
+          "Reference Usage",
+          "Target Changes",
+          "Product",
+          "People",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "protected_literals": [
+          "“家庭清洁专家”",
+          "ACME",
+          "ZX-9",
+          "Image 1 <bbox> 100 200 700 800 </bbox>"
+        ],
+        "bbox_coordinates": [
+          100,
+          200,
+          700,
+          800
+        ],
+        "bbox_api_reference": "Reduce the selected subject; preserve its specified appearance and position; preserve the requested people; keep Image 1 <bbox> 100 200 700 800 </bbox> unchanged. Keep the specified blue color. Preserve Image 1 exactly.",
+        "mock_optimization_count": 5,
+        "line_counts": {
+          "indoor": 7,
+          "product": 5,
+          "image_edit": 6,
+          "bbox": 6
+        },
+        "product_people_absent": true,
+        "layouts": {
+          "indoor": {
+            "dialog_box": {
+              "x": 224,
+              "y": 155.5,
+              "width": 576,
+              "height": 457
+            },
+            "footer_box": {
+              "x": 225,
+              "y": 542.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 308,
+              "clientWidth": 574,
+              "scrollHeight": 308,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "product": {
+            "dialog_box": {
+              "x": 224,
+              "y": 145.5,
+              "width": 576,
+              "height": 477
+            },
+            "footer_box": {
+              "x": 225,
+              "y": 552.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 328,
+              "clientWidth": 574,
+              "scrollHeight": 328,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "image_edit": {
+            "dialog_box": {
+              "x": 224,
+              "y": 155.5,
+              "width": 576,
+              "height": 457
+            },
+            "footer_box": {
+              "x": 225,
+              "y": 542.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 308,
+              "clientWidth": 574,
+              "scrollHeight": 308,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "bbox": {
+            "dialog_box": {
+              "x": 224,
+              "y": 155.5,
+              "width": 576,
+              "height": 457
+            },
+            "footer_box": {
+              "x": 225,
+              "y": 542.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 308,
+              "clientWidth": 574,
+              "scrollHeight": 308,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "final_dialog": {
+            "dialog_box": {
+              "x": 224,
+              "y": 126.5,
+              "width": 576,
+              "height": 515
+            },
+            "footer_box": {
+              "x": 225,
+              "y": 571.5,
+              "width": 574,
+              "height": 69
+            },
+            "body": {
+              "clientHeight": 366,
+              "clientWidth": 574,
+              "scrollHeight": 366,
+              "scrollWidth": 574
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          }
+        },
+        "generation_requests": [],
+        "optimization_requests": [
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          }
+        ],
+        "network_requests": [
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/workspace/aigc/acceptance?pipelineId=2f546851-43cf-48c4-8ad1-1e38d699a1d5"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/app_globals_0yg4wg8.css"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_%40xyflow_react_dist_style_0w-ra00.css"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1di75ot._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_1amofcm._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_%40swc_helpers_cjs_1r9vbqw._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1anvha4._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/turbopack-_08bm286._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1jg_de3._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_0ebjzjj._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1ocjlma._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1obhz50._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/components_07v6wvf._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/lib_063rxjm._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_021u3hf._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1mojsay._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/aigc/pipelines/2f546851-43cf-48c4-8ad1-1e38d699a1d5/runs?page=1&page_size=100"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/tools/assets"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets/7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets/7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5/content"
+          },
+          {
+            "method": "PUT",
+            "url": "http://localhost:8000/api/aigc/pipelines/2f546851-43cf-48c4-8ad1-1e38d699a1d5"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets/7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          }
+        ],
+        "console_errors": [],
+        "page_errors": [],
+        "http_errors": []
+      },
+      "screenshots": [
+        "tablet-reconnaissance.png",
+        "tablet-optimized-dialog.png"
+      ]
+    },
+    "mobile": {
+      "size": [
+        390,
+        844
+      ],
+      "reconnaissance": {
+        "node_titles": [
+          "文本节点1",
+          "文生图1",
+          "文本节点2",
+          "文生图2",
+          "图片节点1",
+          "文本节点3",
+          "图片编辑",
+          "图片节点2",
+          "文本节点4",
+          "图生图"
+        ],
+        "button_count": 14,
+        "textarea_count": 4
+      },
+      "assertions": {
+        "indoor_labels": [
+          "Product",
+          "People",
+          "Animals",
+          "Space",
+          "Environment",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "product_labels": [
+          "Product",
+          "Environment",
+          "Lighting",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "edit_labels": [
+          "Reference Usage",
+          "Edit Instructions",
+          "Preserve",
+          "Product",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "bbox_labels": [
+          "Reference Usage",
+          "Target Changes",
+          "Product",
+          "People",
+          "Composition",
+          "Negative Prompt"
+        ],
+        "protected_literals": [
+          "“家庭清洁专家”",
+          "ACME",
+          "ZX-9",
+          "Image 1 <bbox> 100 200 700 800 </bbox>"
+        ],
+        "bbox_coordinates": [
+          100,
+          200,
+          700,
+          800
+        ],
+        "bbox_api_reference": "Reduce the selected subject; preserve its specified appearance and position; preserve the requested people; keep Image 1 <bbox> 100 200 700 800 </bbox> unchanged. Keep the specified blue color. Preserve Image 1 exactly.",
+        "mock_optimization_count": 5,
+        "line_counts": {
+          "indoor": 7,
+          "product": 5,
+          "image_edit": 6,
+          "bbox": 6
+        },
+        "product_people_absent": true,
+        "layouts": {
+          "indoor": {
+            "dialog_box": {
+              "x": 8,
+              "y": 161.5,
+              "width": 374,
+              "height": 521
+            },
+            "footer_box": {
+              "x": 9,
+              "y": 568.5,
+              "width": 372,
+              "height": 113
+            },
+            "body": {
+              "clientHeight": 328,
+              "clientWidth": 372,
+              "scrollHeight": 328,
+              "scrollWidth": 372
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "product": {
+            "dialog_box": {
+              "x": 8,
+              "y": 151.5,
+              "width": 374,
+              "height": 541
+            },
+            "footer_box": {
+              "x": 9,
+              "y": 578.5,
+              "width": 372,
+              "height": 113
+            },
+            "body": {
+              "clientHeight": 348,
+              "clientWidth": 372,
+              "scrollHeight": 348,
+              "scrollWidth": 372
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "image_edit": {
+            "dialog_box": {
+              "x": 8,
+              "y": 161.5,
+              "width": 374,
+              "height": 521
+            },
+            "footer_box": {
+              "x": 9,
+              "y": 568.5,
+              "width": 372,
+              "height": 113
+            },
+            "body": {
+              "clientHeight": 328,
+              "clientWidth": 372,
+              "scrollHeight": 328,
+              "scrollWidth": 372
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "bbox": {
+            "dialog_box": {
+              "x": 8,
+              "y": 171.5,
+              "width": 374,
+              "height": 501
+            },
+            "footer_box": {
+              "x": 9,
+              "y": 558.5,
+              "width": 372,
+              "height": 113
+            },
+            "body": {
+              "clientHeight": 308,
+              "clientWidth": 372,
+              "scrollHeight": 308,
+              "scrollWidth": 372
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          },
+          "final_dialog": {
+            "dialog_box": {
+              "x": 8,
+              "y": 142.5,
+              "width": 374,
+              "height": 559
+            },
+            "footer_box": {
+              "x": 9,
+              "y": 587.5,
+              "width": 372,
+              "height": 113
+            },
+            "body": {
+              "clientHeight": 366,
+              "clientWidth": 372,
+              "scrollHeight": 366,
+              "scrollWidth": 372
+            },
+            "body_scrollable": false,
+            "initially_clipped_textareas": 0,
+            "dialog_button_count": 3,
+            "horizontal_overflow": false,
+            "button_overlap": false
+          }
+        },
+        "generation_requests": [],
+        "optimization_requests": [
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          }
+        ],
+        "network_requests": [
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/workspace/aigc/acceptance?pipelineId=2f546851-43cf-48c4-8ad1-1e38d699a1d5"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/app_globals_0yg4wg8.css"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_%40xyflow_react_dist_style_0w-ra00.css"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1di75ot._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_compiled_1amofcm._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_%40swc_helpers_cjs_1r9vbqw._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1anvha4._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/turbopack-_08bm286._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1jg_de3._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_0ebjzjj._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1ocjlma._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/_1obhz50._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/components_07v6wvf._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/lib_063rxjm._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/node_modules_021u3hf._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1mojsay._.js"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/aigc/pipelines/2f546851-43cf-48c4-8ad1-1e38d699a1d5/runs?page=1&page_size=100"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/tools/assets"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets/7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets/7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5/content"
+          },
+          {
+            "method": "PUT",
+            "url": "http://localhost:8000/api/aigc/pipelines/2f546851-43cf-48c4-8ad1-1e38d699a1d5"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7777/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "GET",
+            "url": "http://localhost:8000/api/assets/7fdfedce-9a2f-4cbb-a4e1-b026e0adc8f5"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          },
+          {
+            "method": "POST",
+            "url": "http://localhost:8000/api/aigc/prompts/optimize"
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:7778/event"
+          }
+        ],
+        "console_errors": [],
+        "page_errors": [],
+        "http_errors": []
+      },
+      "screenshots": [
+        "mobile-reconnaissance.png",
+        "mobile-optimized-dialog.png"
+      ]
+    }
+  },
+  "result": {
+    "status": "passed",
+    "completed_viewports": [
+      "desktop",
+      "tablet",
+      "mobile"
+    ]
+  }
+}

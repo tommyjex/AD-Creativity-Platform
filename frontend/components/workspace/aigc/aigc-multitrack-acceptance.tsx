@@ -66,13 +66,17 @@ const INITIAL_CONFIG: MultiTrackEditConfig = {
       elements: [
         {
           id: "acceptance-title",
-          inline_text: "Task 9 多轨浏览器验收",
+          inline_text: null,
           loop: false,
-          source: null,
+          source: {
+            source_handle: "text",
+            source_node_id: "acceptance-text-source"
+          },
           style: {
             background_color: "#00000099",
             bold: true,
             color: "#FFFFFFFF",
+            font_type: "SY_Black",
             font_size: 52,
             italic: false,
             underline: false
@@ -94,6 +98,39 @@ const INITIAL_CONFIG: MultiTrackEditConfig = {
       name: "标题轨道",
       order: 0,
       type: "text"
+    },
+    {
+      elements: [
+        {
+          asset_id: "acceptance-subtitle-asset",
+          id: "acceptance-subtitle",
+          loop: false,
+          style: {
+            background_color: "#00000099",
+            bold: false,
+            color: "#FFFFFFFF",
+            font_type: "SY_Black",
+            font_size: 42,
+            italic: false,
+            underline: false
+          },
+          target_time: { end_ms: 6000, start_ms: 0 },
+          transform: {
+            height: 162,
+            rotation: 0,
+            width: 1536,
+            x: 192,
+            y: 864
+          },
+          type: "subtitle"
+        }
+      ],
+      hidden: false,
+      id: "acceptance-subtitle-track",
+      muted: false,
+      name: "字幕轨道",
+      order: 1,
+      type: "subtitle"
     }
   ]
 };
@@ -101,6 +138,8 @@ const SOURCES: AigcTimelineSource[] = [
   {
     available: true,
     kind: "video",
+    mime_type: "video/mp4",
+    preview_url: VIDEO_URL,
     source_handle: "video",
     source_node_id: "acceptance-video-source"
   },
@@ -115,6 +154,14 @@ const SOURCES: AigcTimelineSource[] = [
     kind: "image",
     source_handle: "image",
     source_node_id: "acceptance-image-source"
+  },
+  {
+    available: true,
+    kind: "text",
+    preview_text: "Task 9 上游真实文案",
+    text_preview_status: "resolved",
+    source_handle: "text",
+    source_node_id: "acceptance-text-source"
   }
 ];
 

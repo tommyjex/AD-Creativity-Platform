@@ -226,6 +226,14 @@ def _apply_additive_migrations(bind: Engine) -> None:
             connection.execute(
                 text("ALTER TABLE pipelines ADD COLUMN deleted_at DATETIME NULL")
             )
+    if "thumbnail_asset_id" not in pipeline_columns:
+        with bind.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE pipelines "
+                    "ADD COLUMN thumbnail_asset_id VARCHAR(36) NULL"
+                )
+            )
     inspector = inspect(bind)
     pipeline_indexes = {
         index["name"] for index in inspector.get_indexes("pipelines")
@@ -236,6 +244,14 @@ def _apply_additive_migrations(bind: Engine) -> None:
                 text(
                     "CREATE INDEX ix_pipelines_deleted_at "
                     "ON pipelines (deleted_at)"
+                )
+            )
+    if "ix_pipelines_thumbnail_asset_id" not in pipeline_indexes:
+        with bind.begin() as connection:
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_pipelines_thumbnail_asset_id "
+                    "ON pipelines (thumbnail_asset_id)"
                 )
             )
 

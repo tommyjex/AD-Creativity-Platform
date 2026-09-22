@@ -1,0 +1,1407 @@
+module.exports = [
+"[externals]/next/dist/shared/lib/no-fallback-error.external.js [external] (next/dist/shared/lib/no-fallback-error.external.js, cjs)", ((__turbopack_context__, module, exports) => {
+
+var mod = __turbopack_context__.x("next/dist/shared/lib/no-fallback-error.external.js", () => require("next/dist/shared/lib/no-fallback-error.external.js"));
+
+module.exports = mod;
+}),
+"[project]/app/workspace/aigc/pipelines/[pipelineId]/page.tsx [app-rsc] (ecmascript)", ((__turbopack_context__) => {
+"use strict";
+
+__turbopack_context__.s([
+    "default",
+    ()=>AigcPipelineEditorPage
+]);
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/rsc/react-jsx-dev-runtime.js [app-rsc] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$editor$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/components/workspace/aigc/aigc-editor.tsx [app-rsc] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$client$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/api-client.ts [app-rsc] (ecmascript)");
+;
+;
+;
+async function AigcPipelineEditorPage({ params }) {
+    const { pipelineId } = await params;
+    const api = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$client$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createApiClient"])();
+    let pipeline;
+    try {
+        pipeline = await api.getAigcPipeline(pipelineId, {
+            cache: "no-store"
+        });
+    } catch (error) {
+        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
+            className: "grid h-[100dvh] place-items-center px-6",
+            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                className: "text-sm text-destructive",
+                children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$client$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["getUserFacingErrorMessage"])(error)
+            }, void 0, false, {
+                fileName: "[project]/app/workspace/aigc/pipelines/[pipelineId]/page.tsx",
+                lineNumber: 20,
+                columnNumber: 9
+            }, this)
+        }, void 0, false, {
+            fileName: "[project]/app/workspace/aigc/pipelines/[pipelineId]/page.tsx",
+            lineNumber: 19,
+            columnNumber: 7
+        }, this);
+    }
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        className: "h-[100dvh] overflow-hidden [&>main]:!h-full",
+        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$editor$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["AigcEditor"], {
+            entity: pipeline,
+            mode: "pipeline"
+        }, void 0, false, {
+            fileName: "[project]/app/workspace/aigc/pipelines/[pipelineId]/page.tsx",
+            lineNumber: 29,
+            columnNumber: 7
+        }, this)
+    }, void 0, false, {
+        fileName: "[project]/app/workspace/aigc/pipelines/[pipelineId]/page.tsx",
+        lineNumber: 28,
+        columnNumber: 5
+    }, this);
+}
+}),
+"[project]/app/workspace/aigc/pipelines/[pipelineId]/page.tsx [app-rsc] (ecmascript, Next.js Server Component)", (function(__turbopack_context__){
+
+__turbopack_context__.n(__turbopack_context__.i("[project]/app/workspace/aigc/pipelines/[pipelineId]/page.tsx [app-rsc] (ecmascript)"));
+}),
+"[project]/components/workspace/aigc/aigc-editor.tsx [app-rsc] (client reference proxy)", ((__turbopack_context__) => {
+"use strict";
+
+__turbopack_context__.s([
+    "AigcEditor",
+    ()=>AigcEditor,
+    "connectionValidationFeedback",
+    ()=>connectionValidationFeedback,
+    "getAigcConnectionValidationError",
+    ()=>getAigcConnectionValidationError,
+    "isValidAigcConnection",
+    ()=>isValidAigcConnection,
+    "toFlowEdge",
+    ()=>toFlowEdge
+]);
+// This file is generated by next-core EcmascriptClientReferenceModule.
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/rsc/react-server-dom-turbopack-server.js [app-rsc] (ecmascript)");
+;
+const AigcEditor = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call AigcEditor() from the server but AigcEditor is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx", "AigcEditor");
+const connectionValidationFeedback = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call connectionValidationFeedback() from the server but connectionValidationFeedback is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx", "connectionValidationFeedback");
+const getAigcConnectionValidationError = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call getAigcConnectionValidationError() from the server but getAigcConnectionValidationError is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx", "getAigcConnectionValidationError");
+const isValidAigcConnection = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call isValidAigcConnection() from the server but isValidAigcConnection is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx", "isValidAigcConnection");
+const toFlowEdge = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call toFlowEdge() from the server but toFlowEdge is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx", "toFlowEdge");
+}),
+"[project]/components/workspace/aigc/aigc-editor.tsx [app-rsc] (client reference proxy) <module evaluation>", ((__turbopack_context__) => {
+"use strict";
+
+__turbopack_context__.s([
+    "AigcEditor",
+    ()=>AigcEditor,
+    "connectionValidationFeedback",
+    ()=>connectionValidationFeedback,
+    "getAigcConnectionValidationError",
+    ()=>getAigcConnectionValidationError,
+    "isValidAigcConnection",
+    ()=>isValidAigcConnection,
+    "toFlowEdge",
+    ()=>toFlowEdge
+]);
+// This file is generated by next-core EcmascriptClientReferenceModule.
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/rsc/react-server-dom-turbopack-server.js [app-rsc] (ecmascript)");
+;
+const AigcEditor = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call AigcEditor() from the server but AigcEditor is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx <module evaluation>", "AigcEditor");
+const connectionValidationFeedback = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call connectionValidationFeedback() from the server but connectionValidationFeedback is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx <module evaluation>", "connectionValidationFeedback");
+const getAigcConnectionValidationError = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call getAigcConnectionValidationError() from the server but getAigcConnectionValidationError is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx <module evaluation>", "getAigcConnectionValidationError");
+const isValidAigcConnection = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call isValidAigcConnection() from the server but isValidAigcConnection is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx <module evaluation>", "isValidAigcConnection");
+const toFlowEdge = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$server$2d$dom$2d$turbopack$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerClientReference"])(function() {
+    throw new Error("Attempted to call toFlowEdge() from the server but toFlowEdge is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Component or passed to props of a Client Component.");
+}, "[project]/components/workspace/aigc/aigc-editor.tsx <module evaluation>", "toFlowEdge");
+}),
+"[project]/components/workspace/aigc/aigc-editor.tsx [app-rsc] (ecmascript)", ((__turbopack_context__) => {
+"use strict";
+
+var __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$editor$2e$tsx__$5b$app$2d$rsc$5d$__$28$client__reference__proxy$29$__$3c$module__evaluation$3e$__ = __turbopack_context__.i("[project]/components/workspace/aigc/aigc-editor.tsx [app-rsc] (client reference proxy) <module evaluation>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$editor$2e$tsx__$5b$app$2d$rsc$5d$__$28$client__reference__proxy$29$__ = __turbopack_context__.i("[project]/components/workspace/aigc/aigc-editor.tsx [app-rsc] (client reference proxy)");
+;
+__turbopack_context__.n(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$editor$2e$tsx__$5b$app$2d$rsc$5d$__$28$client__reference__proxy$29$__);
+}),
+"[project]/lib/api-client.ts [app-rsc] (ecmascript)", ((__turbopack_context__) => {
+"use strict";
+
+__turbopack_context__.s([
+    "ApiError",
+    ()=>ApiError,
+    "apiClient",
+    ()=>apiClient,
+    "createApiClient",
+    ()=>createApiClient,
+    "getBackendBaseUrl",
+    ()=>getBackendBaseUrl,
+    "getSafeProviderErrorSummary",
+    ()=>getSafeProviderErrorSummary,
+    "getUserFacingErrorMessage",
+    ()=>getUserFacingErrorMessage,
+    "isApiError",
+    ()=>isApiError
+]);
+var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$types$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/api-types.ts [app-rsc] (ecmascript)");
+;
+const DEFAULT_BACKEND_BASE_URL = "http://localhost:8000";
+const STAGE_ENDPOINTS = {
+    story: "story",
+    character: "characters",
+    script: "script",
+    storyboard: "storyboard",
+    image: "images",
+    video: "videos",
+    compose: "compose"
+};
+const TEXT_ARTIFACT_ENDPOINTS = {
+    script: "script",
+    story: "story",
+    storyboard: "storyboard"
+};
+class ApiError extends Error {
+    code;
+    detail;
+    responseBody;
+    status;
+    constructor({ code, detail, message, responseBody, status }){
+        super(message);
+        this.name = "ApiError";
+        this.code = code;
+        this.detail = detail;
+        this.responseBody = responseBody;
+        this.status = status;
+    }
+}
+function isApiError(error) {
+    return error instanceof ApiError;
+}
+function getSafeProviderErrorSummary(detail) {
+    if (!detail) {
+        return null;
+    }
+    const fields = new Map();
+    for (const part of detail.split(";")){
+        const separator = part.indexOf("=");
+        if (separator < 1) continue;
+        const key = part.slice(0, separator).trim();
+        const value = part.slice(separator + 1).trim();
+        if ([
+            "provider_code",
+            "request_id",
+            "provider_task_id",
+            "phase"
+        ].includes(key) && /^[A-Za-z0-9._:/-]{1,200}$/.test(value)) {
+            fields.set(key, value);
+        }
+    }
+    const providerCode = fields.get("provider_code");
+    if (!providerCode) {
+        return null;
+    }
+    return [
+        `方舟错误码：${providerCode}`,
+        fields.get("request_id") ? `Request ID：${fields.get("request_id")}` : null,
+        fields.get("provider_task_id") ? `任务 ID：${fields.get("provider_task_id")}` : null
+    ].filter(Boolean).join(" · ");
+}
+function getSafeExternalServiceMessage(message) {
+    if (!message || message === "external provider error was redacted") {
+        return null;
+    }
+    if (!/^[\w\s.,:/()_-]{1,160}$/.test(message)) {
+        return null;
+    }
+    return message;
+}
+function getSafeExternalServiceErrorSummary(detail) {
+    if (!detail) {
+        return null;
+    }
+    const labels = {
+        asset_id: "资产",
+        phase: "阶段",
+        provider: "服务",
+        reason: "原因",
+        returncode: "返回码",
+        shot_id: "镜头"
+    };
+    const fields = new Map();
+    for (const part of detail.split(";")){
+        const separator = part.indexOf("=");
+        if (separator < 1) continue;
+        const key = part.slice(0, separator).trim();
+        const value = part.slice(separator + 1).trim();
+        if (key in labels && /^[A-Za-z0-9._:/-]{1,200}$/.test(value)) {
+            fields.set(key, value);
+        }
+    }
+    return [
+        "provider",
+        "phase",
+        "reason",
+        "returncode",
+        "shot_id",
+        "asset_id"
+    ].map((key)=>{
+        const value = fields.get(key);
+        return value ? `${labels[key]}：${value}` : null;
+    }).filter(Boolean).join(" · ") || null;
+}
+function getUserFacingErrorMessage(error) {
+    if (isApiError(error)) {
+        if (error.code === "validation_error" && error.detail) {
+            return error.detail;
+        }
+        if (error.status >= 500) {
+            if (error.code === "external_service_error") {
+                const externalMessage = getSafeExternalServiceMessage(error.message);
+                const externalSummary = getSafeExternalServiceErrorSummary(error.detail);
+                const parts = [
+                    externalMessage,
+                    externalSummary
+                ].filter(Boolean);
+                if (parts.length > 0) {
+                    return `服务暂时不可用。${parts.join(" · ")}`;
+                }
+            }
+            const providerSummary = getSafeProviderErrorSummary(error.detail);
+            return providerSummary ? `服务暂时不可用。${providerSummary}` : "服务暂时不可用，请稍后重试。";
+        }
+        return error.message || "请求未完成，请检查输入后重试。";
+    }
+    return "请求未完成，请检查网络连接后重试。";
+}
+function getBackendBaseUrl() {
+    return ("TURBOPACK compile-time value", "http://127.0.0.1:8001")?.trim() || DEFAULT_BACKEND_BASE_URL;
+}
+function createApiClient(options = {}) {
+    const baseUrl = normalizeBaseUrl(options.baseUrl ?? getBackendBaseUrl());
+    const fetcher = options.fetcher ?? fetch;
+    const defaultHeaders = options.headers;
+    return {
+        listProjects (keywordOrOptions, options) {
+            const keyword = typeof keywordOrOptions === "string" ? keywordOrOptions : undefined;
+            const requestOptions = typeof keywordOrOptions === "string" ? options : keywordOrOptions;
+            const searchParams = new URLSearchParams();
+            if (keyword) {
+                searchParams.set("q", keyword);
+            }
+            const query = searchParams.toString();
+            return request(fetcher, baseUrl, `/api/projects${query ? `?${query}` : ""}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        createProject (payload, requestOptions) {
+            return request(fetcher, baseUrl, "/api/projects", {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        getProject (projectId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        deleteProject (projectId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        updateProject (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PATCH"
+            });
+        },
+        listImagePromptVersions (projectId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-prompt-versions`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        getImagePromptVersion (projectId, versionId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-prompt-versions/${encodeURIComponent(versionId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        saveImagePromptVersion (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-prompt-versions`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        generateImagePrompt (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-prompts/generate`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        uploadImageProjectReference (projectId, file, options = {}) {
+            const searchParams = new URLSearchParams();
+            if (options.filename) searchParams.set("filename", options.filename);
+            if (options.mimeType) searchParams.set("mime_type", options.mimeType);
+            const query = searchParams.toString();
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-references/upload${query ? `?${query}` : ""}`, {
+                ...options,
+                body: file,
+                headers: mergeHeaders(defaultHeaders, {
+                    "Content-Type": "application/octet-stream"
+                }, options.headers),
+                json: false,
+                method: "POST"
+            });
+        },
+        setImageProjectReferenceSelection (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-reference-selection`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PUT"
+            });
+        },
+        generateProjectImage (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-generations`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        editProjectImage (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-generations`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        decomposeImageLayers (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-layer-sets`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        listImageLayerSets (projectId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-layer-sets`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        getImageLayerSet (projectId, setId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-layer-sets/${encodeURIComponent(setId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        updateImageLayerSet (projectId, setId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-layer-sets/${encodeURIComponent(setId)}`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PATCH"
+            });
+        },
+        getCanvasLayout (projectId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/canvas-layout`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        saveCanvasLayout (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/canvas-layout`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PUT"
+            });
+        },
+        composeImageLayers (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-layer-compositions`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        editImageLayerContent (projectId, setId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/image-layer-sets/${encodeURIComponent(setId)}/content-edits`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        selectCurrentImage (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/current-image`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PATCH"
+            });
+        },
+        updateTextArtifact (projectId, stage, payload, requestOptions) {
+            const endpoint = TEXT_ARTIFACT_ENDPOINTS[stage];
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/${endpoint}`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PATCH"
+            });
+        },
+        deleteTextArtifact (projectId, artifactId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/text-artifacts/${encodeURIComponent(artifactId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        listProjectAssets (projectId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/assets`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        listAssets (filters = {}, requestOptions) {
+            const searchParams = new URLSearchParams();
+            if (filters.projectId) {
+                searchParams.set("project_id", filters.projectId);
+            }
+            if (filters.category) {
+                searchParams.set("category", filters.category);
+            }
+            if (filters.status) {
+                searchParams.set("status", filters.status);
+            }
+            const query = searchParams.toString();
+            return request(fetcher, baseUrl, `/api/assets${query ? `?${query}` : ""}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        listToolAssets (requestOptions) {
+            return request(fetcher, baseUrl, "/api/tools/assets", {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        listToolTasks (requestOptions) {
+            return request(fetcher, baseUrl, "/api/tools/tasks", {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        getToolTask (taskId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/tools/tasks/${encodeURIComponent(taskId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        deleteToolTask (taskId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/tools/tasks/${encodeURIComponent(taskId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        createToolTask (payload, requestOptions) {
+            return request(fetcher, baseUrl, "/api/tools/tasks", {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        uploadToolAsset (kind, file, options = {}) {
+            const searchParams = new URLSearchParams({
+                kind
+            });
+            if (options.filename) searchParams.set("filename", options.filename);
+            if (options.mimeType) searchParams.set("mime_type", options.mimeType);
+            return request(fetcher, baseUrl, `/api/tools/assets/upload?${searchParams.toString()}`, {
+                ...options,
+                body: file,
+                headers: mergeHeaders(defaultHeaders, {
+                    "Content-Type": options.mimeType || file.type || "application/octet-stream"
+                }, options.headers),
+                json: false,
+                method: "POST"
+            });
+        },
+        submitFaceBlurVideo (payload, requestOptions) {
+            return request(fetcher, baseUrl, "/api/tools/face-blur-video", {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        generateToolVideo (payload, requestOptions) {
+            return request(fetcher, baseUrl, "/api/tools/videos", {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        optimizeToolVideoPrompt (payload, requestOptions) {
+            return request(fetcher, baseUrl, "/api/tools/videos/optimize-prompt", {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        retryToolTask (taskId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/tools/tasks/${encodeURIComponent(taskId)}/retry`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        getAsset (assetId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/assets/${encodeURIComponent(assetId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        renameAsset (assetId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/assets/${encodeURIComponent(assetId)}`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PATCH"
+            });
+        },
+        deleteAsset (projectId, assetId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        deleteToolAsset (assetId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/tools/assets/${encodeURIComponent(assetId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        generateStage (projectId, stage, requestOptions) {
+            const endpoint = STAGE_ENDPOINTS[stage];
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/${endpoint}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        streamGenerationStage (projectId, stage, onEvent, requestOptions) {
+            const endpoint = STAGE_ENDPOINTS[stage];
+            return requestEventStream(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/${endpoint}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            }, parseGenerationStreamEvent, onEvent);
+        },
+        skipCharacters (projectId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/characters/skip`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        iterateCharacterAsset (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/character-assets/iterations`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        updateCharacterCard (projectId, cardId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/character-cards/${encodeURIComponent(cardId)}`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PATCH"
+            });
+        },
+        deleteCharacterCard (projectId, cardId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/character-cards/${encodeURIComponent(cardId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        generateCharacterCardImage (projectId, cardId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/character-cards/${encodeURIComponent(cardId)}/generate-image`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        getStoryboardShotVideoConfig (projectId, shotId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/video-config`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        updateStoryboardShotVideoConfig (projectId, shotId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/video-config`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PATCH"
+            });
+        },
+        optimizeStoryboardShotVideoPrompt (projectId, shotId, videoPrompt, onEvent = ()=>{}, requestOptions) {
+            let completed = null;
+            return requestEventStream(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/optimize-video-prompt`, {
+                ...requestOptions,
+                body: {
+                    video_prompt: videoPrompt
+                },
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            }, parsePromptOptimizationStreamEvent, (event)=>{
+                onEvent(event);
+                if (event.type === "complete") {
+                    completed = {
+                        optimized_prompt: event.optimized_prompt
+                    };
+                }
+            }).then(()=>{
+                if (completed === null) {
+                    throw new ApiError({
+                        code: "generation_failed",
+                        message: "optimization stream ended without a result",
+                        responseBody: null,
+                        status: 500
+                    });
+                }
+                return completed;
+            });
+        },
+        setStoryboardShotFirstFrame (projectId, shotId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/first-frame`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        clearStoryboardShotFirstFrame (projectId, shotId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/first-frame`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        uploadStoryboardShotFirstFrame (projectId, shotId, file, options = {}) {
+            const searchParams = new URLSearchParams();
+            if (options.filename) searchParams.set("filename", options.filename);
+            if (options.mimeType) searchParams.set("mime_type", options.mimeType);
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/first-frame/upload?${searchParams.toString()}`, {
+                ...options,
+                body: file,
+                headers: mergeHeaders(defaultHeaders, {
+                    "Content-Type": options.mimeType || file.type || "application/octet-stream"
+                }, options.headers),
+                json: false,
+                method: "POST"
+            });
+        },
+        attachStoryboardShotReference (projectId, shotId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/references`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        removeStoryboardShotReference (projectId, shotId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/references`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        applyStoryboardShotLastFrameReference (projectId, shotId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/last-frame-reference`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        ensureStoryboardShotLastFrameReferenceAsset (projectId, shotId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/last-frame-reference-asset`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        deleteStoryboardShot (projectId, shotId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        mergeStoryboardShots (projectId, shotIds, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/merge`, {
+                ...requestOptions,
+                body: {
+                    shot_ids: shotIds
+                },
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        splitStoryboardShot (projectId, shotId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/split`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        uploadStoryboardShotReference (projectId, shotId, kind, file, options = {}) {
+            const searchParams = new URLSearchParams({
+                kind
+            });
+            if (options.filename) {
+                searchParams.set("filename", options.filename);
+            }
+            if (options.mimeType) {
+                searchParams.set("mime_type", options.mimeType);
+            }
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/references/upload?${searchParams.toString()}`, {
+                ...options,
+                body: file,
+                headers: mergeHeaders(defaultHeaders, {
+                    "Content-Type": options.mimeType || file.type || "application/octet-stream"
+                }, options.headers),
+                json: false,
+                method: "POST"
+            });
+        },
+        generateStoryboardShotVideo (projectId, shotId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/generate-video`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        editStoryboardShotVideo (projectId, shotId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/edit-video`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        selectStoryboardShotVideo (projectId, shotId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/shots/${encodeURIComponent(shotId)}/select-video`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        generateStoryboardShotVideoByLocator (projectId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/projects/${encodeURIComponent(projectId)}/storyboard/generate-video`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        listAigcTemplates (filters = {}, requestOptions) {
+            return request(fetcher, baseUrl, withAigcListQuery("/api/aigc/templates", filters), {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        getAigcTemplate (templateId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/templates/${encodeURIComponent(templateId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        deleteAigcTemplate (templateId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/templates/${encodeURIComponent(templateId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        updateAigcTemplate (templateId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/templates/${encodeURIComponent(templateId)}`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PUT"
+            });
+        },
+        instantiateAigcTemplate (templateId, payload = {}, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/templates/${encodeURIComponent(templateId)}/instantiate`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        listAigcPipelines (filters = {}, requestOptions) {
+            return request(fetcher, baseUrl, withAigcListQuery("/api/aigc/pipelines", filters), {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        getAigcPipeline (pipelineId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        listAigcPipelineThumbnailCandidates (pipelineId, filters = {}, requestOptions) {
+            return request(fetcher, baseUrl, withAigcListQuery(`/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/thumbnail-candidates`, filters), {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        updateAigcPipelineThumbnail (pipelineId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/thumbnail`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PUT"
+            });
+        },
+        deleteAigcPipeline (pipelineId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "DELETE"
+            });
+        },
+        updateAigcPipeline (pipelineId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "PUT"
+            });
+        },
+        saveAigcPipelineAsTemplate (pipelineId, payload, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/templates`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        optimizeAigcPrompt (payload, requestOptions) {
+            return request(fetcher, baseUrl, "/api/aigc/prompts/optimize", {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        createAigcRun (pipelineId, payload, idempotencyKey, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/runs`, {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, {
+                    "Idempotency-Key": idempotencyKey
+                }, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        listAigcRuns (pipelineId, filters = {}, requestOptions) {
+            return request(fetcher, baseUrl, withAigcListQuery(`/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/runs`, filters), {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        getAigcRun (runId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/runs/${encodeURIComponent(runId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        getAigcInternalRunAsset (pipelineId, runId, assetId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/assets/${encodeURIComponent(assetId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        retryAigcRunNode (runId, nodeId, idempotencyKey, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/runs/${encodeURIComponent(runId)}/nodes/${encodeURIComponent(nodeId)}/retry`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, {
+                    "Idempotency-Key": idempotencyKey
+                }, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        cancelAigcRun (runId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/aigc/runs/${encodeURIComponent(runId)}/cancel`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        createAigcPipeline (payload, requestOptions) {
+            return request(fetcher, baseUrl, "/api/aigc/pipelines", {
+                ...requestOptions,
+                body: payload,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        uploadAigcMedia (kind, file, options = {}) {
+            const searchParams = new URLSearchParams();
+            if (options.filename) searchParams.set("filename", options.filename);
+            if (options.mimeType) searchParams.set("mime_type", options.mimeType);
+            const query = searchParams.toString();
+            return request(fetcher, baseUrl, `/api/aigc/assets/${kind}s${query ? `?${query}` : ""}`, {
+                ...options,
+                body: file,
+                headers: mergeHeaders(defaultHeaders, {
+                    "Content-Type": options.mimeType || file.type || "application/octet-stream"
+                }, options.headers),
+                json: false,
+                method: "POST"
+            });
+        },
+        uploadAigcSubtitle (file, options = {}) {
+            const searchParams = new URLSearchParams();
+            if (options.filename) searchParams.set("filename", options.filename);
+            searchParams.set("mime_type", options.mimeType || file.type || "application/x-subrip");
+            return request(fetcher, baseUrl, `/api/aigc/assets/subtitles?${searchParams.toString()}`, {
+                ...options,
+                body: file,
+                headers: mergeHeaders(defaultHeaders, {
+                    "Content-Type": options.mimeType || file.type || "application/x-subrip"
+                }, options.headers),
+                json: false,
+                method: "POST"
+            });
+        },
+        uploadAigcImage (file, options = {}) {
+            return this.uploadAigcMedia("image", file, options);
+        },
+        getTask (taskId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/tasks/${encodeURIComponent(taskId)}`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+            });
+        },
+        retryTask (taskId, requestOptions) {
+            return request(fetcher, baseUrl, `/api/tasks/${encodeURIComponent(taskId)}/retry`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            });
+        },
+        retryTextTask (taskId, onEvent, requestOptions) {
+            return requestEventStream(fetcher, baseUrl, `/api/tasks/${encodeURIComponent(taskId)}/retry`, {
+                ...requestOptions,
+                headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+                method: "POST"
+            }, parseGenerationStreamEvent, onEvent);
+        }
+    };
+}
+function withAigcListQuery(path, filters) {
+    const searchParams = new URLSearchParams();
+    const query = filters.query?.trim();
+    if (query) searchParams.set("q", query);
+    if (filters.page !== undefined) searchParams.set("page", String(filters.page));
+    if (filters.pageSize !== undefined) {
+        searchParams.set("page_size", String(filters.pageSize));
+    }
+    const queryString = searchParams.toString();
+    return queryString ? `${path}?${queryString}` : path;
+}
+const apiClient = createApiClient();
+async function requestEventStream(fetcher, baseUrl, path, config, parseEvent, onEvent) {
+    const { body, headers, json = true, method = "POST", ...requestOptions } = config;
+    const response = await fetcher(buildUrl(baseUrl, path), {
+        ...requestOptions,
+        body: body === undefined ? undefined : json ? JSON.stringify(body) : body,
+        headers: mergeHeaders({
+            Accept: "text/event-stream"
+        }, body === undefined || !json ? undefined : {
+            "Content-Type": "application/json"
+        }, headers),
+        method
+    });
+    if (!response.ok) {
+        throw await parseApiError(response);
+    }
+    if (!response.body) {
+        throw streamProtocolError("stream response has no body");
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    async function dispatch(block) {
+        const parsed = parseSseBlock(block);
+        if (!parsed) return;
+        const data = parsed.data.length > 0 ? JSON.parse(parsed.data) : null;
+        const event = parseEvent(parsed.event, data);
+        onEvent(event);
+        if (parsed.event === "error" && isApiErrorPayload(data)) {
+            const payload = sanitizeApiErrorPayload(data);
+            throw new ApiError({
+                ...payload,
+                responseBody: data,
+                status: 500
+            });
+        }
+    }
+    while(true){
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, {
+            stream: !done
+        });
+        let match = /\r?\n\r?\n/.exec(buffer);
+        while(match){
+            const block = buffer.slice(0, match.index);
+            buffer = buffer.slice(match.index + match[0].length);
+            await dispatch(block);
+            match = /\r?\n\r?\n/.exec(buffer);
+        }
+        if (done) break;
+    }
+    if (buffer.trim().length > 0) {
+        await dispatch(buffer);
+    }
+}
+function parseSseBlock(block) {
+    let event = "message";
+    const data = [];
+    for (const line of block.split(/\r?\n/)){
+        if (line.startsWith(":")) continue;
+        if (line.startsWith("event:")) {
+            event = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+            data.push(line.slice(5).trimStart());
+        }
+    }
+    return data.length > 0 ? {
+        event,
+        data: data.join("\n")
+    } : null;
+}
+function parseGenerationStreamEvent(eventName, data) {
+    if (!isObject(data)) throw streamProtocolError("invalid generation stream event");
+    if (eventName === "delta" && typeof data.text === "string") {
+        return {
+            type: "delta",
+            text: data.text
+        };
+    }
+    if ((eventName === "task" || eventName === "complete") && isObject(data.task)) {
+        return {
+            type: eventName,
+            task: data.task
+        };
+    }
+    if (eventName === "error" && isApiErrorPayload(data)) {
+        return {
+            type: "error",
+            error: sanitizeApiErrorPayload(data)
+        };
+    }
+    throw streamProtocolError(`unsupported generation stream event: ${eventName}`);
+}
+function parsePromptOptimizationStreamEvent(eventName, data) {
+    if (!isObject(data)) throw streamProtocolError("invalid optimization stream event");
+    if (eventName === "delta" && typeof data.text === "string") {
+        return {
+            type: "delta",
+            text: data.text
+        };
+    }
+    if (eventName === "complete" && typeof data.optimized_prompt === "string") {
+        return {
+            type: "complete",
+            optimized_prompt: data.optimized_prompt
+        };
+    }
+    if (eventName === "error" && isApiErrorPayload(data)) {
+        return {
+            type: "error",
+            error: sanitizeApiErrorPayload(data)
+        };
+    }
+    throw streamProtocolError(`unsupported optimization stream event: ${eventName}`);
+}
+function streamProtocolError(message) {
+    return new ApiError({
+        code: "generation_failed",
+        message,
+        responseBody: null,
+        status: 500
+    });
+}
+async function request(fetcher, baseUrl, path, config = {}) {
+    const { body, headers, json = true, method = "GET", ...requestOptions } = config;
+    const response = await fetcher(buildUrl(baseUrl, path), {
+        ...requestOptions,
+        body: body === undefined ? undefined : json ? JSON.stringify(body) : body,
+        headers: mergeHeaders(body === undefined || !json ? undefined : {
+            "Content-Type": "application/json"
+        }, headers),
+        method
+    });
+    if (!response.ok) {
+        throw await parseApiError(response);
+    }
+    if (response.status === 204) {
+        return undefined;
+    }
+    return await response.json();
+}
+async function parseApiError(response) {
+    const responseBody = sanitizeErrorBody(await readResponseBody(response));
+    const payload = sanitizeApiErrorPayload(toApiErrorPayload(response.status, responseBody));
+    return new ApiError({
+        ...payload,
+        responseBody,
+        status: response.status
+    });
+}
+function toApiErrorPayload(status, body) {
+    if (isObject(body)) {
+        const detail = body.detail;
+        if (isApiErrorPayload(detail)) {
+            return detail;
+        }
+        if (Array.isArray(detail)) {
+            return {
+                code: "validation_error",
+                detail: formatValidationDetail(detail),
+                message: "request validation failed"
+            };
+        }
+        if (typeof detail === "string" && detail.length > 0) {
+            return {
+                code: "unknown",
+                detail,
+                message: detail
+            };
+        }
+        if (isApiErrorPayload(body)) {
+            return body;
+        }
+    }
+    return {
+        code: "unknown",
+        detail: typeof body === "string" && body.length > 0 ? body : undefined,
+        message: `request failed with status ${status}`
+    };
+}
+function sanitizeApiErrorPayload(payload) {
+    return {
+        ...payload,
+        detail: payload.detail ? sanitizeErrorText(payload.detail) : undefined,
+        message: sanitizeErrorText(payload.message)
+    };
+}
+function sanitizeErrorBody(value) {
+    if (typeof value === "string") {
+        return sanitizeErrorText(value);
+    }
+    if (Array.isArray(value)) {
+        return value.map((item)=>sanitizeErrorBody(item));
+    }
+    if (isObject(value)) {
+        return Object.fromEntries(Object.entries(value).map(([key, item])=>[
+                key,
+                sanitizeErrorBody(item)
+            ]));
+    }
+    return value;
+}
+function sanitizeErrorText(value) {
+    let sanitized = value.replace(/https?:\/\/[^\s"'<>]+/gi, (url)=>{
+        try {
+            const parsed = new URL(url);
+            if (/(^|&)(x-tos-|signature|x-amz-|expires|token)/i.test(parsed.search.slice(1))) {
+                parsed.search = "";
+            }
+            return parsed.toString();
+        } catch  {
+            return url;
+        }
+    });
+    sanitized = sanitized.replace(/\b(ark[_-]?(?:api[_-]?)?key|tos[_-]?(?:ak|sk|access[_-]?key|secret[_-]?key)|password|passwd|pwd|secret|token|signature)\b\s*[:=]\s*[^,\s;]+/gi, "$1=[redacted]");
+    sanitized = sanitized.replace(/\b(sk-[a-z0-9][a-z0-9._-]{8,}|ak-[a-z0-9][a-z0-9._-]{8,}|ark-[a-z0-9][a-z0-9._-]{8,})\b/gi, "[redacted-key]");
+    sanitized = sanitized.replace(/\b((?:mysql|postgres(?:ql)?):\/\/[^:\s/@]+):([^@\s]+)@/gi, "$1:[redacted]@");
+    if (/\b(provider|vendor|upstream)\b/i.test(sanitized) && /\b(sensitive|secret|signature|token|password|sk-|ark[_-]?key|tos[_-]?(?:ak|sk))\b/i.test(sanitized)) {
+        return "external provider error was redacted";
+    }
+    return sanitized;
+}
+async function readResponseBody(response) {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+        try {
+            return await response.json();
+        } catch  {
+            return null;
+        }
+    }
+    try {
+        return await response.text();
+    } catch  {
+        return null;
+    }
+}
+function buildUrl(baseUrl, path) {
+    return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+}
+function normalizeBaseUrl(baseUrl) {
+    return baseUrl.replace(/\/+$/, "");
+}
+function mergeHeaders(...headersList) {
+    const headers = new Headers();
+    for (const headersInit of headersList){
+        if (headersInit === undefined) {
+            continue;
+        }
+        new Headers(headersInit).forEach((value, key)=>{
+            headers.set(key, value);
+        });
+    }
+    return headers;
+}
+function isApiErrorPayload(value) {
+    return isObject(value) && isErrorCode(value.code) && typeof value.message === "string";
+}
+function isErrorCode(value) {
+    return typeof value === "string" && __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$types$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["ERROR_CODES"].includes(value);
+}
+function isObject(value) {
+    return typeof value === "object" && value !== null;
+}
+function formatValidationDetail(detail) {
+    return detail.map((item)=>{
+        const path = item.loc?.join(".");
+        return path ? `${path}: ${item.msg ?? item.type ?? "invalid"}` : item.msg;
+    }).filter(Boolean).join("; ");
+}
+}),
+"[project]/lib/api-types.ts [app-rsc] (ecmascript)", ((__turbopack_context__) => {
+"use strict";
+
+__turbopack_context__.s([
+    "ASSET_CATEGORIES",
+    ()=>ASSET_CATEGORIES,
+    "ASSET_TYPES",
+    ()=>ASSET_TYPES,
+    "CHARACTER_ASSET_ITERATION_OPERATIONS",
+    ()=>CHARACTER_ASSET_ITERATION_OPERATIONS,
+    "ERROR_CODES",
+    ()=>ERROR_CODES,
+    "REFERENCE_ASSET_KINDS",
+    ()=>REFERENCE_ASSET_KINDS,
+    "STAGES",
+    ()=>STAGES,
+    "STATUSES",
+    ()=>STATUSES
+]);
+const STATUSES = [
+    "draft",
+    "queued",
+    "running",
+    "succeeded",
+    "skipped",
+    "failed",
+    "cancelled",
+    "expired",
+    "stale"
+];
+const STAGES = [
+    "brief",
+    "story",
+    "character",
+    "script",
+    "storyboard",
+    "image",
+    "video",
+    "compose"
+];
+const ASSET_TYPES = [
+    "uploaded_image",
+    "uploaded_video",
+    "uploaded_audio",
+    "generated_image",
+    "storyboard_video",
+    "final_video",
+    "subtitle"
+];
+const ASSET_CATEGORIES = [
+    "character",
+    "scene",
+    "reference"
+];
+const REFERENCE_ASSET_KINDS = [
+    "image",
+    "video",
+    "audio"
+];
+const CHARACTER_ASSET_ITERATION_OPERATIONS = [
+    "edit",
+    "regenerate"
+];
+const ERROR_CODES = [
+    "validation_error",
+    "not_found",
+    "dependency_missing",
+    "task_conflict",
+    "invalid_state",
+    "generation_failed",
+    "external_service_error",
+    "unknown"
+];
+}),
+];
+
+//# sourceMappingURL=%5Broot-of-the-server%5D__0ok4_sp._.js.map

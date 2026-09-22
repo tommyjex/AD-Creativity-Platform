@@ -93,6 +93,8 @@ const pipeline: AigcPipeline = {
   source_template_revision: null,
   revision: 4,
   latest_run_status: null,
+  thumbnail_asset_id: null,
+  thumbnail: null,
   created_at: "2026-09-05T00:00:00Z",
   updated_at: "2026-09-05T00:00:00Z"
 };
@@ -117,9 +119,9 @@ describe("AigcTimelineEditorShell", () => {
       "h-[100dvh]",
       "bg-[#0b0d10]"
     );
-    expect(screen.getByRole("region", { name: "结构预览" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "画面预览" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "多轨时间线" })).toBeInTheDocument();
-    expect(screen.getByText("最终效果以 MediaKit 合成为准")).toBeInTheDocument();
+    expect(screen.getByText(/最终效果以 MediaKit 合成为准/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存到节点" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "执行剪辑" })).toBeEnabled();
   });

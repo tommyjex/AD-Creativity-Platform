@@ -6,26 +6,42 @@ const viewports = [
   { height: 768, name: "desktop-1024x768", width: 1024 },
   { height: 844, name: "mobile-390x844", width: 390 }
 ];
-const activeFlowA = runDetail({
+const successfulBranchA = runDetail({
   id: "acceptance-run-a",
   mode: "from_node",
-  runNumber: 102,
-  runningNodeId: "flow-a-model",
-  startNodeId: "flow-a-model",
-  status: "running"
-});
-const successfulFlowB = runDetail({
-  id: "acceptance-run-b",
-  mode: "from_node",
-  resultNodeId: "flow-b-output",
-  resultText: "流程 B 独立结果",
+  resultAsset: {
+    asset_id: "acceptance-branch-a-image",
+    ordinal: 0,
+    mime_type: "image/png",
+    download_url: "/api/assets/acceptance-branch-a-image/content",
+    available: true,
+    metadata: {}
+  },
+  resultNodeIds: ["branch-a-model", "branch-a-output"],
   runNumber: 101,
-  startNodeId: "flow-b-model",
+  startNodeId: "branch-a-model",
   status: "succeeded"
 });
+const activeBranchB = runDetail({
+  id: "acceptance-run-b",
+  mode: "from_node",
+  runNumber: 102,
+  runningNodeId: "branch-b-model",
+  startNodeId: "branch-b-model",
+  status: "running"
+});
+const failedBranchC = runDetail({
+  errorNodeId: "branch-c-model",
+  id: "acceptance-run-c",
+  mode: "from_node",
+  runNumber: 103,
+  startNodeId: "branch-c-model",
+  status: "failed"
+});
 const paginatedRuns = [
-  activeFlowA.run,
-  successfulFlowB.run,
+  failedBranchC.run,
+  activeBranchB.run,
+  successfulBranchA.run,
   ...Array.from({ length: 100 }, (_, index) =>
     historicalRun(100 - index)
   )
@@ -72,6 +88,9 @@ async function verifyViewport(browserInstance, viewport) {
   await page.route("**/favicon.ico", (route) =>
     route.fulfill({ body: "", status: 204 })
   );
+  await page.route("http://127.0.0.1:7777/event", (route) =>
+    route.fulfill({ body: "", status: 204 })
+  );
   await installFlowIsolationRoutes(
     page,
     fixture.pipelineId,
@@ -83,59 +102,80 @@ async function verifyViewport(browserInstance, viewport) {
     await page.goto(fixture.pipelineUrl, { waitUntil: "domcontentloaded" });
     await page.getByTestId("aigc-editor-header").waitFor();
     await page
-      .locator('.react-flow__node[data-id="flow-a-model"]')
+      .locator('.react-flow__node[data-id="branch-a-model"]')
       .waitFor();
     await waitForCondition(
       () => requestedListPages.has(1) && requestedListPages.has(2),
       `${viewport.name}: Run 列表完成多页请求`
     );
+    assert(
+      await page.getByTestId("aigc-command-execute").isDisabled(),
+      `${viewport.name}: 活动分支存在时禁止执行全部`
+    );
 
-    await clickVisibleNode(page, "flow-a-model");
-    const flowAButton = page.getByRole("button", {
+    await selectNode(page, "branch-a-model");
+    const branchAButton = page.getByRole("button", {
       name: "从此节点运行"
     });
-    await flowAButton.waitFor();
+    await branchAButton.waitFor();
     assert(
-      await flowAButton.isDisabled(),
-      `${viewport.name}: 流程 A 活动时局部执行禁用`
+      await branchAButton.isEnabled(),
+      `${viewport.name}: 分支 A 不受活动分支 B 影响`
     );
     assertButtonInsideViewport(
-      await flowAButton.boundingBox(),
+      await branchAButton.boundingBox(),
       viewport,
-      `${viewport.name}: 流程 A 局部执行按钮`
+      `${viewport.name}: 分支 A 局部执行按钮`
     );
 
     await page.getByRole("button", { name: "关闭详情栏" }).click();
-    await clickVisibleNode(page, "flow-b-model");
-    const flowBButton = page.getByRole("button", {
+    await selectNode(page, "branch-b-model");
+    const branchBButton = page.getByRole("button", {
       name: "从此节点运行"
     });
-    await flowBButton.waitFor();
+    await branchBButton.waitFor();
     assert(
-      await flowBButton.isEnabled(),
-      `${viewport.name}: 流程 B 局部执行保持启用`
+      await branchBButton.isDisabled(),
+      `${viewport.name}: 活动分支 B 禁止重复运行`
     );
     assertButtonInsideViewport(
-      await flowBButton.boundingBox(),
+      await branchBButton.boundingBox(),
       viewport,
-      `${viewport.name}: 流程 B 局部执行按钮`
+      `${viewport.name}: 分支 B 局部执行按钮`
     );
-
-    await page.getByRole("button", { name: "关闭详情栏" }).click();
-    await page
-      .locator('.react-flow__node[data-id="flow-b-output"]')
-      .dispatchEvent("click");
+    await page.getByRole("tab", { name: "运行" }).click();
     const inspector = page.getByTestId("aigc-inspector");
+    await inspector
+      .getByLabel("运行历史")
+      .selectOption(activeBranchB.run.id);
+    await inspector.getByText("Run #102", { exact: true }).waitFor();
+    await inspector.getByText("运行中", { exact: true }).first().waitFor();
+
+    await page.getByRole("button", { name: "关闭详情栏" }).click();
+    await selectNode(page, "branch-c-model");
+    await page.getByRole("tab", { name: "运行" }).click();
+    await inspector
+      .getByLabel("运行历史")
+      .selectOption(failedBranchC.run.id);
+    await inspector.getByText("Run #103", { exact: true }).waitFor();
+    await inspector
+      .getByText("分支 C Mock 失败", { exact: true })
+      .first()
+      .waitFor();
+
+    await page.getByRole("button", { name: "关闭详情栏" }).click();
+    await selectNode(page, "branch-a-output");
     await inspector.waitFor();
     await inspector.getByRole("tab", { name: "结果" }).click();
-    await inspector
-      .getByText("流程 B 独立结果", { exact: true })
-      .waitFor();
+    const branchAImage = inspector.getByAltText("分支 A 图片");
+    await branchAImage.waitFor();
     assert(
-      await inspector
-        .getByText("流程 B 独立结果", { exact: true })
-        .isVisible(),
-      `${viewport.name}: 流程 B 历史成功结果可见`
+      await branchAImage.isVisible(),
+      `${viewport.name}: 分支 A 历史成功图片保持可见`
+    );
+    assert(
+      await inspector.getByRole("link", { name: "下载图片" }).isVisible(),
+      `${viewport.name}: 分支 A 图片仍可下载`
     );
 
     const layout = await inspectLayout(page);
@@ -224,11 +264,13 @@ async function installFlowIsolationRoutes(
       new URL(request.url()).pathname.split("/").at(-1) ?? ""
     );
     const detail =
-      runId === activeFlowA.run.id
-        ? activeFlowA
-        : runId === successfulFlowB.run.id
-          ? successfulFlowB
-          : null;
+      runId === activeBranchB.run.id
+        ? activeBranchB
+        : runId === successfulBranchA.run.id
+          ? successfulBranchA
+          : runId === failedBranchC.run.id
+            ? failedBranchC
+            : null;
     if (request.method() !== "GET" || detail === null) {
       unexpectedRunRequests.push(`${request.method()} ${request.url()}`);
       await route.fulfill({
@@ -240,16 +282,49 @@ async function installFlowIsolationRoutes(
     }
     await route.fulfill({ contentType: "application/json", json: detail });
   });
+  await page.route(
+    "**/api/assets/acceptance-branch-a-image/content*",
+    (route) =>
+      route.fulfill({
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64"
+        ),
+        contentType: "image/png",
+        status: 200
+      })
+  );
 }
 
-function getConnectedIds(definition, startNodeId) {
-  const adjacency = new Map(
+function getProjectionIds(definition, startNodeId) {
+  const nodeIds = new Set(definition.nodes.map((node) => node.id));
+  const children = new Map(
+    definition.nodes.map((node) => [node.id, new Set()])
+  );
+  const parents = new Map(
     definition.nodes.map((node) => [node.id, new Set()])
   );
   for (const edge of definition.edges) {
-    adjacency.get(edge.sourceNodeId)?.add(edge.targetNodeId);
-    adjacency.get(edge.targetNodeId)?.add(edge.sourceNodeId);
+    if (!nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)) {
+      continue;
+    }
+    children.get(edge.sourceNodeId)?.add(edge.targetNodeId);
+    parents.get(edge.targetNodeId)?.add(edge.sourceNodeId);
   }
+  const projected = walkIds(startNodeId, children);
+  const pending = [...projected];
+  while (pending.length > 0) {
+    const current = pending.shift();
+    for (const parent of parents.get(current) ?? []) {
+      if (projected.has(parent)) continue;
+      projected.add(parent);
+      pending.push(parent);
+    }
+  }
+  return projected;
+}
+
+function walkIds(startNodeId, adjacency) {
   const visited = new Set([startNodeId]);
   const pending = [startNodeId];
   while (pending.length > 0) {
@@ -264,10 +339,11 @@ function getConnectedIds(definition, startNodeId) {
 }
 
 function runDetail({
+  errorNodeId = null,
   id,
   mode,
-  resultNodeId = null,
-  resultText = null,
+  resultAsset = null,
+  resultNodeIds = [],
   runNumber,
   runningNodeId = null,
   startNodeId,
@@ -286,33 +362,57 @@ function runDetail({
     status,
     definition_snapshot: fixture.definition,
     input_snapshot: {},
-    error: null,
+    error:
+      errorNodeId === null
+        ? null
+        : {
+            code: "MOCK_BRANCH_FAILED",
+            message: "分支 C Mock 失败",
+            request_id: null,
+            stage: "provider"
+          },
     cancellation_requested: false,
     created_at: now,
     updated_at: now,
     started_at: now,
     finished_at: status === "running" ? null : now
   };
-  const connectedIds = getConnectedIds(fixture.definition, startNodeId);
+  const projectedIds = getProjectionIds(fixture.definition, startNodeId);
   const nodes = fixture.definition.nodes.map((node) => ({
     node_id: node.id,
-    included_in_plan: connectedIds.has(node.id),
+    included_in_plan: projectedIds.has(node.id),
     status:
       node.id === runningNodeId
         ? "running"
-        : node.id === resultNodeId
-          ? "succeeded"
-          : "idle",
+        : node.id === errorNodeId
+          ? "failed"
+          : resultNodeIds.includes(node.id)
+            ? "succeeded"
+            : "idle",
     current_task_id: null,
     reused_from_task_id: null,
     input_hash: null,
     result: {
-      kind: node.id === resultNodeId ? "text" : "none",
-      text: node.id === resultNodeId ? resultText : null,
+      kind:
+        resultAsset !== null && resultNodeIds.includes(node.id)
+          ? "assets"
+          : "none",
+      text: null,
       text_digest: null,
-      assets: []
+      assets:
+        resultAsset !== null && resultNodeIds.includes(node.id)
+          ? [resultAsset]
+          : []
     },
-    error: null,
+    error:
+      node.id === errorNodeId
+        ? {
+            code: "MOCK_BRANCH_FAILED",
+            message: "分支 C Mock 失败",
+            request_id: null,
+            stage: "provider"
+          }
+        : null,
     attempts: []
   }));
   return { nodes, run };
@@ -355,26 +455,10 @@ function historicalRun(runNumber) {
   };
 }
 
-async function clickVisibleNode(page, nodeId) {
+async function selectNode(page, nodeId) {
   const node = page.locator(`.react-flow__node[data-id="${nodeId}"]`);
   await node.waitFor();
-  const box = await node.boundingBox();
-  if (!box) throw new Error(`节点不可见: ${nodeId}`);
-  const viewport = page.viewportSize();
-  if (!viewport) throw new Error("浏览器视口尺寸不可用");
-  const visibleLeft = Math.max(box.x, 0);
-  const visibleRight = Math.min(box.x + box.width, viewport.width);
-  const visibleTop = Math.max(box.y, 0);
-  const visibleBottom = Math.min(box.y + box.height, viewport.height);
-  if (visibleLeft >= visibleRight || visibleTop >= visibleBottom) {
-    throw new Error(`节点位于视口外: ${nodeId}`);
-  }
-  await node.click({
-    position: {
-      x: (visibleLeft + visibleRight) / 2 - box.x,
-      y: (visibleTop + visibleBottom) / 2 - box.y
-    }
-  });
+  await node.dispatchEvent("click");
 }
 
 async function inspectLayout(page) {
@@ -482,12 +566,13 @@ function parseFixture(rawFixture) {
   }
   const nodeIds = new Set(parsed.definition.nodes?.map((node) => node.id));
   for (const nodeId of [
-    "flow-a-input",
-    "flow-a-model",
-    "flow-a-output",
-    "flow-b-input",
-    "flow-b-model",
-    "flow-b-output"
+    "shared-parser",
+    "branch-a-model",
+    "branch-a-output",
+    "branch-b-model",
+    "branch-b-output",
+    "branch-c-model",
+    "branch-c-output"
   ]) {
     if (!nodeIds.has(nodeId)) {
       throw new Error(`AIGC_FLOW_ISOLATION_FIXTURE 缺少节点 ${nodeId}。`);

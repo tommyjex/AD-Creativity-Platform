@@ -1,0 +1,392 @@
+{
+  "initial_manifest": {
+    "committed": false,
+    "pipeline_id": "f792ccac-eb40-4d58-9221-16a6a3477c3d",
+    "run_id": "fb4eb8cb-7564-4275-968d-6e903de6002e",
+    "revision": 0,
+    "image": {
+      "asset_id": "naming-acceptance-image",
+      "asset_ids": [
+        "naming-acceptance-image",
+        "naming-acceptance-image-2"
+      ],
+      "name": "雨夜霓虹跑车"
+    },
+    "video": {
+      "asset_id": "naming-acceptance-video",
+      "name": "海岸日落短片"
+    },
+    "historical": {
+      "asset_id": "naming-acceptance-historical",
+      "name": "历史森林海报"
+    },
+    "provider_calls": 0
+  },
+  "started_clean": true,
+  "viewports": {
+    "desktop": {
+      "size": [
+        1440,
+        1000
+      ],
+      "editor": {
+        "revision_before_refresh": 3,
+        "revision_after_refresh": 3,
+        "node_downloads": {
+          "image": {
+            "filename": "雨夜霓虹跑车.png",
+            "path": "test-results/aigc-generated-media-naming/downloads/node-image.png",
+            "size_bytes": 79
+          },
+          "video": {
+            "filename": "海岸日落短片.mp4",
+            "path": "test-results/aigc-generated-media-naming/downloads/node-video.mp4",
+            "size_bytes": 186288
+          }
+        },
+        "result_downloads": [
+          {
+            "filename": "雨夜霓虹跑车.png",
+            "path": "test-results/aigc-generated-media-naming/downloads/result-image-1.png",
+            "size_bytes": 79
+          },
+          {
+            "filename": "雨夜霓虹跑车-2.png",
+            "path": "test-results/aigc-generated-media-naming/downloads/result-image-2.png",
+            "size_bytes": 79
+          },
+          {
+            "filename": "海岸日落短片.mp4",
+            "path": "test-results/aigc-generated-media-naming/downloads/result-video.mp4",
+            "size_bytes": 186288
+          }
+        ],
+        "layout": {
+          "document": {
+            "clientWidth": 1440,
+            "scrollWidth": 1440,
+            "clientHeight": 1000,
+            "scrollHeight": 1000
+          },
+          "shell": {
+            "clientWidth": 1440,
+            "scrollWidth": 1440,
+            "clientHeight": 936,
+            "scrollHeight": 936
+          },
+          "reachable": {
+            "details": {
+              "x": 1204.828125,
+              "y": 69.5,
+              "width": 36,
+              "height": 36
+            },
+            "config-tab": {
+              "x": 1125,
+              "y": 118,
+              "width": 90.328125,
+              "height": 32
+            },
+            "result-tab": {
+              "x": 1215.328125,
+              "y": 118,
+              "width": 90.328125,
+              "height": 32
+            },
+            "run-tab": {
+              "x": 1305.65625,
+              "y": 118,
+              "width": 90.34375,
+              "height": 32
+            },
+            "close-inspector": {
+              "x": 1400,
+              "y": 116,
+              "width": 36,
+              "height": 36
+            }
+          },
+          "overlaps": []
+        }
+      },
+      "asset_library": {
+        "downloads": {
+          "image": {
+            "filename": "雨夜霓虹跑车.png",
+            "path": "test-results/aigc-generated-media-naming/downloads/asset-library-image.png",
+            "size_bytes": 79
+          },
+          "image-2": {
+            "filename": "雨夜霓虹跑车-2.png",
+            "path": "test-results/aigc-generated-media-naming/downloads/asset-library-image-2.png",
+            "size_bytes": 79
+          },
+          "video": {
+            "filename": "海岸日落短片.mp4",
+            "path": "test-results/aigc-generated-media-naming/downloads/asset-library-video.mp4",
+            "size_bytes": 186288
+          },
+          "historical": {
+            "filename": "历史森林海报.png",
+            "path": "test-results/aigc-generated-media-naming/downloads/asset-library-historical.png",
+            "size_bytes": 79
+          }
+        },
+        "layout": {
+          "document": {
+            "clientWidth": 1440,
+            "scrollWidth": 1440,
+            "clientHeight": 1000,
+            "scrollHeight": 1000
+          },
+          "shell": null,
+          "reachable": {},
+          "overlaps": []
+        }
+      },
+      "console_errors": [],
+      "page_errors": [],
+      "http_errors": []
+    },
+    "tablet": {
+      "size": [
+        1024,
+        768
+      ],
+      "editor": {
+        "revision_before_refresh": 4,
+        "revision_after_refresh": 4,
+        "node_downloads": {},
+        "result_downloads": [],
+        "layout": {
+          "document": {
+            "clientWidth": 1024,
+            "scrollWidth": 1024,
+            "clientHeight": 768,
+            "scrollHeight": 768
+          },
+          "shell": {
+            "clientWidth": 1024,
+            "scrollWidth": 1024,
+            "clientHeight": 704,
+            "scrollHeight": 704
+          },
+          "reachable": {
+            "details": {
+              "x": 888,
+              "y": 69.5,
+              "width": 36,
+              "height": 36
+            },
+            "config-tab": {
+              "x": 709,
+              "y": 118,
+              "width": 90.328125,
+              "height": 32
+            },
+            "result-tab": {
+              "x": 799.328125,
+              "y": 118,
+              "width": 90.328125,
+              "height": 32
+            },
+            "run-tab": {
+              "x": 889.65625,
+              "y": 118,
+              "width": 90.34375,
+              "height": 32
+            },
+            "close-inspector": {
+              "x": 984,
+              "y": 116,
+              "width": 36,
+              "height": 36
+            }
+          },
+          "overlaps": []
+        }
+      },
+      "asset_library": {
+        "downloads": {},
+        "layout": {
+          "document": {
+            "clientWidth": 1024,
+            "scrollWidth": 1024,
+            "clientHeight": 768,
+            "scrollHeight": 1427
+          },
+          "shell": null,
+          "reachable": {},
+          "overlaps": []
+        }
+      },
+      "console_errors": [],
+      "page_errors": [],
+      "http_errors": []
+    },
+    "mobile": {
+      "size": [
+        390,
+        844
+      ],
+      "editor": {
+        "revision_before_refresh": 5,
+        "revision_after_refresh": 5,
+        "node_downloads": {},
+        "result_downloads": [],
+        "layout": {
+          "document": {
+            "clientWidth": 390,
+            "scrollWidth": 390,
+            "clientHeight": 844,
+            "scrollHeight": 844
+          },
+          "shell": {
+            "clientWidth": 390,
+            "scrollWidth": 390,
+            "clientHeight": 780,
+            "scrollHeight": 780
+          },
+          "reachable": {
+            "details": {
+              "x": 254,
+              "y": 69.5,
+              "width": 36,
+              "height": 36
+            },
+            "config-tab": {
+              "x": 75,
+              "y": 118,
+              "width": 90.328125,
+              "height": 32
+            },
+            "result-tab": {
+              "x": 165.328125,
+              "y": 118,
+              "width": 90.328125,
+              "height": 32
+            },
+            "run-tab": {
+              "x": 255.65625,
+              "y": 118,
+              "width": 90.34375,
+              "height": 32
+            },
+            "close-inspector": {
+              "x": 350,
+              "y": 116,
+              "width": 36,
+              "height": 36
+            }
+          },
+          "overlaps": []
+        }
+      },
+      "asset_library": {
+        "downloads": {},
+        "layout": {
+          "document": {
+            "clientWidth": 390,
+            "scrollWidth": 390,
+            "clientHeight": 844,
+            "scrollHeight": 2710
+          },
+          "shell": null,
+          "reachable": {},
+          "overlaps": []
+        }
+      },
+      "console_errors": [],
+      "page_errors": [],
+      "http_errors": []
+    }
+  },
+  "committed_manifest": {
+    "committed": true,
+    "pipeline_id": "f792ccac-eb40-4d58-9221-16a6a3477c3d",
+    "run_id": "fb4eb8cb-7564-4275-968d-6e903de6002e",
+    "revision": 5,
+    "image": {
+      "asset_id": "naming-acceptance-image",
+      "asset_ids": [
+        "naming-acceptance-image",
+        "naming-acceptance-image-2"
+      ],
+      "name": "雨夜霓虹跑车"
+    },
+    "video": {
+      "asset_id": "naming-acceptance-video",
+      "name": "海岸日落短片"
+    },
+    "historical": {
+      "asset_id": "naming-acceptance-historical",
+      "name": "历史森林海报"
+    },
+    "provider_calls": 0
+  },
+  "metadata": {
+    "image": {
+      "id": "naming-acceptance-image",
+      "status": "succeeded",
+      "metadata": {
+        "origin": "aigc",
+        "operation": "text_to_image",
+        "pipeline_id": "f792ccac-eb40-4d58-9221-16a6a3477c3d",
+        "run_id": "fb4eb8cb-7564-4275-968d-6e903de6002e",
+        "node_id": "image-model",
+        "task_id": "26056fd3-e4c5-4e83-80af-f646acd0efce",
+        "name": "雨夜霓虹跑车.png",
+        "name_scheme": "aigc_generated_node_v2",
+        "generated_name": "雨夜霓虹跑车",
+        "name_source": "ai",
+        "naming_model": "doubao-seed-2-0-mini-260428",
+        "naming_status": "succeeded",
+        "output_ordinal": 0
+      }
+    },
+    "image-2": {
+      "id": "naming-acceptance-image-2",
+      "status": "succeeded",
+      "metadata": {
+        "origin": "aigc",
+        "operation": "text_to_image",
+        "pipeline_id": "f792ccac-eb40-4d58-9221-16a6a3477c3d",
+        "run_id": "fb4eb8cb-7564-4275-968d-6e903de6002e",
+        "node_id": "image-model",
+        "task_id": "26056fd3-e4c5-4e83-80af-f646acd0efce",
+        "name": "雨夜霓虹跑车-2.png",
+        "name_scheme": "aigc_generated_node_v2",
+        "generated_name": "雨夜霓虹跑车",
+        "name_source": "ai",
+        "naming_model": "doubao-seed-2-0-mini-260428",
+        "naming_status": "succeeded",
+        "output_ordinal": 1
+      }
+    },
+    "video": {
+      "id": "naming-acceptance-video",
+      "status": "succeeded",
+      "metadata": {
+        "origin": "aigc",
+        "operation": "video_generation",
+        "pipeline_id": "f792ccac-eb40-4d58-9221-16a6a3477c3d",
+        "run_id": "fb4eb8cb-7564-4275-968d-6e903de6002e",
+        "node_id": "video-model",
+        "task_id": "621c93cc-2e96-401a-baa0-4e8aee51bee0",
+        "name": "海岸日落短片.mp4",
+        "name_scheme": "aigc_generated_node_v2",
+        "generated_name": "海岸日落短片",
+        "name_source": "ai",
+        "naming_model": "doubao-seed-2-0-mini-260428",
+        "naming_status": "succeeded",
+        "output_ordinal": 0
+      }
+    }
+  },
+  "content_disposition": {
+    "image": "雨夜霓虹跑车.png",
+    "image-2": "雨夜霓虹跑车-2.png",
+    "video": "海岸日落短片.mp4",
+    "historical": "历史森林海报.png"
+  }
+}

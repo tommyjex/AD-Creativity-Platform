@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 from typing import Protocol
@@ -76,6 +77,14 @@ class PipelineRunConflictError(RuntimeError):
     """Raised when a pipeline is still referenced by an AIGC run."""
 
 
+@dataclass(frozen=True)
+class AigcPipelineThumbnailOutput:
+    pipeline_id: str
+    run_id: str
+    node_id: str
+    asset: Asset
+
+
 def multitrack_subtitle_asset_slot(track_id: str, element_id: str) -> str:
     identity = f"{track_id}\0{element_id}".encode()
     return f"subtitle:{hashlib.sha256(identity).hexdigest()}"
@@ -112,6 +121,25 @@ class Repository(Protocol):
         self,
         pipeline_id: str,
         data: AigcPipelineUpdate,
+    ) -> AigcPipeline: ...
+
+    def update_aigc_pipeline_thumbnail(
+        self,
+        pipeline_id: str,
+        *,
+        asset_id: str | None,
+    ) -> AigcPipeline: ...
+
+    def list_aigc_pipeline_thumbnail_outputs(
+        self,
+        pipeline_ids: Iterable[str],
+    ) -> dict[str, list[AigcPipelineThumbnailOutput]]: ...
+
+    def patch_aigc_pipeline_node_custom_name(
+        self,
+        pipeline_id: str,
+        node_id: str,
+        custom_name: str,
     ) -> AigcPipeline: ...
 
     def delete_aigc_pipeline(self, pipeline_id: str) -> None: ...
@@ -193,6 +221,15 @@ class Repository(Protocol):
         status: AigcTaskStatus,
         result: AigcTaskResult,
         error: AigcTaskError | None,
+        metrics: AigcTaskMetrics,
+    ) -> tuple[AigcPipelineTaskAttempt, bool]: ...
+
+    def commit_aigc_generated_media_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+        result: AigcTaskResult,
         metrics: AigcTaskMetrics,
     ) -> tuple[AigcPipelineTaskAttempt, bool]: ...
 

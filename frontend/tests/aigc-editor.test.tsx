@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AigcEditor,
@@ -105,11 +106,27 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
             id: string;
           }
         ) => void;
+        onNodeContextMenu?: (
+          event: React.MouseEvent,
+          node: { id: string }
+        ) => void;
+        onPaneContextMenu?: (event: React.MouseEvent) => void;
+        onInit?: (instance: {
+          screenToFlowPosition: (position: {
+            x: number;
+            y: number;
+          }) => { x: number; y: number };
+        }) => void;
         onPaneClick?: () => void;
         translateExtent?: unknown;
       };
     }) => {
       const runActions = useAigcRunActions();
+      useEffect(() => {
+        reactFlowProps?.onInit?.({
+          screenToFlowPosition: ({ x, y }) => ({ x: x - 100, y: y - 50 })
+        });
+      }, [reactFlowProps]);
       const layerCanvas = nodes.find((node) => node.type === "layer_canvas");
       const layerComposite = nodes.find(
         (node) => node.type === "layer_composite"
@@ -182,6 +199,9 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
               aria-label={`选择节点 ${node.id}`}
               key={node.id}
               onClick={() => reactFlowProps?.onNodeClick?.(null, node)}
+              onContextMenu={(event) =>
+                reactFlowProps?.onNodeContextMenu?.(event, node)
+              }
               type="button"
             >
               {node.id}
@@ -189,6 +209,15 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
           ))}
           <button onClick={() => reactFlowProps?.onPaneClick?.()} type="button">
             点击画布空白
+          </button>
+          <button
+            aria-label="右键画布空白"
+            onContextMenu={(event) =>
+              reactFlowProps?.onPaneContextMenu?.(event)
+            }
+            type="button"
+          >
+            右键画布空白
           </button>
         </div>
       );
@@ -252,7 +281,9 @@ const pipeline: AigcPipeline = {
   id: "pipeline-1",
   source_template_id: template.id,
   source_template_revision: template.revision,
-  latest_run_status: null
+  latest_run_status: null,
+  thumbnail_asset_id: null,
+  thumbnail: null
 };
 
 function modalityPipeline(): AigcPipeline {
@@ -414,6 +445,118 @@ function disconnectedPipeline(): AigcPipeline {
     ...pipeline,
     definition:
       disconnectedDefinition as unknown as AigcPipelineDefinition
+  };
+}
+
+function sharedImageBranchPipeline(): AigcPipeline {
+  const imageModelConfig = {
+    model: "doubao-seedream-5-0-pro-260628",
+    aspect_ratio: "1:1" as const,
+    size: "2K" as const,
+    format: "png" as const
+  };
+  const sharedDefinition: AigcPipelineDefinitionV2 = {
+    schemaVersion: 2,
+    nodes: [
+      {
+        id: "shared-input",
+        type: "text",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 160 },
+        config: { text: "共享输入", bbox_references: [], title: null }
+      },
+      {
+        id: "shared-model",
+        type: "llm",
+        position: { x: 280, y: 0 },
+        size: { width: 240, height: 160 },
+        config: {
+          model: "doubao-seed-evolving",
+          system_prompt: "",
+          temperature: 0.7
+        }
+      },
+      {
+        id: "branch-a-model",
+        type: "text_to_image",
+        position: { x: 560, y: -180 },
+        size: { width: 240, height: 160 },
+        config: imageModelConfig
+      },
+      {
+        id: "branch-a-output",
+        type: "image",
+        position: { x: 840, y: -180 },
+        size: { width: 240, height: 160 },
+        config: {
+          asset_id: null,
+          bbox: null,
+          bbox_asset_id: null,
+          title: "分支 A 图片"
+        }
+      },
+      {
+        id: "branch-b-model",
+        type: "text_to_image",
+        position: { x: 560, y: 180 },
+        size: { width: 240, height: 160 },
+        config: imageModelConfig
+      },
+      {
+        id: "branch-b-output",
+        type: "image",
+        position: { x: 840, y: 180 },
+        size: { width: 240, height: 160 },
+        config: {
+          asset_id: null,
+          bbox: null,
+          bbox_asset_id: null,
+          title: "分支 B 图片"
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "shared-input-model",
+        sourceNodeId: "shared-input",
+        sourceHandle: "text",
+        targetNodeId: "shared-model",
+        targetHandle: "prompt"
+      },
+      {
+        id: "shared-branch-a",
+        sourceNodeId: "shared-model",
+        sourceHandle: "text",
+        targetNodeId: "branch-a-model",
+        targetHandle: "prompt"
+      },
+      {
+        id: "branch-a-output-edge",
+        sourceNodeId: "branch-a-model",
+        sourceHandle: "image",
+        targetNodeId: "branch-a-output",
+        targetHandle: "image"
+      },
+      {
+        id: "shared-branch-b",
+        sourceNodeId: "shared-model",
+        sourceHandle: "text",
+        targetNodeId: "branch-b-model",
+        targetHandle: "prompt"
+      },
+      {
+        id: "branch-b-output-edge",
+        sourceNodeId: "branch-b-model",
+        sourceHandle: "image",
+        targetNodeId: "branch-b-output",
+        targetHandle: "image"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  return {
+    ...pipeline,
+    definition: sharedDefinition as unknown as AigcPipelineDefinition
   };
 }
 
@@ -1529,6 +1672,7 @@ describe("AIGC editor modes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     navigationMocks.push.mockReset();
+    window.localStorage.clear();
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(min-width: 1024px)",
       media: query,
@@ -1627,6 +1771,237 @@ describe("AIGC editor modes", () => {
     fireEvent.click(screen.getByRole("button", { name: "取消运行" }));
     await waitFor(() => {
       expect(apiMocks.cancelAigcRun).toHaveBeenCalledWith(activeA.id);
+    });
+  });
+
+  it("preserves a completed image branch while a shared-upstream sibling runs", async () => {
+    const entity = sharedImageBranchPipeline();
+    const branchA = scopedRun(
+      entity.definition,
+      "run-branch-a",
+      4,
+      "branch-a-model",
+      "succeeded"
+    );
+    const branchB = scopedRun(
+      entity.definition,
+      "run-branch-b",
+      5,
+      "branch-b-model",
+      "running"
+    );
+    const imageAsset = {
+      asset_id: "branch-a-asset",
+      ordinal: 0,
+      mime_type: "image/png",
+      download_url: "/api/assets/branch-a-asset/content",
+      available: true,
+      metadata: {}
+    } satisfies AigcResultAsset;
+    const branchADetail: AigcPipelineRunDetail = {
+      run: branchA,
+      nodes: [
+        runNodeFixture("branch-a-model", {
+          result: {
+            kind: "assets",
+            text: null,
+            text_digest: null,
+            assets: [imageAsset]
+          }
+        }),
+        runNodeFixture("branch-a-output", {
+          result: {
+            kind: "assets",
+            text: null,
+            text_digest: null,
+            assets: [imageAsset]
+          }
+        })
+      ]
+    };
+    const branchBDetail: AigcPipelineRunDetail = {
+      run: branchB,
+      nodes: [
+        runNodeFixture("branch-b-model", {
+          status: "running"
+        }),
+        runNodeFixture("branch-b-output", {
+          status: "idle"
+        })
+      ]
+    };
+    apiMocks.listAigcRuns.mockResolvedValue({
+      items: [branchB, branchA],
+      page: 1,
+      page_size: 100,
+      total: 2
+    });
+    apiMocks.getAigcRun.mockImplementation(async (runId: string) =>
+      runId === branchA.id ? branchADetail : branchBDetail
+    );
+    renderEditor(entity, "pipeline");
+
+    await waitFor(() => {
+      expect(apiMocks.getAigcRun).toHaveBeenCalledWith(branchA.id);
+      expect(apiMocks.getAigcRun).toHaveBeenCalledWith(branchB.id);
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 branch-a-output" })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "结果" }));
+
+    expect(await screen.findByAltText("分支 A 图片")).toHaveClass(
+      "object-contain"
+    );
+    expect(
+      screen.getByRole("link", { name: "下载图片" }).getAttribute("href")
+    ).toContain("/api/assets/branch-a-asset/content");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 branch-a-model" })
+    );
+    expect(
+      screen.getByRole("button", { name: "从此节点运行" })
+    ).toBeEnabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 branch-b-model" })
+    );
+    expect(
+      screen.getByRole("button", { name: "从此节点运行" })
+    ).toBeDisabled();
+  });
+
+  it("keeps a sibling image when an active branch detail fails", async () => {
+    const entity = sharedImageBranchPipeline();
+    const branchA = scopedRun(
+      entity.definition,
+      "run-branch-a",
+      4,
+      "branch-a-model",
+      "succeeded"
+    );
+    const branchB = scopedRun(
+      entity.definition,
+      "run-branch-b",
+      5,
+      "branch-b-model",
+      "running"
+    );
+    const imageAsset = {
+      asset_id: "branch-a-asset",
+      ordinal: 0,
+      mime_type: "image/png",
+      download_url: "/api/assets/branch-a-asset/content",
+      available: true,
+      metadata: {}
+    } satisfies AigcResultAsset;
+    apiMocks.listAigcRuns.mockResolvedValue({
+      items: [branchB, branchA],
+      page: 1,
+      page_size: 100,
+      total: 2
+    });
+    apiMocks.getAigcRun.mockImplementation(async (runId: string) => {
+      if (runId === branchB.id) throw new Error("branch B detail failed");
+      return {
+        run: branchA,
+        nodes: [
+          runNodeFixture("branch-a-output", {
+            result: {
+              kind: "assets",
+              text: null,
+              text_digest: null,
+              assets: [imageAsset]
+            }
+          })
+        ]
+      };
+    });
+    renderEditor(entity, "pipeline");
+
+    await waitFor(() => {
+      expect(apiMocks.getAigcRun).toHaveBeenCalledWith(branchA.id);
+      expect(apiMocks.getAigcRun).toHaveBeenCalledWith(branchB.id);
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 branch-a-output" })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "结果" }));
+    expect(await screen.findByAltText("分支 A 图片")).toHaveClass(
+      "object-contain"
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 branch-b-model" })
+    );
+    expect(
+      screen.getByRole("button", { name: "从此节点运行" })
+    ).toBeDisabled();
+  });
+
+  it("allows shared-upstream sibling submissions while blocking their parent scope", async () => {
+    const entity = sharedImageBranchPipeline();
+    const pendingA = deferred<AigcPipelineRunDetail>();
+    const pendingB = deferred<AigcPipelineRunDetail>();
+    const runA = scopedRun(
+      entity.definition,
+      "pending-branch-a",
+      1,
+      "branch-a-model",
+      "queued"
+    );
+    const runB = scopedRun(
+      entity.definition,
+      "pending-branch-b",
+      2,
+      "branch-b-model",
+      "queued"
+    );
+    apiMocks.createAigcRun.mockImplementation(
+      (
+        _pipelineId: string,
+        payload: { start_node_id: string | null }
+      ) =>
+        payload.start_node_id === "branch-a-model"
+          ? pendingA.promise
+          : pendingB.promise
+    );
+    renderEditor(entity, "pipeline");
+    await waitFor(() => {
+      expect(screen.getByTestId("aigc-command-execute")).toBeEnabled();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 branch-a-model" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "从此节点运行" }));
+    await waitFor(() => {
+      expect(apiMocks.createAigcRun).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 branch-b-model" })
+    );
+    const executeBranchB = screen.getByRole("button", {
+      name: "从此节点运行"
+    });
+    expect(executeBranchB).toBeEnabled();
+    fireEvent.click(executeBranchB);
+    await waitFor(() => {
+      expect(apiMocks.createAigcRun).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 shared-model" })
+    );
+    expect(
+      screen.getByRole("button", { name: "从此节点运行" })
+    ).toBeDisabled();
+
+    await act(async () => {
+      pendingA.resolve(scopedRunDetail(runA, "branch-a-model"));
+      pendingB.resolve(scopedRunDetail(runB, "branch-b-model"));
+      await Promise.all([pendingA.promise, pendingB.promise]);
     });
   });
 
@@ -1824,6 +2199,12 @@ describe("AIGC editor modes", () => {
     await waitFor(() => {
       expect(apiMocks.createAigcRun).toHaveBeenCalledTimes(1);
     });
+    expect(screen.getByRole("button", { name: "运行中" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "运行中" })).toHaveAttribute(
+      "title",
+      "运行中"
+    );
+    expect(screen.getByTestId("aigc-editor-header")).toHaveClass("h-14");
     fireEvent.click(
       screen.getByRole("button", { name: "选择节点 flow-b-model" })
     );
@@ -2126,24 +2507,28 @@ describe("AIGC editor modes", () => {
     const { store } = renderEditor(entity, "pipeline");
 
     fireEvent.click(screen.getByRole("button", { name: "选择画布节点" }));
-    const editor = await screen.findByLabelText("基础文本");
+    fireEvent.click(await screen.findByTestId("aigc-prompt-preview"));
+    const editor = await screen.findByLabelText("完整基础文本");
     expect(editor).toHaveValue("来自 Run 的文案");
     expect(screen.queryByText("上游")).toBeNull();
     expect(screen.queryByText("本地")).toBeNull();
-    expect(screen.getByLabelText("显示标题")).toBeDisabled();
+    expect(screen.getByLabelText("内容标题")).toBeDisabled();
     fireEvent.change(editor, { target: { value: "当前节点覆盖文案" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用" }));
     expect(
       (
         store.getState().definition as AigcPipelineDefinitionV2
       ).nodes.find((node) => node.id === "model")?.config
     ).toMatchObject({ upstream_text_override: "当前节点覆盖文案" });
     fireEvent.click(screen.getByRole("button", { name: "恢复上游文本" }));
-    expect(screen.getByLabelText("基础文本")).toHaveValue("来自 Run 的文案");
+    expect(screen.getByTestId("aigc-prompt-preview")).toHaveTextContent(
+      "来自 Run 的文案"
+    );
 
     act(() => store.getState().removeEdge("text-upstream"));
 
-    expect(screen.getByLabelText("显示标题")).toBeEnabled();
-    expect(screen.getByLabelText("基础文本")).toHaveValue(
+    expect(screen.getByLabelText("内容标题")).toBeEnabled();
+    expect(screen.getByTestId("aigc-prompt-preview")).toHaveTextContent(
       "断开后恢复的本地文案"
     );
     expect(
@@ -2254,11 +2639,11 @@ describe("AIGC editor modes", () => {
     );
     expect(screen.getByRole("link", { name: "下载图片" })).toHaveAttribute(
       "download",
-      "海报交付-1.png"
+      "海报交付.png"
     );
     expect(screen.getByRole("link", { name: "下载视频" })).toHaveAttribute(
       "download",
-      "视频交付-1.mp4"
+      "视频交付.mp4"
     );
     expect(screen.getByRole("link", { name: "下载音频" })).toHaveAttribute(
       "download",
@@ -2310,6 +2695,23 @@ describe("AIGC editor modes", () => {
     ).toBeInTheDocument();
   });
 
+  it("edits a node name independently from its content title", () => {
+    const { store } = renderEditor(modalityPipeline(), "pipeline");
+    fireEvent.click(screen.getByRole("button", { name: "选择画布节点" }));
+
+    const nodeName = screen.getByRole("textbox", { name: "节点名称" });
+    fireEvent.change(nodeName, { target: { value: "商品主视觉输入" } });
+    fireEvent.blur(nodeName);
+
+    expect(
+      store.getState().definition.nodes.find((node) => node.id === "model")
+        ?.custom_name
+    ).toBe("商品主视觉输入");
+    expect(
+      screen.getByRole("heading", { name: "商品主视觉输入" })
+    ).toBeInTheDocument();
+  });
+
   it.each([
     ["pipeline", pipeline, "/workspace/aigc?view=pipelines"],
     ["template", template, "/workspace/aigc?view=templates"]
@@ -2322,6 +2724,16 @@ describe("AIGC editor modes", () => {
         "href",
         expectedHref
       );
+      expect(screen.getByTestId("aigc-editor-title")).toHaveTextContent(
+        entity.name
+      );
+      expect(screen.getByTestId("aigc-editor-title")).toHaveAttribute(
+        "title",
+        entity.name
+      );
+      expect(screen.getByTestId("aigc-editor-mode")).toHaveTextContent(
+        mode === "pipeline" ? "画布" : "模板"
+      );
     }
   );
 
@@ -2333,15 +2745,93 @@ describe("AIGC editor modes", () => {
       { openInspector: false }
     );
 
-    expect(screen.getByTestId("aigc-node-palette")).toHaveClass("w-[184px]");
+    expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
+    expect(screen.getByRole("button", { name: "打开节点库" })).toHaveAttribute(
+      "aria-controls",
+      "aigc-node-palette"
+    );
+    expect(screen.getByRole("button", { name: "打开节点库" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
     expect(screen.getByTestId("aigc-editor-shell")).toHaveClass(
+      "h-[100dvh]",
       "bg-[#101318]",
       "[--card:220_13%_11%]"
     );
     expect(screen.getByTestId("aigc-editor-header")).toHaveClass(
       "bg-[#171a1f]",
-      "border-[#30353d]"
+      "border-[#30353d]",
+      "h-14",
+      "overflow-hidden",
+      "shadow-[0_3px_12px_rgba(0,0,0,0.22)]"
     );
+    expect(screen.getByTestId("aigc-editor-title-row")).toHaveClass(
+      "min-w-0",
+      "flex-1"
+    );
+    expect(screen.getByTestId("aigc-editor-title")).toHaveClass("truncate");
+    const starMap = screen.getByTestId("aigc-toolbar-star-map");
+    expect(starMap).toHaveAttribute("aria-hidden", "true");
+    expect(starMap).toHaveClass("pointer-events-none", "hidden", "xl:block");
+    expect(
+      within(starMap).getAllByTestId("aigc-toolbar-star-line")
+    ).toHaveLength(11);
+    const starPoints = within(starMap).getAllByTestId(
+      "aigc-toolbar-star-point"
+    );
+    expect(starPoints).toHaveLength(12);
+    const modalities = ["text", "image", "video", "audio"] as const;
+    for (const [index, point] of starPoints.entries()) {
+      const modality = modalities[index % modalities.length];
+      expect(point).toHaveAttribute("data-modality", modality);
+      expect(point).toHaveStyle({
+        backgroundColor: `var(--aigc-modality-${modality})`
+      });
+    }
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveAttribute(
+      "aria-live",
+      "polite"
+    );
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveAttribute(
+      "data-status",
+      "idle"
+    );
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveClass("sr-only");
+    expect(
+      screen.getByTestId("aigc-autosave-status").querySelector("svg")
+    ).toBeNull();
+    expect(screen.getByTestId("aigc-command-group-panel")).toHaveAttribute(
+      "aria-label",
+      "面板命令"
+    );
+    expect(screen.getByTestId("aigc-command-group-document")).toHaveAttribute(
+      "aria-label",
+      "文档命令"
+    );
+    expect(screen.getByTestId("aigc-command-group-execution")).toHaveAttribute(
+      "aria-label",
+      "执行命令"
+    );
+    expect(screen.getByTestId("aigc-command-inspector")).toHaveClass(
+      "h-10",
+      "w-10"
+    );
+    expect(screen.getByTestId("aigc-command-save-template")).toHaveClass(
+      "h-10",
+      "min-w-10"
+    );
+    expect(screen.getByTestId("aigc-command-execute")).toHaveClass(
+      "h-10",
+      "min-w-10",
+      "bg-blue-600"
+    );
+    for (const label of ["详情", "另存为模板", "执行"]) {
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+        "title",
+        label
+      );
+    }
     expect(screen.getByTestId("node-canvas")).toHaveClass("bg-[#101318]");
     expect(screen.getByTestId("node-canvas")).toHaveAttribute(
       "data-background-color",
@@ -2355,6 +2845,17 @@ describe("AIGC editor modes", () => {
     expect(screen.getByTestId("node-canvas")).toHaveAttribute(
       "data-controls-orientation",
       "horizontal"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开节点库" }));
+    expect(screen.getByTestId("aigc-node-palette")).toHaveClass("w-[184px]");
+    expect(screen.getByRole("button", { name: "隐藏节点库" })).toHaveAttribute(
+      "aria-controls",
+      "aigc-node-palette"
+    );
+    expect(screen.getByRole("button", { name: "隐藏节点库" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
     );
 
     fireEvent.click(screen.getByRole("button", { name: "选择画布节点" }));
@@ -2392,8 +2893,227 @@ describe("AIGC editor modes", () => {
     );
   });
 
-  it("keeps narrow panels mutually exclusive and clears node overlays at the desktop breakpoint", () => {
-    let matches = false;
+  it("keeps toolbar-only interactions out of the persistent draft", async () => {
+    const { store } = renderEditor(
+      pipeline,
+      "pipeline",
+      createEditorStore(pipeline, "pipeline"),
+      { openInspector: false }
+    );
+    const initialDefinition = structuredClone(store.getState().definition);
+
+    fireEvent.click(screen.getByRole("button", { name: "详情" }));
+    expect(screen.getByTestId("aigc-inspector")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "详情" }));
+    expect(screen.queryByTestId("aigc-inspector")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "另存为模板" }));
+    expect(
+      screen.getByRole("heading", { name: "另存为模板" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 850));
+    });
+    expect(store.getState().definition).toEqual(initialDefinition);
+    expect(store.getState().definition.viewport).toEqual(
+      initialDefinition.viewport
+    );
+    expect(apiMocks.updateAigcPipeline).not.toHaveBeenCalled();
+    expect(apiMocks.updateAigcTemplate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", null],
+    ["false", "false"],
+    ["invalid", "invalid"]
+  ])("defaults the desktop node palette to hidden for %s preference", (_, value) => {
+    if (value !== null) {
+      window.localStorage.setItem("aigc.node-palette.visible.v1", value);
+    }
+
+    renderEditor(
+      pipeline,
+      "pipeline",
+      createEditorStore(pipeline, "pipeline"),
+      { openInspector: false }
+    );
+
+    expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "打开节点库" })
+    ).toBeInTheDocument();
+  });
+
+  it("restores a visible desktop node palette from the shared browser preference", () => {
+    window.localStorage.setItem("aigc.node-palette.visible.v1", "true");
+
+    const first = renderEditor(
+      pipeline,
+      "pipeline",
+      createEditorStore(pipeline, "pipeline"),
+      { openInspector: false }
+    );
+    expect(screen.getByTestId("aigc-node-palette")).toHaveClass("w-[184px]");
+    first.unmount();
+
+    renderEditor(
+      template,
+      "template",
+      createEditorStore(template, "template"),
+      { openInspector: false }
+    );
+    expect(screen.getByTestId("aigc-node-palette")).toHaveClass("w-[184px]");
+  });
+
+  it("falls back to hidden when reading the node palette preference fails", () => {
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new Error("storage unavailable");
+      });
+
+    try {
+      renderEditor(
+        pipeline,
+        "pipeline",
+        createEditorStore(pipeline, "pipeline"),
+        { openInspector: false }
+      );
+      expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
+      expect(screen.getByTestId("node-canvas")).toBeInTheDocument();
+    } finally {
+      getItem.mockRestore();
+    }
+  });
+
+  it("keeps palette controls usable when writing the preference fails", () => {
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("storage unavailable");
+      });
+
+    try {
+      renderEditor(
+        pipeline,
+        "pipeline",
+        createEditorStore(pipeline, "pipeline"),
+        { openInspector: false }
+      );
+      fireEvent.click(screen.getByRole("button", { name: "打开节点库" }));
+      expect(screen.getByTestId("aigc-node-palette")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "隐藏节点库" }));
+      expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it("persists explicit visibility while preserving editor context", () => {
+    const { store } = renderEditor(
+      pipeline,
+      "pipeline",
+      createEditorStore(pipeline, "pipeline"),
+      { openInspector: false }
+    );
+    const initialViewport = store.getState().definition.viewport;
+
+    fireEvent.click(screen.getByRole("button", { name: "选择画布节点" }));
+    fireEvent.click(screen.getByRole("tab", { name: "运行" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开节点库" }));
+
+    expect(window.localStorage.getItem("aigc.node-palette.visible.v1")).toBe(
+      "true"
+    );
+    expect(store.getState().selectedNodeId).toBe("model");
+    expect(store.getState().definition.viewport).toEqual(initialViewport);
+    expect(screen.getByRole("tab", { name: "运行" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+
+    const initialNodeCount = store.getState().definition.nodes.length;
+    fireEvent.click(screen.getByRole("button", { name: "LLM" }));
+    fireEvent.click(screen.getByRole("button", { name: "LLM" }));
+    expect(store.getState().definition.nodes).toHaveLength(initialNodeCount + 2);
+    expect(screen.getByTestId("aigc-node-palette")).toBeInTheDocument();
+    const selectedNodeBeforeHide = store.getState().selectedNodeId;
+
+    fireEvent.click(screen.getByRole("button", { name: "隐藏节点库" }));
+    expect(window.localStorage.getItem("aigc.node-palette.visible.v1")).toBe(
+      "false"
+    );
+    expect(store.getState().selectedNodeId).toBe(selectedNodeBeforeHide);
+    expect(store.getState().definition.viewport).toEqual(initialViewport);
+    expect(screen.getByRole("tab", { name: "运行" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
+  it("does not autosave visibility-only node palette changes", async () => {
+    renderEditor(
+      pipeline,
+      "pipeline",
+      createEditorStore(pipeline, "pipeline"),
+      { openInspector: false }
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开节点库" }));
+    fireEvent.click(screen.getByRole("button", { name: "隐藏节点库" }));
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 850));
+    });
+    expect(apiMocks.updateAigcPipeline).not.toHaveBeenCalled();
+    expect(apiMocks.updateAigcTemplate).not.toHaveBeenCalled();
+  });
+
+  it("opens a searchable pane menu and creates at the converted position", () => {
+    const { store } = renderEditor(pipeline, "pipeline");
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "右键画布空白" }),
+      { clientX: 500, clientY: 400 }
+    );
+
+    expect(screen.getByTestId("aigc-canvas-node-picker")).toBeInTheDocument();
+    const search = screen.getByRole("textbox", { name: "搜索节点" });
+    fireEvent.change(search, { target: { value: "text_to_image" } });
+    fireEvent.keyDown(search, { key: "Enter" });
+
+    expect(store.getState().definition.nodes.at(-1)).toMatchObject({
+      type: "text_to_image",
+      custom_name: null,
+      position: { x: 288, y: 272 }
+    });
+    expect(screen.queryByTestId("aigc-canvas-node-picker")).toBeNull();
+  });
+
+  it("keeps node and pane context menus mutually exclusive", () => {
+    renderEditor(pipeline, "pipeline");
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "选择节点 model" }),
+      { clientX: 300, clientY: 200 }
+    );
+
+    expect(screen.getByTestId("aigc-node-context-menu")).toBeInTheDocument();
+    expect(screen.queryByTestId("aigc-canvas-node-picker")).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "重命名" })).toBeVisible();
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "右键画布空白" }),
+      { clientX: 500, clientY: 400 }
+    );
+    expect(screen.queryByTestId("aigc-node-context-menu")).toBeNull();
+    expect(screen.getByTestId("aigc-canvas-node-picker")).toBeInTheDocument();
+  });
+
+  it("keeps narrow panels isolated and restores the desktop palette preference across breakpoints", () => {
+    let matches = true;
     const listeners = new Set<(event: MediaQueryListEvent) => void>();
     const mediaQuery = {
       get matches() {
@@ -2422,9 +3142,31 @@ describe("AIGC editor modes", () => {
     );
 
     expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "打开节点库" }));
+    expect(screen.getByTestId("aigc-node-palette")).toHaveClass("w-[184px]");
+    expect(window.localStorage.getItem("aigc.node-palette.visible.v1")).toBe(
+      "true"
+    );
+
+    matches = false;
+    act(() =>
+      listeners.forEach((listener) =>
+        listener({ matches: false } as MediaQueryListEvent)
+      )
+    );
+    expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "打开节点面板" }));
     expect(screen.getByTestId("aigc-node-palette")).toHaveClass("w-60");
+    expect(
+      screen.getByRole("button", { name: "关闭节点面板" })
+    ).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "LLM" }));
+    expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
+    expect(window.localStorage.getItem("aigc.node-palette.visible.v1")).toBe(
+      "true"
+    );
 
+    fireEvent.click(screen.getByRole("button", { name: "打开节点面板" }));
     fireEvent.click(screen.getByRole("button", { name: "打开检查器" }));
     expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
     expect(screen.getByTestId("aigc-inspector")).toHaveClass(
@@ -2460,6 +3202,35 @@ describe("AIGC editor modes", () => {
       )
     );
     expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "打开节点面板" })
+    ).toBeInTheDocument();
+
+    matches = true;
+    act(() =>
+      listeners.forEach((listener) =>
+        listener({ matches: true } as MediaQueryListEvent)
+      )
+    );
+    expect(screen.getByTestId("aigc-node-palette")).toHaveClass("w-[184px]");
+
+    fireEvent.click(screen.getByRole("button", { name: "隐藏节点库" }));
+    matches = false;
+    act(() =>
+      listeners.forEach((listener) =>
+        listener({ matches: false } as MediaQueryListEvent)
+      )
+    );
+    matches = true;
+    act(() =>
+      listeners.forEach((listener) =>
+        listener({ matches: true } as MediaQueryListEvent)
+      )
+    );
+    expect(screen.queryByTestId("aigc-node-palette")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "打开节点库" })
+    ).toBeInTheDocument();
   });
 
   it("adds JSON parser from the control palette and edits JSONPath with local feedback", () => {
@@ -2486,6 +3257,7 @@ describe("AIGC editor modes", () => {
     ).toMatchObject({ config: { json_path: "items" } });
 
     const parserCount = store.getState().definition.nodes.length;
+    fireEvent.click(screen.getByRole("button", { name: "打开节点库" }));
     fireEvent.click(screen.getByRole("button", { name: "JSON 解析器" }));
     expect(store.getState().definition.nodes).toHaveLength(parserCount + 1);
     expect(store.getState().definition.nodes.at(-1)).toMatchObject({
@@ -2502,7 +3274,7 @@ describe("AIGC editor modes", () => {
     );
 
     expect(screen.getByRole("heading", { name: "JSON 项 1" })).toBeInTheDocument();
-    expect(screen.getByLabelText("显示标题")).toBeDisabled();
+    expect(screen.getByLabelText("内容标题")).toBeDisabled();
     expect(screen.queryByLabelText("基础文本")).toBeNull();
     expect(screen.getByText("只读上游内容 · 来源：JSON 解析器")).toBeInTheDocument();
     expect(screen.getByLabelText("JSON 项 1只读内容")).toHaveTextContent(
@@ -2609,10 +3381,113 @@ describe("AIGC editor modes", () => {
     expect(await screen.findByText("已保存 Revision 5")).toBeInTheDocument();
   });
 
+  it("refreshes and authoritatively rebases an AI-generated node name", async () => {
+    const entity = structuredClone(pipeline);
+    entity.definition.edges.push({
+      id: "edge-model-output",
+      sourceNodeId: "model",
+      sourceHandle: "image",
+      targetNodeId: "output",
+      targetHandle: "image"
+    });
+    const run = runFixture({
+      id: "run-generated-name-success",
+      definition_snapshot: entity.definition,
+      pipeline_revision: entity.revision,
+      status: "succeeded"
+    });
+    const remote = structuredClone(entity);
+    remote.name = "服务端画布";
+    remote.revision = entity.revision;
+    const remoteOutput = remote.definition.nodes.find(
+      (node) => node.id === "output"
+    );
+    if (!remoteOutput) throw new Error("expected output node");
+    remoteOutput.custom_name = null;
+    apiMocks.listAigcRuns.mockResolvedValue({
+      items: [run],
+      page: 1,
+      page_size: 20,
+      total: 1
+    });
+    apiMocks.getAigcRun.mockResolvedValue({
+      run,
+      nodes: [
+        runNodeFixture("model", {
+          result: {
+            kind: "assets",
+            naming: {
+              status: "succeeded",
+              model: "doubao-seed-2-0-mini-260428",
+              name: "秋日咖啡"
+            },
+            text: null,
+            text_digest: null,
+            assets: [
+              {
+                asset_id: "generated-name-asset",
+                ordinal: 0,
+                mime_type: "image/png",
+                download_url: "/api/assets/generated-name-asset/content",
+                available: true,
+                metadata: {}
+              }
+            ]
+          },
+          status: "succeeded"
+        })
+      ]
+    });
+    apiMocks.getAigcPipeline.mockResolvedValue(remote);
+    apiMocks.updateAigcPipeline.mockResolvedValue({
+      ...remote,
+      name: "本地未保存名称",
+      revision: remote.revision + 1
+    });
+    const { store } = renderEditor(entity, "pipeline");
+
+    act(() => {
+      store.getState().setNodeCustomName("model", "运行中人工名称");
+    });
+    fireEvent.change(screen.getByLabelText("名称"), {
+      target: { value: "本地未保存名称" }
+    });
+
+    await waitFor(() => {
+      expect(apiMocks.getAigcPipeline).toHaveBeenCalledWith(entity.id);
+      expect(store.getState().revision).toBe(remote.revision);
+      expect(
+        store.getState().definition.nodes.find((node) => node.id === "output")
+          ?.custom_name
+      ).toBe("秋日咖啡");
+    });
+
+    await waitFor(() => {
+      expect(apiMocks.updateAigcPipeline).toHaveBeenCalledWith(
+        entity.id,
+        expect.objectContaining({
+          expected_revision: remote.revision,
+          name: "本地未保存名称",
+          definition: expect.objectContaining({
+            nodes: expect.arrayContaining([
+              expect.objectContaining({
+                id: "output",
+                custom_name: "秋日咖啡"
+              })
+            ])
+          })
+        })
+      );
+    }, { timeout: 2_000 });
+  });
+
   it("keeps template editing non-executable and autosaves by revision", async () => {
     renderEditor(template, "template");
 
     expect(screen.queryByRole("button", { name: "执行" })).toBeNull();
+    expect(screen.queryByTestId("aigc-command-group-document")).toBeNull();
+    expect(screen.queryByTestId("aigc-command-group-execution")).toBeNull();
+    expect(screen.getByTestId("aigc-command-group-panel")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "运行记录" })).toBeNull();
     expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
     fireEvent.change(screen.getByLabelText("名称"), {
@@ -2620,6 +3495,10 @@ describe("AIGC editor modes", () => {
     });
     expect(screen.getByTestId("aigc-autosave-status")).toHaveTextContent(
       "等待自动保存"
+    );
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveAttribute(
+      "data-status",
+      "pending"
     );
 
     await waitFor(() => {
@@ -2640,6 +3519,7 @@ describe("AIGC editor modes", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "执行" })).toBeEnabled();
     });
+    fireEvent.click(screen.getByRole("button", { name: "打开节点库" }));
     fireEvent.click(screen.getByRole("button", { name: "LLM" }));
 
     await waitFor(() => {
@@ -2649,11 +3529,21 @@ describe("AIGC editor modes", () => {
     expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
   });
 
-  it("uses a single-row minimal toolbar while keeping every command reachable at 390px", async () => {
+  it("contracts the toolbar without losing priority commands at 390px", async () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       value: 390
     });
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    }));
     const narrowPipeline = {
       ...pipeline,
       name: "这是一个用于验证窄屏标题截断行为的超长 AIGC 工作流名称"
@@ -2667,17 +3557,29 @@ describe("AIGC editor modes", () => {
     });
 
     expect(screen.getByTestId("aigc-editor-header")).toHaveClass(
-      "h-12",
+      "h-14",
       "flex-row",
-      "items-center"
+      "items-center",
+      "overflow-hidden"
     );
     expect(screen.getByTestId("aigc-editor-title-row")).toHaveClass(
-      "shrink-0"
+      "min-w-0",
+      "flex-1"
+    );
+    expect(screen.getByTestId("aigc-editor-title")).toHaveClass("truncate");
+    expect(screen.getByTestId("aigc-editor-title")).toHaveAttribute(
+      "title",
+      `${narrowPipeline.name}（已修改）`
+    );
+    expect(screen.getByTestId("aigc-editor-mode")).toHaveClass(
+      "hidden",
+      "md:inline-flex"
     );
     expect(screen.getByText("等待自动保存")).toBeInTheDocument();
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveClass("sr-only");
 
     const actions = screen.getByTestId("aigc-editor-actions");
-    expect(actions).toHaveClass("ml-auto", "justify-end");
+    expect(actions).toHaveClass("shrink-0", "justify-end");
     for (const command of [
       "aigc-command-inspector",
       "aigc-command-save-template",
@@ -2697,9 +3599,14 @@ describe("AIGC editor modes", () => {
     expect(within(actions).queryByRole("button", { name: "保存" })).toBeNull();
     expect(within(actions).getByText("另存为模板")).toHaveClass(
       "hidden",
-      "xl:inline"
+      "lg:inline"
     );
-    expect(within(actions).getByText("执行")).toHaveClass("hidden", "xl:inline");
+    expect(within(actions).getByText("执行")).toHaveClass("hidden", "lg:inline");
+    expect(screen.getByTitle("返回 AIGC 工作台")).toHaveClass("h-10", "w-10");
+    expect(screen.getByRole("button", { name: "详情" })).toHaveClass(
+      "h-10",
+      "w-10"
+    );
   });
 
   it("lowers only the narrow-screen viewport minimum without bounding panning", () => {
@@ -3027,6 +3934,7 @@ describe("AIGC editor modes", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "执行" })).toBeEnabled();
     });
+    fireEvent.click(screen.getByRole("button", { name: "打开节点库" }));
     fireEvent.click(
       screen.getByRole("button", { name: "视频画质增强" })
     );
@@ -3140,6 +4048,7 @@ describe("AIGC editor modes", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "执行" })).toBeEnabled();
     });
+    fireEvent.click(screen.getByRole("button", { name: "打开节点库" }));
     fireEvent.click(
       screen.getByRole("button", { name: "视频人脸打码" })
     );
@@ -3878,7 +4787,7 @@ describe("AIGC editor modes", () => {
       name: "下载图片"
     });
     expect(downloads).toHaveLength(2);
-    expect(downloads[0]).toHaveAttribute("download", "结果-1.webp");
+    expect(downloads[0]).toHaveAttribute("download", "结果.webp");
     expect(downloads[1]).toHaveAttribute("download", "结果-2.jpg");
   });
 
@@ -4158,16 +5067,11 @@ describe("AIGC editor modes", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "下载视频" })
-    ).toHaveAttribute("download", "广告成片-1.mp4");
+    ).toHaveAttribute("download", "广告成片.mp4");
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "放大预览：广告成片" })
-    );
-    const preview = screen.getByLabelText("广告成片 放大预览");
-    expect(preview).toHaveAttribute("controls");
-    expect(preview).toHaveAttribute("autoplay");
-    expect(preview).toHaveClass("object-contain");
-    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    expect(
+      screen.queryByRole("button", { name: "放大预览：广告成片" })
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "运行" }));
     fireEvent.change(await screen.findByLabelText("运行历史"), {
@@ -4270,7 +5174,7 @@ describe("AIGC editor modes", () => {
     expect(currentMetadata).toHaveTextContent("打码强度中等强度");
     expect(
       screen.getByRole("link", { name: "下载视频" })
-    ).toHaveAttribute("download", "人脸打码结果-1.mp4");
+    ).toHaveAttribute("download", "人脸打码结果.mp4");
 
     fireEvent.click(screen.getByRole("tab", { name: "运行" }));
     fireEvent.change(await screen.findByLabelText("运行历史"), {
@@ -4393,11 +5297,11 @@ describe("AIGC editor modes", () => {
       await screen.findByLabelText("播放视频：多轨剪辑成片-1")
     ).toHaveClass("object-contain");
     expect(
-      screen.getByRole("button", { name: "全屏播放：多轨剪辑成片-1" })
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "全屏播放：多轨剪辑成片-1" })
+    ).toBeNull();
     expect(
       screen.getByRole("link", { name: "下载视频" })
-    ).toHaveAttribute("download", "多轨剪辑成片-1.mp4");
+    ).toHaveAttribute("download", "多轨剪辑成片.mp4");
     const metadata = screen.getByLabelText("视频输出信息");
     expect(metadata).toHaveTextContent("轨道4");
     expect(metadata).toHaveTextContent("元素12");
@@ -4538,7 +5442,7 @@ describe("AIGC editor modes", () => {
     expect(metadata).toHaveTextContent("色深10-bit");
     expect(
       screen.getByRole("link", { name: "下载视频" })
-    ).toHaveAttribute("download", "画质增强结果-1.mov");
+    ).toHaveAttribute("download", "画质增强结果.mov");
   });
 
   it("saves a pipeline as a template through an in-app dialog", async () => {
@@ -4725,6 +5629,16 @@ describe("AIGC editor modes", () => {
     expect(
       await screen.findByText("自动保存失败：请求失败")
     ).toBeInTheDocument();
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveAttribute(
+      "data-status",
+      "failed"
+    );
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveClass("sr-only");
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveAttribute(
+      "aria-label",
+      "自动保存状态：自动保存失败：请求失败"
+    );
+    expect(screen.getByTestId("aigc-editor-header")).toHaveClass("h-14");
     expect(apiMocks.createAigcRun).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTitle("返回 AIGC 工作台"));
@@ -4798,6 +5712,12 @@ describe("AIGC editor modes", () => {
     expect(
       await screen.findByText("保存冲突：服务端已有更新，请刷新后重新编辑。")
     ).toBeInTheDocument();
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveAttribute(
+      "data-status",
+      "conflict"
+    );
+    expect(screen.getByTestId("aigc-autosave-status")).toHaveClass("sr-only");
+    expect(screen.getByTestId("aigc-editor-header")).toHaveClass("h-14");
     expect(navigationMocks.push).not.toHaveBeenCalled();
 
     const event = new Event("beforeunload", { cancelable: true });

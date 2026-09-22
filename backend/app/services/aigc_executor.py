@@ -4,12 +4,14 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import time
 from collections import defaultdict
 from contextlib import suppress
 from dataclasses import dataclass
 from uuid import uuid4
 
+from backend.app.core.logging import log_event
 from backend.app.repositories import NotFoundError, Repository
 from backend.app.schemas import (
     AigcAssetDirection,
@@ -46,6 +48,7 @@ from backend.app.schemas import (
     LayerCompositeNode,
     LlmNode,
     MultiTrackAudioElement,
+    MultiTrackEditConfig,
     MultiTrackEditNode,
     MultiTrackImageElement,
     MultiTrackSubtitleElement,
@@ -57,6 +60,7 @@ from backend.app.schemas import (
     VideoEnhancementNode,
     VideoFaceBlurNode,
     VideoGenerationNode,
+    VideoSubtitleExtractionNode,
     validate_multi_track_edit_config,
 )
 from backend.app.schemas.aigc import AigcV2Node
@@ -70,6 +74,7 @@ from backend.app.services.aigc_dag import (
     AigcExecutionPlan,
     AigcPlanAction,
     AigcUpstreamDigest,
+    aigc_run_projection_node_ids,
     build_aigc_execution_plan,
     canonical_aigc_input_hash,
     validate_aigc_dag,
@@ -81,6 +86,7 @@ from backend.app.services.aigc_gateway import (
     AIGC_MULTITRACK_EXECUTOR_VERSION,
     AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION,
     AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION,
+    AIGC_VIDEO_SUBTITLE_EXTRACTION_EXECUTOR_VERSION,
     AIGC_VIDEO_EXECUTOR_VERSION,
     AigcGatewayExecution,
     AigcGatewayError,
@@ -101,54 +107,6 @@ class AigcResolvedInputError(ValueError):
         self.code = code
 
 
-# #region debug-point A-E:layer-canvas-reporter
-def _debug_layer_canvas_worker(
-    hypothesis_id: str,
-    location: str,
-    message: str,
-    data: dict[str, object],
-) -> None:
-    try:
-        import time
-        import urllib.request
-
-        debug_url = "http://127.0.0.1:7777/event"
-        session_id = "aigc-layer-asset-transfer"
-        try:
-            with open(
-                ".dbg/aigc-layer-asset-transfer.env",
-                encoding="utf-8",
-            ) as env_file:
-                env_values = dict(
-                    line.split("=", 1)
-                    for line in env_file.read().splitlines()
-                    if "=" in line
-                )
-            debug_url = env_values.get("DEBUG_SERVER_URL", debug_url)
-            session_id = env_values.get("DEBUG_SESSION_ID", session_id)
-        except Exception:
-            pass
-        urllib.request.urlopen(
-            urllib.request.Request(
-                debug_url,
-                data=json.dumps(
-                    {
-                        "sessionId": session_id,
-                        "runId": "canvas-post-fix",
-                        "hypothesisId": hypothesis_id,
-                        "location": location,
-                        "msg": f"[DEBUG] {message}",
-                        "data": data,
-                        "ts": int(time.time() * 1000),
-                    }
-                ).encode(),
-                headers={"Content-Type": "application/json"},
-            ),
-            timeout=0.2,
-        ).read()
-    except Exception:
-        pass
-# #endregion
 
 
 TERMINAL_RUN_STATUSES = {
@@ -172,6 +130,7 @@ STATIC_TASK_TYPES = {
     "video_generation": AigcTaskType.VIDEO_GENERATION,
     "video_enhancement": AigcTaskType.VIDEO_ENHANCEMENT,
     "video_face_blur": AigcTaskType.VIDEO_FACE_BLUR,
+    "video_subtitle_extraction": AigcTaskType.VIDEO_SUBTITLE_EXTRACTION,
     "multi_track_edit": AigcTaskType.MULTI_TRACK_EDIT,
     "json_parser": AigcTaskType.JSON_PARSER,
     "layer_canvas": AigcTaskType.LAYER_CANVAS,
@@ -199,7 +158,7 @@ ORDERED_MULTI_INPUT_HANDLES = {
         "reference_videos",
         "reference_audios",
     },
-    "multi_track_edit": {"videos", "images", "audios", "texts"},
+    "multi_track_edit": {"videos", "images", "audios", "texts", "subtitles"},
 }
 MULTI_TRACK_ASSET_TYPES = {
     "video": {
@@ -235,6 +194,7 @@ class AigcPipelineRuntime:
         video_concurrency: int = 1,
         video_enhancement_concurrency: int = 1,
         video_face_blur_concurrency: int = 1,
+        video_subtitle_extraction_concurrency: int = 1,
         multitrack_concurrency: int = 1,
         lease_seconds: int = 30,
         lease_retry_seconds: float = 1.0,
@@ -261,6 +221,9 @@ class AigcPipelineRuntime:
         )
         self._video_face_blur_semaphore = asyncio.Semaphore(
             video_face_blur_concurrency
+        )
+        self._video_subtitle_extraction_semaphore = asyncio.Semaphore(
+            video_subtitle_extraction_concurrency
         )
         self._multitrack_semaphore = asyncio.Semaphore(multitrack_concurrency)
 
@@ -421,12 +384,22 @@ class AigcPipelineRuntime:
             for asset in self.repository.list_assets(status=None)
             if asset.status.value == "succeeded"
         }
+        validation_node_ids = aigc_run_projection_node_ids(
+            definition,
+            mode=planning_mode,
+            start_node_id=start_node_id,
+        )
         validate_aigc_dag(
             definition,
             available_asset_ids=available_assets,
+            validation_node_ids=validation_node_ids,
         )
         cache = self._cache_state(pipeline.id)
-        input_hashes = self._expected_input_hashes(definition, cache.nodes)
+        input_hashes = self._expected_input_hashes(
+            definition,
+            cache.nodes,
+            validation_node_ids=validation_node_ids,
+        )
         plan = build_aigc_execution_plan(
             definition,
             mode=planning_mode,
@@ -453,6 +426,14 @@ class AigcPipelineRuntime:
             run,
             idempotency_key=idempotency_key,
             nodes=run_nodes,
+        )
+        log_event(
+            logger,
+            "aigc.run",
+            outcome="started",
+            pipeline_id=created.run.pipeline_id,
+            run_id=created.run.id,
+            operation=persisted_mode.value,
         )
         initialization_error = next(
             (node.error for node in created.nodes if node.error is not None),
@@ -500,6 +481,8 @@ class AigcPipelineRuntime:
         self,
         definition,
         cached_nodes: dict[str, AigcPipelineRunNode],
+        *,
+        validation_node_ids: frozenset[str] | None = None,
     ) -> dict[str, str]:
         definition = canonicalize_aigc_definition(definition)
         order = validate_aigc_dag(
@@ -509,6 +492,7 @@ class AigcPipelineRuntime:
                 for asset in self.repository.list_assets(status=None)
                 if asset.status.value == "succeeded"
             },
+            validation_node_ids=validation_node_ids,
         )
         node_by_id = {node.id: node for node in definition.nodes}
         incoming = defaultdict(list)
@@ -700,51 +684,6 @@ class AigcPipelineRuntime:
         node: TextNode | ImageNode | VideoNode | AudioNode,
     ) -> AigcTaskResult:
         if isinstance(node, TextNode):
-            # #region debug-point A-D:local-text-validation
-            try:
-                import time
-                import urllib.request
-
-                urllib.request.urlopen(
-                    urllib.request.Request(
-                        "http://127.0.0.1:7779/event",
-                        data=json.dumps(
-                            {
-                                "sessionId": "local-text-empty-validation",
-                                "runId": "post-fix",
-                                "hypothesisId": "A-D",
-                                "location": (
-                                    "aigc_executor.py:"
-                                    "AigcPipelineRuntime._local_modality_result"
-                                ),
-                                "msg": "[DEBUG] Validating local text node",
-                                "data": {
-                                    "nodeId": node.id,
-                                    "textLength": len(node.config.text.strip()),
-                                    "referenceCount": len(
-                                        node.config.bbox_references
-                                    ),
-                                    "referenceInstructionLengths": [
-                                        len(reference.instruction.strip())
-                                        for reference
-                                        in node.config.bbox_references
-                                    ],
-                                    "hasUpstreamOverride": (
-                                        node.config.upstream_text_override
-                                        is not None
-                                    ),
-                                },
-                                "traceId": node.id,
-                                "ts": int(time.time() * 1000),
-                            }
-                        ).encode(),
-                        headers={"Content-Type": "application/json"},
-                    ),
-                    timeout=0.2,
-                ).read()
-            except Exception:
-                pass
-            # #endregion
             if (
                 not node.config.text.strip()
                 and not node.config.bbox_references
@@ -876,6 +815,17 @@ class AigcPipelineRuntime:
                 }
                 continue
             await self._enqueue(task.task_id)
+            log_event(
+                logger,
+                "aigc.task",
+                outcome="started",
+                pipeline_id=task.pipeline_id,
+                run_id=task.run_id,
+                node_id=task.node_id,
+                task_id=task.task_id,
+                task_type=task.type.value,
+                phase="queued",
+            )
 
     def _project_modality_nodes(self, run_id: str) -> None:
         detail = self.repository.get_aigc_run(run_id)
@@ -1107,10 +1057,12 @@ class AigcPipelineRuntime:
             params["upstream_layer_set"] = _layer_set_summary(layer_set)
         elif isinstance(node, LayerCompositeNode):
             layer_set = AigcLayerSet.model_validate(values["layers"])
-            replacement = AigcEditedLayer.model_validate(values["replacement"])
-            _validate_layer_composite_source(layer_set, replacement)
             params["input_layer_set"] = layer_set.model_dump(mode="json")
-            params["replacement"] = replacement.model_dump(mode="json")
+            replacement_value = values.get("replacement")
+            if replacement_value is not None:
+                replacement = AigcEditedLayer.model_validate(replacement_value)
+                _validate_layer_composite_source(layer_set, replacement)
+                params["replacement"] = replacement.model_dump(mode="json")
         elif isinstance(node, JsonParserNode):
             text = values.get("text")
             if not isinstance(text, str):
@@ -1153,6 +1105,23 @@ class AigcPipelineRuntime:
             if not isinstance(input_asset_id, str) or not input_asset_id:
                 raise ValueError("video_face_blur requires one video asset")
             params["input_asset_id"] = input_asset_id
+        elif isinstance(node, VideoSubtitleExtractionNode):
+            input_asset_id = values.get("video")
+            if not isinstance(input_asset_id, str) or not input_asset_id:
+                raise ValueError(
+                    "video_subtitle_extraction requires one video asset"
+                )
+            params["input_asset_id"] = input_asset_id
+        elif isinstance(node, LlmNode):
+            prompt = values.get("prompt")
+            if not isinstance(prompt, str) or not prompt.strip():
+                raise ValueError("llm requires one non-empty prompt")
+            params["prompt"] = prompt
+            image_asset_id = values.get("image")
+            if image_asset_id is not None:
+                if not isinstance(image_asset_id, str) or not image_asset_id:
+                    raise ValueError("llm image input is unavailable")
+                params["input_image_asset_id"] = image_asset_id
         else:
             params["prompt"] = values["prompt"]
         return params, upstream_ids
@@ -1174,7 +1143,10 @@ class AigcPipelineRuntime:
         target_ordinals: dict[str, int] = defaultdict(int)
         for edge in edges:
             source = node_by_id[edge.source_node_id]
-            if isinstance(source, TextNode) and not _node_has_upstream(
+            if isinstance(node, LlmNode) and edge.target_handle == "image":
+                image_asset_id = str(params.get("input_image_asset_id") or "")
+                digest = self._asset_digest(image_asset_id)
+            elif isinstance(source, TextNode) and not _node_has_upstream(
                 source.id,
                 graph_edges,
             ):
@@ -1275,6 +1247,7 @@ class AigcPipelineRuntime:
             "image": "images",
             "audio": "audios",
             "text": "texts",
+            "subtitle": "subtitles",
         }
         resolved_sources: dict[str, dict[str, object]] = {}
         upstream_ids: list[str] = []
@@ -1352,10 +1325,105 @@ class AigcPipelineRuntime:
                     "type": kind,
                     "asset_id": asset.id,
                 }
+        project_payload = node.config.model_dump(mode="json")
+        project_tracks = list(project_payload["tracks"])
+        configured_subtitle_ids = {
+            element.asset_id
+            for track in node.config.tracks
+            for element in track.elements
+            if isinstance(element, MultiTrackSubtitleElement)
+            and element.asset_id
+        }
+        upstream_subtitles: list[dict[str, object]] = []
+        subtitle_edges = [
+            edge for edge in edges if edge.target_handle == "subtitles"
+        ]
+        canvas_width = node.config.canvas.width or 1920
+        canvas_height = node.config.canvas.height or 1080
+        for ordinal, edge in enumerate(subtitle_edges):
+            run_node = run_node_by_id.get(edge.source_node_id)
+            if run_node is None or run_node.status not in SUCCESS_NODE_STATUSES:
+                raise ValueError("subtitle source RunNode is unavailable")
+            value = _result_value_for_port(
+                run_node.result,
+                edge.source_handle,
+                edge.source_node_id,
+            )
+            asset = self._require_multi_track_asset(
+                str(value),
+                kind="subtitle",
+            )
+            upstream_subtitles.append(
+                {
+                    "source_node_id": edge.source_node_id,
+                    "source_handle": edge.source_handle,
+                    "asset_id": asset.id,
+                    "digest": self._asset_digest(asset.id),
+                    "ordinal": ordinal,
+                }
+            )
+            if edge.source_node_id not in upstream_ids:
+                upstream_ids.append(edge.source_node_id)
+            if asset.id in configured_subtitle_ids:
+                continue
+            configured_subtitle_ids.add(asset.id)
+            element_id = f"upstream-subtitle-{ordinal}"
+            duration_ms = max(1000, _subtitle_asset_duration_ms(asset))
+            project_tracks.append(
+                {
+                    "id": f"upstream-subtitle-track-{ordinal}",
+                    "name": f"字幕 {ordinal + 1}",
+                    "type": "subtitle",
+                    "order": len(project_tracks),
+                    "hidden": False,
+                    "muted": False,
+                    "elements": [
+                        {
+                            "id": element_id,
+                            "type": "subtitle",
+                            "asset_id": asset.id,
+                            "target_time": {
+                                "start_ms": 0,
+                                "end_ms": duration_ms,
+                            },
+                            "loop": False,
+                            "transform": {
+                                "x": round(canvas_width * 0.1),
+                                "y": round(canvas_height * 0.8),
+                                "width": round(canvas_width * 0.8),
+                                "height": round(canvas_height * 0.15),
+                                "rotation": 0,
+                            },
+                            "style": {
+                                "font_size": 42,
+                                "color": "#FFFFFFFF",
+                                "bold": False,
+                                "italic": False,
+                                "underline": False,
+                                "background_color": "#00000099",
+                            },
+                        }
+                    ],
+                }
+            )
+            resolved_sources[element_id] = {
+                "type": "subtitle",
+                "asset_id": asset.id,
+            }
+        project = MultiTrackEditConfig.model_validate(
+            {**project_payload, "tracks": project_tracks}
+        )
+        merged_issues = validate_multi_track_edit_config(project)
+        if merged_issues:
+            first = merged_issues[0]
+            raise ValueError(
+                f"multi-track project {first.code} at {first.path}"
+            )
         return (
             {
-                "project": node.config.model_dump(mode="json"),
+                "project": project.model_dump(mode="json"),
                 "resolved_sources": resolved_sources,
+                "upstream_subtitles": upstream_subtitles,
             },
             upstream_ids,
         )
@@ -1376,6 +1444,7 @@ class AigcPipelineRuntime:
             "image": "images",
             "audio": "audios",
             "text": "texts",
+            "subtitle": "subtitles",
         }
         ordinals: dict[str, int] = defaultdict(int)
         upstream: list[AigcUpstreamDigest] = []
@@ -1417,6 +1486,27 @@ class AigcPipelineRuntime:
                     )
                 )
                 ordinals[target_handle] += 1
+        for edge in edges:
+            if edge.target_handle != "subtitles":
+                continue
+            digest = digests.get(edge.source_node_id)
+            if digest is None:
+                cached = cached_nodes.get(edge.source_node_id)
+                digest = (
+                    _result_port_digest(cached.result, edge.source_handle)
+                    if cached is not None
+                    else f"pending:{edge.source_node_id}"
+                )
+            upstream.append(
+                AigcUpstreamDigest(
+                    target_handle="subtitles",
+                    source_node_id=edge.source_node_id,
+                    source_handle=edge.source_handle,
+                    digest=digest,
+                    ordinal=ordinals["subtitles"],
+                )
+            )
+            ordinals["subtitles"] += 1
         return upstream
 
     def _hash_resolved_multi_track(
@@ -1432,6 +1522,7 @@ class AigcPipelineRuntime:
             "image": "images",
             "audio": "audios",
             "text": "texts",
+            "subtitle": "subtitles",
         }
         ordinals: dict[str, int] = defaultdict(int)
         upstream: list[AigcUpstreamDigest] = []
@@ -1462,6 +1553,20 @@ class AigcPipelineRuntime:
                     )
                 )
                 ordinals[target_handle] += 1
+        raw_subtitles = params.get("upstream_subtitles")
+        if isinstance(raw_subtitles, list):
+            for item in raw_subtitles:
+                if not isinstance(item, dict):
+                    continue
+                upstream.append(
+                    AigcUpstreamDigest(
+                        target_handle="subtitles",
+                        source_node_id=str(item.get("source_node_id") or ""),
+                        source_handle=str(item.get("source_handle") or ""),
+                        digest=str(item.get("digest") or ""),
+                        ordinal=int(item.get("ordinal") or 0),
+                    )
+                )
         return canonical_aigc_input_hash(
             node_type=node.type,
             executor_version=_executor_version(node),
@@ -1492,6 +1597,10 @@ class AigcPipelineRuntime:
             "|".join(
                 [
                     asset.id,
+                    asset.asset_role.value,
+                    asset.status.value,
+                    asset.type.value,
+                    asset.mime_type or "",
                     asset.object_key or "",
                     str(asset.size_bytes or 0),
                     asset.updated_at.isoformat(),
@@ -1528,6 +1637,20 @@ class AigcPipelineRuntime:
                 run_id,
                 status=status,
                 finished_at=utc_now(),
+            )
+            log_event(
+                logger,
+                "aigc.run",
+                outcome=(
+                    "succeeded"
+                    if status == AigcPipelineRunStatus.SUCCEEDED
+                    else "canceled"
+                    if status == AigcPipelineRunStatus.CANCELED
+                    else "failed"
+                ),
+                pipeline_id=detail.run.pipeline_id,
+                run_id=run_id,
+                operation="execution",
             )
 
     async def _enqueue(self, task_id: str) -> None:
@@ -1704,6 +1827,15 @@ class AigcPipelineRuntime:
         )
         if task is None:
             return
+        task_context = {
+            "pipeline_id": task.pipeline_id,
+            "run_id": task.run_id,
+            "node_id": task.node_id,
+            "task_id": task.task_id,
+            "attempt_id": str(task.attempt),
+            "task_type": task.type.value,
+        }
+        log_event(logger, "aigc.task", outcome="started", phase="execution", **task_context)
         semaphore = (
             self._llm_semaphore
             if task.type == AigcTaskType.LLM
@@ -1711,15 +1843,19 @@ class AigcPipelineRuntime:
                 self._multitrack_semaphore
                 if task.type == AigcTaskType.MULTI_TRACK_EDIT
                 else (
-                    self._video_face_blur_semaphore
-                    if task.type == AigcTaskType.VIDEO_FACE_BLUR
+                    self._video_subtitle_extraction_semaphore
+                    if task.type == AigcTaskType.VIDEO_SUBTITLE_EXTRACTION
                     else (
-                        self._video_enhancement_semaphore
-                        if task.type == AigcTaskType.VIDEO_ENHANCEMENT
+                        self._video_face_blur_semaphore
+                        if task.type == AigcTaskType.VIDEO_FACE_BLUR
                         else (
-                            self._video_semaphore
-                            if task.type == AigcTaskType.VIDEO_GENERATION
-                            else self._image_semaphore
+                            self._video_enhancement_semaphore
+                            if task.type == AigcTaskType.VIDEO_ENHANCEMENT
+                            else (
+                                self._video_semaphore
+                                if task.type == AigcTaskType.VIDEO_GENERATION
+                                else self._image_semaphore
+                            )
                         )
                     )
                 )
@@ -1746,6 +1882,15 @@ class AigcPipelineRuntime:
                         metrics=execution.metrics,
                     )
                 )
+            elif execution.result.naming is not None:
+                committed, accepted = (
+                    self.repository.commit_aigc_generated_media_task_attempt(
+                        task.task_id,
+                        fencing_token=token,
+                        result=execution.result,
+                        metrics=execution.metrics,
+                    )
+                )
             else:
                 committed, accepted = self.repository.commit_aigc_task_attempt(
                     task.task_id,
@@ -1757,6 +1902,14 @@ class AigcPipelineRuntime:
                 )
             if not accepted:
                 await self._cleanup_task_outputs(task.task_id)
+            log_event(
+                logger,
+                "aigc.task",
+                outcome="succeeded" if accepted else "skipped",
+                duration_ms=execution.metrics.duration_ms,
+                phase="execution",
+                **task_context,
+            )
         except asyncio.CancelledError:
             _, accepted = self.repository.commit_aigc_task_attempt(
                 task.task_id,
@@ -1773,6 +1926,13 @@ class AigcPipelineRuntime:
             if accepted:
                 await self._schedule_ready_nodes(task.run_id)
                 await self._finalize_run(task.run_id)
+            log_event(
+                logger,
+                "aigc.task",
+                outcome="canceled",
+                phase="execution",
+                **task_context,
+            )
             raise
         except AigcJsonParserError as exc:
             self.repository.commit_aigc_task_attempt(
@@ -1786,6 +1946,16 @@ class AigcPipelineRuntime:
                     stage="execution",
                 ),
                 metrics=AigcTaskMetrics(),
+            )
+            log_event(
+                logger,
+                "aigc.task",
+                outcome="failed",
+                level=logging.WARNING,
+                phase="execution",
+                exception=exc,
+                error_code=exc.code,
+                **task_context,
             )
         except AigcGatewayError as exc:
             committed, accepted = self.repository.commit_aigc_task_attempt(
@@ -1824,36 +1994,24 @@ class AigcPipelineRuntime:
                     )
                 else:
                     await self._enqueue(retry.task_id)
-        except Exception as exc:
-            # #region debug-point E:worker-exception
-            import re
-
-            debug_traceback = exc.__traceback__
-            while debug_traceback is not None and debug_traceback.tb_next is not None:
-                debug_traceback = debug_traceback.tb_next
-            _debug_layer_canvas_worker(
-                "E",
-                "aigc_executor.py:_process_task",
-                "Worker caught an unexpected task exception",
-                {
-                    "run_id": task.run_id,
-                    "task_id": task.task_id,
-                    "task_type": task.type.value,
-                    "exception_type": type(exc).__name__,
-                    "message": re.sub(
-                        r"https?://\S+|(?i:(?:password|token|secret|authorization)=\S+)",
-                        "[redacted]",
-                        str(exc),
-                    )[:240],
-                    "exception_location": (
-                        f"{debug_traceback.tb_frame.f_code.co_name}:"
-                        f"{debug_traceback.tb_lineno}"
-                        if debug_traceback is not None
-                        else None
-                    ),
-                },
+                    log_event(
+                        logger,
+                        "aigc.task",
+                        outcome="retried",
+                        phase=exc.error.stage,
+                        error_code=exc.error.code,
+                        **task_context,
+                    )
+            log_event(
+                logger,
+                "aigc.task",
+                outcome="failed",
+                level=logging.WARNING,
+                phase=exc.error.stage,
+                error_code=exc.error.code,
+                **task_context,
             )
-            # #endregion
+        except Exception as exc:
             self.repository.commit_aigc_task_attempt(
                 task.task_id,
                 fencing_token=token,
@@ -1865,6 +2023,16 @@ class AigcPipelineRuntime:
                     stage="worker",
                 ),
                 metrics=AigcTaskMetrics(),
+            )
+            await self._cleanup_task_outputs(task.task_id)
+            log_event(
+                logger,
+                "aigc.task",
+                outcome="failed",
+                level=logging.ERROR,
+                phase="worker",
+                exception=exc,
+                **task_context,
             )
         await self._schedule_ready_nodes(task.run_id)
         await self._finalize_run(task.run_id)
@@ -1962,28 +2130,13 @@ class AigcPipelineRuntime:
             ),
         ]
         self.repository.add_aigc_task_assets(references)
-        # #region debug-point D:layer-canvas-task-relationships
-        _debug_layer_canvas_worker(
-            "D",
-            "aigc_executor.py:_record_layer_canvas_assets",
-            "Layer canvas task asset relationships persisted",
-            {
-                "run_id": task.run_id,
-                "task_id": task.task_id,
-                "relationship_count": len(references),
-                "input_count": sum(
-                    reference.direction == AigcAssetDirection.INPUT
-                    for reference in references
-                ),
-                "output_count": sum(
-                    reference.direction == AigcAssetDirection.OUTPUT
-                    for reference in references
-                ),
-            },
-        )
-        # #endregion
 
     def _result_available(self, result: AigcTaskResult) -> bool:
+        if (
+            result.kind == AigcResultKind.NONE
+            and result.metadata.get("empty") is True
+        ):
+            return True
         if result.kind == AigcResultKind.TEXT:
             return result.text is not None
         if result.kind == AigcResultKind.TEXT_ITEMS:
@@ -2005,6 +2158,18 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _subtitle_asset_duration_ms(asset) -> int:
+    value = asset.metadata.get("duration_seconds")
+    if (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
+    ):
+        return round(value * 1000)
+    return 1000
+
+
 def _executor_version(node: AigcV2Node) -> str:
     if isinstance(node, JsonParserNode):
         return "aigc-json-parser-v1"
@@ -2016,6 +2181,8 @@ def _executor_version(node: AigcV2Node) -> str:
         return AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION
     if isinstance(node, VideoFaceBlurNode):
         return AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION
+    if isinstance(node, VideoSubtitleExtractionNode):
+        return AIGC_VIDEO_SUBTITLE_EXTRACTION_EXECUTOR_VERSION
     if isinstance(node, MultiTrackEditNode):
         return AIGC_MULTITRACK_EXECUTOR_VERSION
     if isinstance(node, (LayerCanvasNode, LayerCompositeNode)):
@@ -2119,51 +2286,10 @@ def _execute_json_parser(
 def _execute_layer_canvas(
     task: AigcPipelineTaskAttempt,
 ) -> AigcGatewayExecution:
-    # #region debug-point C:layer-canvas-entry
-    _debug_layer_canvas_worker(
-        "C",
-        "aigc_executor.py:_execute_layer_canvas",
-        "Entered local layer canvas execution",
-        {
-            "run_id": task.run_id,
-            "task_id": task.task_id,
-        },
-    )
-    # #endregion
     layer_set = AigcLayerSet.model_validate(task.params["input_layer_set"])
     patch_payloads = task.params.get("transform_patches") or []
     layer_ids = {layer.id for layer in layer_set.layers}
     selected_layer_id = task.params.get("selected_layer_id")
-    # #region debug-point A-B:layer-canvas-source
-    _debug_layer_canvas_worker(
-        "A-B",
-        "aigc_executor.py:_execute_layer_canvas",
-        "Parsed layer canvas source and selection",
-        {
-            "run_id": task.run_id,
-            "task_id": task.task_id,
-            "source_id": layer_set.id,
-            "source_version": layer_set.version,
-            "source_digest": layer_set.digest,
-            "selected_layer_id": selected_layer_id,
-            "patch_count": len(patch_payloads),
-            "patches": [
-                {
-                    "layer_id": str(patch.get("layer_id")),
-                    "fields": sorted(
-                        key
-                        for key in patch
-                        if key
-                        in {"x", "y", "scale", "z_index", "visible", "deleted"}
-                    ),
-                    "deleted": patch.get("deleted") is True,
-                }
-                for patch in patch_payloads
-                if isinstance(patch, dict)
-            ][:50],
-        },
-    )
-    # #endregion
     if selected_layer_id == layer_set.base_asset_id:
         raise ValueError("base layer cannot be selected")
     patches = {
@@ -2277,22 +2403,6 @@ def _execute_layer_canvas(
         if selected is not None
         else None
     )
-    # #region debug-point C:layer-canvas-exit
-    _debug_layer_canvas_worker(
-        "C",
-        "aigc_executor.py:_execute_layer_canvas",
-        "Exited local layer canvas execution",
-        {
-            "run_id": task.run_id,
-            "task_id": task.task_id,
-            "derived_id": derived.id,
-            "derived_version": derived.version,
-            "derived_digest": derived.digest,
-            "derived_layer_count": len(derived.layers),
-            "selected_layer_id": selected.id if selected is not None else None,
-        },
-    )
-    # #endregion
     return AigcGatewayExecution(
         result=AigcTaskResult(
             kind=AigcResultKind.LAYER_CANVAS,
@@ -2572,7 +2682,7 @@ def _result_value_for_port(
 ) -> object:
     if source_handle == "text" and result.text is not None:
         return result.text
-    if source_handle in {"image", "video", "audio"}:
+    if source_handle in {"image", "video", "audio", "subtitle"}:
         available = next(
             (item for item in result.assets if item.available),
             None,
@@ -2598,7 +2708,7 @@ def _project_result_for_port(
             text=result.text,
             text_digest=result.text_digest,
         )
-    if source_handle in {"image", "video", "audio"}:
+    if source_handle in {"image", "video", "audio", "subtitle"}:
         return AigcTaskResult(
             kind=AigcResultKind.ASSETS,
             assets=[item for item in result.assets if item.available],

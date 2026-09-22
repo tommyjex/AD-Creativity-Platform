@@ -1,7 +1,9 @@
+import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from inspect import isawaitable
 from time import perf_counter
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -14,11 +16,19 @@ from .api.dependencies import (
     get_face_blur_video_client_factory,
     get_media_inspector_service,
     get_modelark_generation_service,
+    get_multitrack_client_factory,
     get_repository,
     get_video_enhancement_client_factory,
 )
 from .api.router import api_router
 from .core.config import get_settings
+from .core.logging import (
+    bind_log_context,
+    configure_structured_logging,
+    detach_tls_sink,
+    log_event,
+    reset_log_context,
+)
 
 APP_NAME = "AD Creativity Backend"
 APP_VERSION = "0.1.0"
@@ -35,6 +45,11 @@ async def _resolve_dependency(
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
+    logger = logging.getLogger(__name__)
+    tls_sink = application.state.tls_log_sink
+    if tls_sink is not None:
+        tls_sink.start()
+    log_event(logger, "application.lifecycle", outcome="started", phase="startup")
     repository = None
     runtime_override = application.dependency_overrides.get(
         get_aigc_pipeline_runtime
@@ -68,24 +83,68 @@ async def _lifespan(application: FastAPI):
                 application,
                 get_face_blur_video_client_factory,
             ),
+            multitrack_client_factory=await _resolve_dependency(
+                application,
+                get_multitrack_client_factory,
+            ),
             settings=await _resolve_dependency(application, get_settings),
         )
     application.state.aigc_pipeline_runtime = runtime
-    await runtime.start()
+    try:
+        await runtime.start()
+    except Exception as exc:
+        log_event(
+            logger,
+            "application.lifecycle",
+            outcome="failed",
+            level=logging.ERROR,
+            phase="startup",
+            exception=exc,
+        )
+        if tls_sink is not None:
+            detach_tls_sink(tls_sink)
+            await tls_sink.aclose()
+        if repository is not None:
+            discard_aigc_pipeline_runtime(repository)
+        raise
     try:
         yield
     finally:
-        await runtime.stop()
-        if repository is not None:
-            discard_aigc_pipeline_runtime(repository)
+        try:
+            await runtime.stop()
+            log_event(
+                logger,
+                "application.lifecycle",
+                outcome="succeeded",
+                phase="shutdown",
+            )
+        except Exception as exc:
+            log_event(
+                logger,
+                "application.lifecycle",
+                outcome="failed",
+                level=logging.ERROR,
+                phase="shutdown",
+                exception=exc,
+            )
+            raise
+        finally:
+            if tls_sink is not None:
+                detach_tls_sink(tls_sink)
+                await tls_sink.aclose()
+            if repository is not None:
+                discard_aigc_pipeline_runtime(repository)
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
+    tls_sink = configure_structured_logging(settings)
     application = FastAPI(
         title=APP_NAME,
         version=APP_VERSION,
         lifespan=_lifespan,
     )
+    application.state.tls_log_sink = tls_sink
 
     application.add_middleware(
         CORSMiddleware,
@@ -98,66 +157,53 @@ def create_app() -> FastAPI:
     @application.middleware("http")
     async def add_request_headers(request: Request, call_next):
         started_at = perf_counter()
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = request.headers.get(
+        request_id = request.headers.get(
             "X-Request-ID",
             str(uuid4()),
         )
-        response.headers["X-Process-Time"] = f"{perf_counter() - started_at:.6f}"
-        return response
+        token = bind_log_context(request_id=request_id)
+        logger = logging.getLogger(__name__)
+        route = request.url.path
+        log_event(
+            logger,
+            "http.request",
+            outcome="started",
+            method=request.method,
+            route=route,
+        )
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            log_event(
+                logger,
+                "http.request",
+                outcome="failed",
+                level=logging.ERROR,
+                duration_ms=(perf_counter() - started_at) * 1000,
+                method=request.method,
+                route=route,
+                exception=exc,
+            )
+            raise
+        else:
+            duration_seconds = perf_counter() - started_at
+            response.headers["X-Request-ID"] = request_id
+            response.headers["X-Process-Time"] = f"{duration_seconds:.6f}"
+            log_event(
+                logger,
+                "http.request",
+                outcome="succeeded",
+                duration_ms=duration_seconds * 1000,
+                method=request.method,
+                route=route,
+                status_code=response.status_code,
+            )
+            return response
+        finally:
+            reset_log_context(token)
 
     @application.get("/health", tags=["health"])
     async def health_check() -> dict[str, str]:
-        # #region debug-point A-D:queued-task-runtime-state
-        try:
-            import json
-            import time
-            import urllib.request
-
-            runtime = application.state.aigc_pipeline_runtime
-            task = runtime.repository.get_aigc_task_attempt(
-                "e609612d-ccc9-4c3f-8465-6a0ff6fb26e9"
-            )
-            urllib.request.urlopen(
-                urllib.request.Request(
-                    "http://127.0.0.1:7780/event",
-                    data=json.dumps(
-                        {
-                            "sessionId": "aigc-task-stuck-queued",
-                            "runId": "post-fix",
-                            "hypothesisId": "A-D",
-                            "location": "main.py:health_check",
-                            "msg": "[DEBUG] Queued task runtime state",
-                            "data": {
-                                "taskId": task.task_id,
-                                "taskStatus": task.status.value,
-                                "taskCreatedAt": task.created_at.isoformat(),
-                                "taskStartedAt": (
-                                    task.started_at.isoformat()
-                                    if task.started_at
-                                    else None
-                                ),
-                                "taskRunId": task.run_id,
-                                "queueSize": runtime.queue.qsize(),
-                                "isEnqueued": task.task_id in runtime._enqueued,
-                                "leaseToken": runtime._lease_token,
-                                "workerCount": len(runtime._workers),
-                                "workerDone": [
-                                    worker.done()
-                                    for worker in runtime._workers
-                                ],
-                            },
-                            "traceId": task.task_id,
-                            "ts": int(time.time() * 1000),
-                        }
-                    ).encode(),
-                    headers={"Content-Type": "application/json"},
-                ),
-                timeout=0.2,
-            ).read()
-        except Exception:
-            pass
-        # #endregion
         return {
             "status": "ok",
             "name": APP_NAME,

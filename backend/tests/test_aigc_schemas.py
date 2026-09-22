@@ -7,7 +7,13 @@ from backend.app.schemas.aigc import (
     AIGC_NODE_REGISTRY,
     AIGC_V2_NODE_REGISTRY,
     AigcEditedLayer,
+    AigcGeneratedMediaName,
+    AigcGeneratedMediaNamingRequest,
+    AigcGeneratedMediaNamingResult,
     AigcImageLayer,
+    AigcImagePromptFullDesignResult,
+    AigcImagePromptLocalEditResult,
+    AigcImagePromptSections,
     AigcJsonParserItem,
     AigcLayer,
     AigcLayerSet,
@@ -22,6 +28,8 @@ from backend.app.schemas.aigc import (
     AigcPortDefinition,
     AigcPortType,
     AigcPromptOptimizeRequest,
+    AigcPromptOptimizeResponse,
+    AigcSeedreamPromptOptimizationResult,
     AigcResultAsset,
     AigcResultKind,
     AigcTaskType,
@@ -31,6 +39,8 @@ from backend.app.schemas.aigc import (
     ImageToImageConfig,
     JsonParserConfig,
     LayerCanvasConfig,
+    MultiTrackEditConfig,
+    MultiTrackTextStyle,
     TextConfig,
     VideoGenerationConfig,
     aigc_node_run_key,
@@ -70,6 +80,43 @@ def llm_node(node_id: str = "llm-1") -> dict[str, object]:
     }
 
 
+def multitrack_text_element(
+    *,
+    element_type: str,
+    font_type: str | None | object = None,
+    include_font_type: bool = True,
+) -> dict[str, object]:
+    style: dict[str, object] = {
+        "font_size": 48,
+        "color": "#FFFFFFFF",
+        "bold": False,
+        "italic": False,
+        "underline": False,
+        "background_color": "#00000000",
+    }
+    if include_font_type:
+        style["font_type"] = font_type
+    element: dict[str, object] = {
+        "id": f"{element_type}-1",
+        "type": element_type,
+        "target_time": {"start_ms": 0, "end_ms": 2000},
+        "loop": False,
+        "transform": {
+            "x": 0,
+            "y": 0,
+            "width": 800,
+            "height": 200,
+            "rotation": 0,
+        },
+        "style": style,
+    }
+    if element_type == "text":
+        element.update({"source": None, "inline_text": "标题"})
+    else:
+        element["asset_id"] = "subtitle-asset"
+    return element
+
+
 def test_node_registry_contains_all_schema_version_one_nodes() -> None:
     default_port = AigcPortDefinition(
         id="default",
@@ -89,12 +136,187 @@ def test_node_registry_contains_all_schema_version_one_nodes() -> None:
         AigcNodeType.VIDEO_GENERATION,
         AigcNodeType.VIDEO_ENHANCEMENT,
         AigcNodeType.VIDEO_FACE_BLUR,
+        AigcNodeType.VIDEO_SUBTITLE_EXTRACTION,
         AigcNodeType.LAYER_CANVAS,
         AigcNodeType.LAYER_COMPOSITE,
         AigcNodeType.TEXT_OUTPUT,
         AigcNodeType.IMAGE_OUTPUT,
         AigcNodeType.VIDEO_OUTPUT,
     ]
+    llm = next(item for item in AIGC_NODE_REGISTRY if item.type == AigcNodeType.LLM)
+    assert [(port.id, port.type, port.required, port.multiple) for port in llm.inputs] == [
+        ("prompt", AigcPortType.TEXT, True, False),
+        ("image", AigcPortType.IMAGE_ASSET, False, False),
+    ]
+
+
+def test_generated_media_naming_contract_normalizes_unicode_name() -> None:
+    response = AigcGeneratedMediaName(name="  雨夜霓虹跑车  ")
+    result = AigcGeneratedMediaNamingResult(
+        status="succeeded",
+        name=response.name,
+    )
+
+    assert response.name == "雨夜霓虹跑车"
+    assert len(response.name) == 6
+    assert result.model == "doubao-seed-2-0-mini-260428"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "",
+        "   ",
+        "一二三四五六七八九十甲",
+        "第一行\n第二行",
+        "控制\x00字符",
+        "第一行\u2028第二行",
+        "第一段\u2029第二段",
+        "目录/名称",
+        "目录\\名称",
+        "雨夜跑车.png",
+        "雨夜跑车.图片",
+        '"雨夜跑车"',
+        "“雨夜跑车”",
+        "1.雨夜跑车",
+        "#雨夜跑车",
+        "名称：雨夜跑车",
+    ],
+)
+def test_generated_media_naming_contract_rejects_invalid_names(name: str) -> None:
+    with pytest.raises(ValidationError):
+        AigcGeneratedMediaName(name=name)
+
+
+def test_generated_media_naming_request_accepts_only_visual_inputs() -> None:
+    request = AigcGeneratedMediaNamingRequest(
+        prompt="城市汽车广告",
+        visual_inputs=[
+            {"type": "image", "url": "https://assets.example/image.png"},
+            {
+                "type": "video",
+                "url": "https://assets.example/video.mp4",
+                "fps": 0.3,
+            },
+        ],
+    )
+
+    assert [item.type for item in request.visual_inputs] == ["image", "video"]
+    with pytest.raises(ValidationError):
+        AigcGeneratedMediaNamingRequest(
+            prompt="城市汽车广告",
+            visual_inputs=[
+                {
+                    "type": "audio",
+                    "url": "https://assets.example/audio.mp3",
+                }
+            ],
+        )
+    with pytest.raises(ValidationError, match="fps=0.3"):
+        AigcGeneratedMediaNamingRequest(
+            prompt="城市汽车广告",
+            visual_inputs=[
+                {
+                    "type": "video",
+                    "url": "https://assets.example/video.mp4",
+                    "fps": 1,
+                }
+            ],
+        )
+
+
+def test_multitrack_font_contract_accepts_presets_urls_and_legacy_styles() -> None:
+    custom_font_url = (
+        "https://xujianhua-utils.tos-cn-beijing.volces.com/"
+        "ECOVACS/centurygothic.ttf"
+    )
+    project = MultiTrackEditConfig.model_validate(
+        {
+            "tracks": [
+                {
+                    "id": "text-track",
+                    "name": "文字",
+                    "type": "text",
+                    "elements": [
+                        multitrack_text_element(
+                            element_type="text",
+                            font_type="SY_Black",
+                        )
+                    ],
+                },
+                {
+                    "id": "subtitle-track",
+                    "name": "字幕",
+                    "type": "subtitle",
+                    "elements": [
+                        multitrack_text_element(
+                            element_type="subtitle",
+                            font_type=f"{custom_font_url}?version=1#regular",
+                        )
+                    ],
+                },
+                {
+                    "id": "legacy-text-track",
+                    "name": "旧文字",
+                    "type": "text",
+                    "elements": [
+                        multitrack_text_element(
+                            element_type="text",
+                            include_font_type=False,
+                        )
+                    ],
+                },
+            ]
+        }
+    )
+
+    text = project.tracks[0].elements[0]
+    subtitle = project.tracks[1].elements[0]
+    legacy = project.tracks[2].elements[0]
+    assert text.style.font_type == "SY_Black"  # type: ignore[union-attr]
+    assert subtitle.style.font_type == f"{custom_font_url}?version=1#regular"  # type: ignore[union-attr]
+    assert legacy.style.font_type is None  # type: ignore[union-attr]
+    numeric_label_domain = MultiTrackTextStyle(
+        font_type="https://123.example.com/font.ttf"
+    )
+    assert numeric_label_domain.font_type == "https://123.example.com/font.ttf"
+
+
+@pytest.mark.parametrize(
+    "font_type",
+    [
+        "http://fonts.example.com/font.ttf",
+        "/fonts/font.ttf",
+        "https:fonts.example.com/font.ttf",
+        "https:////fonts.example.com/font.ttf",
+        " https://fonts.example.com/font.ttf",
+        "https://fonts.example.com/font.ttf ",
+        "https://user:secret@fonts.example.com/font.ttf",
+        "https://fonts.example.com/font.woff2",
+        "https://localhost/font.ttf",
+        "https://fonts.localhost/font.ttf",
+        "https://127.0.0.1/font.ttf",
+        "https://10.0.0.1/font.ttf",
+        "https://8.8.8.8/font.ttf",
+        "https://2130706433/font.ttf",
+        "https://0x7f000001/font.ttf",
+        "https://127.1/font.ttf",
+        "https://0177.0x0.0.01/font.ttf",
+        "https://[::1]/font.ttf",
+        "https://[2001:db8::1]/font.ttf",
+        "https://fonts.local/font.ttf",
+        "https://fonts.internal/font.ttf",
+        "https://fonts.lan/font.ttf",
+        "https://fonts.home/font.ttf",
+        "https://fonts.example.com\\font.ttf",
+        "https://fonts.example.com/font\x01.ttf",
+        "unknown-font",
+        f"https://fonts.example.com/{'a' * 2030}.ttf",
+    ],
+)
+def test_multitrack_font_contract_rejects_invalid_values(font_type: str) -> None:
+    with pytest.raises(ValidationError, match="invalid_font_type"):
+        MultiTrackTextStyle(font_type=font_type)
     image_to_image = next(
         item
         for item in AIGC_NODE_REGISTRY
@@ -132,9 +354,12 @@ def test_node_registry_contains_all_schema_version_one_nodes() -> None:
         for item in AIGC_NODE_REGISTRY
         if item.type == AigcNodeType.LAYER_COMPOSITE
     )
-    assert [port.type for port in layer_composite.inputs] == [
-        AigcPortType.LAYER_SET,
-        AigcPortType.EDITED_LAYER,
+    assert [
+        (port.id, port.type, port.required)
+        for port in layer_composite.inputs
+    ] == [
+        ("layers", AigcPortType.LAYER_SET, True),
+        ("replacement", AigcPortType.EDITED_LAYER, False),
     ]
 
     video_generation = next(
@@ -407,6 +632,44 @@ def test_pipeline_definition_validates_discriminated_node_configs() -> None:
     assert definition.nodes[1].type == AigcNodeType.LLM
     assert dumped["schemaVersion"] == 1
     assert dumped["edges"][0]["sourceNodeId"] == "input-1"
+
+
+def test_pipeline_nodes_normalize_and_validate_custom_names() -> None:
+    definition = AigcPipelineDefinitionV2.model_validate(
+        {
+            "schemaVersion": 2,
+            "nodes": [
+                {
+                    "id": "named",
+                    "type": "llm",
+                    "custom_name": "  商品主视觉生成  ",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 240, "height": 160},
+                    "config": {},
+                },
+                {
+                    "id": "blank",
+                    "type": "llm",
+                    "custom_name": "   ",
+                    "position": {"x": 300, "y": 0},
+                    "size": {"width": 240, "height": 160},
+                    "config": {},
+                },
+            ],
+        }
+    )
+
+    assert definition.nodes[0].custom_name == "商品主视觉生成"
+    assert definition.nodes[1].custom_name is None
+    assert definition.model_dump(mode="json", by_alias=True)["nodes"][0][
+        "custom_name"
+    ] == "商品主视觉生成"
+
+    for invalid_name in ("line\nbreak", "control\x00name", "x" * 121):
+        payload = definition.model_dump(mode="json", by_alias=True)
+        payload["nodes"][0]["custom_name"] = invalid_name
+        with pytest.raises(ValidationError):
+            AigcPipelineDefinitionV2.model_validate(payload)
 
 
 def test_legacy_image_to_image_definition_defaults_and_serializes_operation() -> None:
@@ -880,6 +1143,154 @@ def test_prompt_optimization_request_validates_structured_content() -> None:
         )
 
 
+def test_image_prompt_sections_only_enforce_renderable_boundaries() -> None:
+    base = [
+        {"label": "Subject", "content": "Show the requested subject."},
+        {"label": "Lighting", "content": "Use controlled lighting."},
+        {"label": "Composition", "content": "Use balanced framing."},
+        {"label": "Negative Prompt", "content": "No unrelated artifacts."},
+    ]
+    assert len(AigcImagePromptSections(sections=base).sections) == 4
+    ten = [
+        *[
+            {"label": f"Layer {index}", "content": "Use relevant details."}
+            for index in range(1, 9)
+        ],
+        {"label": "Composition", "content": "Use balanced framing."},
+        {"label": "Negative Prompt", "content": "No unrelated artifacts."},
+    ]
+    assert len(AigcImagePromptSections(sections=ten).sections) == 10
+    assert len(AigcImagePromptSections(sections=base[:3]).sections) == 3
+    assert len(
+        AigcImagePromptSections(
+            sections=[
+                *ten,
+                *[
+                    {
+                        "label": f"Optional Layer {index}",
+                        "content": "Use relevant details.",
+                    }
+                    for index in range(11, 21)
+                ],
+            ]
+        ).sections
+    ) == 20
+    assert len(
+        AigcImagePromptSections(
+            sections=[
+                base[0],
+                {"label": "subject", "content": "Duplicate but renderable."},
+                {"label": "Bad:Label", "content": "Still renderable."},
+            ]
+        ).sections
+    ) == 3
+
+    for sections, error in (
+        ([], "at least 1"),
+        (
+            [
+                {
+                    "label": f"Layer {index}",
+                    "content": "Use relevant details.",
+                }
+                for index in range(1, 22)
+            ],
+            "at most 20",
+        ),
+        ([{"label": " ", "content": "Invalid."}], "must not be blank"),
+        ([{"label": "Subject", "content": " "}], "must not be blank"),
+    ):
+        with pytest.raises(ValidationError, match=error):
+            AigcImagePromptSections(sections=sections)
+
+
+def test_image_prompt_optimization_result_schemas_are_mutually_exclusive() -> None:
+    local = AigcImagePromptLocalEditResult(
+        optimization_mode="local_edit",
+        optimized_text=(
+            "Use the input image as the editing base. Change only the coat color "
+            "and preserve every unspecified visual detail unchanged."
+        ),
+    )
+    full = AigcImagePromptFullDesignResult(
+        optimization_mode="full_design",
+        sections=[
+            {"label": "Subject", "content": "Show the requested subject."},
+            {"label": "Composition", "content": "Use balanced framing."},
+            {"label": "Negative Prompt", "content": "Avoid unrelated objects."},
+        ],
+    )
+
+    assert local.optimization_mode == "local_edit"
+    assert full.optimization_mode == "full_design"
+    with pytest.raises(ValidationError):
+        AigcImagePromptLocalEditResult.model_validate(
+            {
+                **local.model_dump(),
+                "sections": full.model_dump()["sections"],
+            }
+        )
+    with pytest.raises(ValidationError):
+        AigcImagePromptFullDesignResult.model_validate(
+            {
+                **full.model_dump(),
+                "optimized_text": local.optimized_text,
+            }
+        )
+    with pytest.raises(ValidationError):
+        AigcImagePromptLocalEditResult.model_validate(
+            {"optimized_text": local.optimized_text}
+        )
+
+
+def test_prompt_optimization_pipeline_context_is_optional_and_image_only() -> None:
+    definition = AigcPipelineDefinitionV2.model_validate(
+        {
+            "nodes": [
+                {
+                    "id": "image-model",
+                    "type": "image_to_image",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 280, "height": 200},
+                    "config": {},
+                }
+            ]
+        }
+    )
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_to_image",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text="重新设计画面",
+        pipeline_context={
+            "pipeline_id": "pipeline-1",
+            "base_revision": 0,
+            "definition_snapshot": definition.model_dump(
+                mode="json",
+                by_alias=True,
+            ),
+            "source_image": None,
+        },
+    )
+
+    assert request.pipeline_context is not None
+    assert request.pipeline_context.definition_snapshot == definition
+    with pytest.raises(ValidationError, match="only supported"):
+        AigcPromptOptimizeRequest(
+            target_node_id="llm-1",
+            target_type="llm",
+            target_config={"model": "doubao-seed-evolving", "system_prompt": ""},
+            text="分析素材",
+            pipeline_context=request.pipeline_context,
+        )
+
+
 def test_pipeline_definition_rejects_duplicate_nodes_and_missing_endpoints() -> None:
     with pytest.raises(ValidationError, match="node ids must be unique"):
         AigcPipelineDefinition.model_validate(
@@ -985,3 +1396,27 @@ def test_task_result_enforces_text_and_asset_shapes() -> None:
 
 def test_node_run_key_uses_unambiguous_separator() -> None:
     assert aigc_node_run_key("run-1", "node-2") == "run-1:node-2"
+
+
+def test_seedream_prompt_optimization_response_contract() -> None:
+    parsed = AigcSeedreamPromptOptimizationResult(
+        generation_type="图像编辑",
+        optimized_text="去掉女生的帽子，保持其他内容不变。",
+        optimization_explanation="明确了编辑对象。",
+    )
+    response = AigcPromptOptimizeResponse(
+        optimized_text=parsed.optimized_text,
+        optimized_reference_instructions=["保持商标位置"],
+        generation_type=parsed.generation_type,
+        optimization_explanation=parsed.optimization_explanation,
+    )
+
+    assert response.generation_type == "图像编辑"
+    assert response.optimization_explanation == "明确了编辑对象。"
+    assert AigcPromptOptimizeResponse().generation_type is None
+    assert AigcPromptOptimizeResponse().optimization_explanation == ""
+
+    with pytest.raises(ValidationError, match="coordinate_tag_forbidden"):
+        AigcPromptOptimizeResponse(
+            optimization_explanation="查看 <bbox>1 2 3 4</bbox>",
+        )

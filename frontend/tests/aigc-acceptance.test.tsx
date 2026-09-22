@@ -29,11 +29,11 @@ describe("AIGC acceptance fixture", () => {
     ).toHaveAttribute(
       "href",
       "http://localhost:8000/api/assets/acceptance-video/content?" +
-        "download=1&filename=%E9%AA%8C%E6%94%B6+Mock+%E6%88%90%E7%89%87-1.mp4"
+        "download=1&filename=%E9%AA%8C%E6%94%B6-Mock-%E6%88%90%E7%89%87.mp4"
     );
     expect(
       screen.getByRole("link", { name: "下载 Mock 视频" })
-    ).toHaveAttribute("download", "验收 Mock 成片-1.mp4");
+    ).toHaveAttribute("download", "验收-Mock-成片.mp4");
     expect(screen.getByText("Mock 结果已失效")).toBeInTheDocument();
     expect(screen.getByText("播放和下载已禁用")).toBeInTheDocument();
   });
@@ -90,14 +90,11 @@ describe("AIGC acceptance fixture", () => {
     expect(
       screen.getByRole("link", { name: "下载增强视频" })
     ).toHaveAttribute("download", "画质增强-Mock-输出.mp4");
-    fireEvent.click(
-      screen.getByRole("button", {
+    expect(
+      screen.queryByRole("button", {
         name: "放大预览：画质增强 Mock 输出.mp4"
       })
-    );
-    expect(
-      screen.getByRole("dialog", { name: "视频预览" })
-    ).toBeInTheDocument();
+    ).toBeNull();
   });
 
   it("blocks MediaKit video processing requests while allowing local media", async () => {

@@ -114,9 +114,6 @@ class MediaKitAsrSubtitleClient:
         if language:
             body["language"] = language
 
-        # #region debug-point A-B-E:submit-request
-        exec("try:\n urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:7777/event',data=json.dumps({'sessionId':'mediakit-asr-failure','runId':'post-fix','hypothesisId':'A-B-E','location':'mediakit.py:_submit','msg':'[DEBUG] MediaKit submit request','data':{'base_host':urlsplit(str(client.base_url)).hostname,'video_scheme':urlsplit(video_url).scheme,'video_host':urlsplit(video_url).hostname,'has_query':bool(urlsplit(video_url).query),'language_set':bool(language)},'ts':int(time.time()*1000)}).encode(),headers={'Content-Type':'application/json'}),timeout=0.2).read()\nexcept Exception:\n pass")
-        # #endregion
         try:
             response = await client.post(self._SUBMIT_PATH, json=body)
         except httpx.HTTPError:
@@ -132,9 +129,6 @@ class MediaKitAsrSubtitleClient:
             )
 
         payload = self._json_or_error(response, phase="submit")
-        # #region debug-point A-B:submit-response
-        exec("try:\n urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:7777/event',data=json.dumps({'sessionId':'mediakit-asr-failure','runId':'post-fix','hypothesisId':'A-B','location':'mediakit.py:_submit','msg':'[DEBUG] MediaKit submit response','data':{'http_status':response.status_code,'payload_keys':sorted(payload.keys()),'success':payload.get('success'),'task_id_present':bool(payload.get('task_id')),'provider_code':payload.get('code')},'ts':int(time.time()*1000)}).encode(),headers={'Content-Type':'application/json'}),timeout=0.2).read()\nexcept Exception:\n pass")
-        # #endregion
         if not payload.get("success"):
             raise MediaKitAsrError(
                 "MediaKit ASR task submission was not accepted.",
@@ -185,9 +179,6 @@ class MediaKitAsrSubtitleClient:
 
             payload = self._json_or_error(response, phase="poll")
             status = payload.get("status")
-            # #region debug-point C-D-E:poll-response
-            exec("try:\n urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:7777/event',data=json.dumps({'sessionId':'mediakit-asr-failure','runId':'post-fix','hypothesisId':'C-D-E','location':'mediakit.py:_poll','msg':'[DEBUG] MediaKit poll response','data':{'http_status':response.status_code,'payload_keys':sorted(payload.keys()),'provider_status':str(status),'result_type':type(payload.get('result')).__name__,'provider_code':payload.get('code'),'provider_message':str(payload.get('message',''))[:200]},'ts':int(time.time()*1000)}).encode(),headers={'Content-Type':'application/json'}),timeout=0.2).read()\nexcept Exception:\n pass")
-            # #endregion
 
             if status == "completed":
                 result = payload.get("result")
@@ -227,9 +218,6 @@ class MediaKitAsrSubtitleClient:
     @staticmethod
     def _parse_subtitles(result: dict[str, Any]) -> list[SubtitleSegment]:
         raw_items = result.get("subtitles")
-        # #region debug-point D:parse-result
-        exec("try:\n urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:7777/event',data=json.dumps({'sessionId':'mediakit-asr-failure','runId':'post-fix','hypothesisId':'D','location':'mediakit.py:_parse_subtitles','msg':'[DEBUG] MediaKit parse result','data':{'result_keys':sorted(result.keys()),'subtitles_type':type(raw_items).__name__,'subtitle_count':len(raw_items) if isinstance(raw_items,list) else None},'ts':int(time.time()*1000)}).encode(),headers={'Content-Type':'application/json'}),timeout=0.2).read()\nexcept Exception:\n pass")
-        # #endregion
         if raw_items is None:
             return []
         if not isinstance(raw_items, list):

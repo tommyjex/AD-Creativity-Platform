@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/bytedance/AD-Creativity/frontend/app/workspace/layout.tsx"],"sourcesContent":["import type { ReactNode } from \"react\";\n\nexport default function WorkspaceLayout({\n  children\n}: Readonly<{\n  children: ReactNode;\n}>) {\n  return (\n    <div className=\"min-h-[calc(100vh-4rem)] bg-background/70\">\n      <main>{children}</main>\n    </div>\n  );\n}\n"],"names":["WorkspaceLayout","children","className"],"mappings":";;;;;;AAEe,SAASA,gBAAgB,EACtCC,QAAQ,EAGR;IACA,qBACE,8OAAC;QAAIC,WAAU;kBACb,cAAA,8OAAC;sBAAMD;;;;;;;;;;;AAGb"}}]
+}

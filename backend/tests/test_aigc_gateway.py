@@ -11,6 +11,8 @@ from PIL import Image
 from backend.app.repositories import InMemoryRepository
 from backend.app.schemas import (
     AigcAssetDirection,
+    AigcGeneratedMediaName,
+    AigcGeneratedMediaNamingRequest,
     AigcPipelineCreate,
     AigcPipelineDefinition,
     AigcPipelineRun,
@@ -36,6 +38,7 @@ from backend.app.services.aigc_gateway import (
     AIGC_IMAGE_EXECUTOR_VERSION,
     AIGC_LLM_EXECUTOR_VERSION,
     AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION,
+    AIGC_VIDEO_SUBTITLE_EXTRACTION_EXECUTOR_VERSION,
     AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION,
     AIGC_VIDEO_EXECUTOR_VERSION,
     AigcGatewayError,
@@ -44,6 +47,7 @@ from backend.app.services.aigc_gateway import (
 from backend.app.services.assets import (
     AigcMultiTrackAssetInput,
     AigcVideoFaceBlurAssetInput,
+    AigcVideoSubtitleAssetInput,
     AigcVideoEnhancementAssetInput,
     AssetStorageService,
     DownloadedAsset,
@@ -56,6 +60,7 @@ from backend.app.services.modelark import (
     LayerDecompositionResult,
     MockModelArkAdapter,
     ModelArkProviderError,
+    ModelArkTextParseError,
     SeedanceVideoGenerationRequest,
 )
 from backend.app.services.mediakit_video_enhancement import (
@@ -72,6 +77,11 @@ from backend.app.services.mediakit_multitrack import (
     MultiTrackTask,
     MultiTrackTaskStatus,
 )
+from backend.app.services.mediakit import SubtitleSegment
+from backend.app.services.mediakit_video_ocr import (
+    VideoOcrTask,
+    VideoOcrTaskStatus,
+)
 
 
 class FakeAigcGeneration:
@@ -80,8 +90,11 @@ class FakeAigcGeneration:
         self.image_requests: list[dict[str, object]] = []
         self.layer_requests: list[dict[str, object]] = []
         self.video_requests: list[SeedanceVideoGenerationRequest] = []
+        self.naming_requests: list[AigcGeneratedMediaNamingRequest] = []
         self.text_error: Exception | None = None
+        self.image_error: Exception | None = None
         self.video_error: Exception | None = None
+        self.naming_error: Exception | None = None
         self.image_url = "https://provider.example/generated.png"
         self.image_mime_type = "image/png"
         self.layer_result = LayerDecompositionResult(
@@ -104,8 +117,19 @@ class FakeAigcGeneration:
             raise self.text_error
         return "优化后的商品海报提示词"
 
+    async def generate_aigc_media_name(
+        self,
+        request: AigcGeneratedMediaNamingRequest,
+    ) -> AigcGeneratedMediaName:
+        self.naming_requests.append(request)
+        if self.naming_error is not None:
+            raise self.naming_error
+        return AigcGeneratedMediaName(name="雨夜霓虹跑车")
+
     async def generate_aigc_image(self, **kwargs) -> GeneratedAssetResult:
         self.image_requests.append(kwargs)
+        if self.image_error is not None:
+            raise self.image_error
         return GeneratedAssetResult(
             type=AssetType.GENERATED_IMAGE,
             stage="image",
@@ -149,6 +173,34 @@ class FakeAigcGeneration:
                 "reference_audio_count": len(request.reference_audio_urls),
             },
         )
+
+
+class CoordinatedAigcGeneration(FakeAigcGeneration):
+    def __init__(self) -> None:
+        super().__init__()
+        self.image_started = asyncio.Event()
+        self.naming_started = asyncio.Event()
+        self.image_release = asyncio.Event()
+        self.naming_release = asyncio.Event()
+        self.naming_cancelled = False
+
+    async def generate_aigc_image(self, **kwargs) -> GeneratedAssetResult:
+        self.image_started.set()
+        await self.image_release.wait()
+        return await super().generate_aigc_image(**kwargs)
+
+    async def generate_aigc_media_name(
+        self,
+        request: AigcGeneratedMediaNamingRequest,
+    ) -> AigcGeneratedMediaName:
+        self.naming_requests.append(request)
+        self.naming_started.set()
+        try:
+            await self.naming_release.wait()
+        except asyncio.CancelledError:
+            self.naming_cancelled = True
+            raise
+        return AigcGeneratedMediaName(name="并发命名")
 
 
 def pipeline_definition(task_type: AigcTaskType) -> AigcPipelineDefinition:
@@ -213,6 +265,36 @@ def pipeline_definition(task_type: AigcTaskType) -> AigcPipelineDefinition:
                         "position": {"x": 320, "y": 0},
                         "size": {"width": 280, "height": 200},
                         "config": {},
+                    },
+                ],
+                "edges": [
+                    {
+                        "id": "edge-video",
+                        "sourceNodeId": "source",
+                        "sourceHandle": "video",
+                        "targetNodeId": "model",
+                        "targetHandle": "video",
+                    }
+                ],
+            }
+        )
+    if task_type == AigcTaskType.VIDEO_SUBTITLE_EXTRACTION:
+        return AigcPipelineDefinition.model_validate(
+            {
+                "nodes": [
+                    {
+                        "id": "source",
+                        "type": "video_input",
+                        "position": {"x": 0, "y": 0},
+                        "size": {"width": 240, "height": 180},
+                        "config": {"asset_id": "source-video"},
+                    },
+                    {
+                        "id": "model",
+                        "type": "video_subtitle_extraction",
+                        "position": {"x": 320, "y": 0},
+                        "size": {"width": 280, "height": 200},
+                        "config": {"mode": "Subtitle"},
                     },
                 ],
                 "edges": [
@@ -522,6 +604,40 @@ def video_face_blur_params(**changes: object) -> dict[str, object]:
     return params
 
 
+def video_subtitle_params(**changes: object) -> dict[str, object]:
+    params: dict[str, object] = {
+        "input_asset_id": "source-video",
+        "mode": "Subtitle",
+    }
+    params.update(changes)
+    return params
+
+
+class FakeVideoOcrClient:
+    def __init__(self, *, segments: tuple[SubtitleSegment, ...]) -> None:
+        self.segments = segments
+        self.submit_calls: list[dict[str, object]] = []
+        self.poll_calls: list[dict[str, object]] = []
+
+    async def submit(self, **kwargs) -> VideoOcrTask:
+        self.submit_calls.append(kwargs)
+        return VideoOcrTask(
+            task_id="ocr-task-safe",
+            status=VideoOcrTaskStatus.QUEUED,
+            request_id="submit-request-safe",
+        )
+
+    async def poll(self, **kwargs) -> VideoOcrTask:
+        self.poll_calls.append(kwargs)
+        return VideoOcrTask(
+            task_id="ocr-task-safe",
+            status=VideoOcrTaskStatus.SUCCEEDED,
+            request_id="poll-request-safe",
+            duration_seconds=8.5,
+            segments=self.segments,
+        )
+
+
 class FakeFaceBlurVideoClient:
     def __init__(
         self,
@@ -798,6 +914,70 @@ def test_gateway_executes_llm_and_returns_text_digest(
     assert execution.result.text_digest is not None
     assert len(execution.result.text_digest) == 64
     assert generation.text_requests[0]["model"] == AIGC_DEFAULT_TEXT_MODEL
+    assert generation.text_requests[0]["image_url"] is None
+    assert generation.naming_requests == []
+
+
+def test_gateway_resolves_llm_image_only_for_the_provider_call(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_media_asset(
+        repository,
+        "llm-image",
+        AssetType.UPLOADED_IMAGE,
+    )
+    generation = FakeAigcGeneration()
+    gateway = AigcModelGateway(repository, generation, test_asset_storage)  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.LLM,
+        {
+            "model": AIGC_DEFAULT_TEXT_MODEL,
+            "prompt": "分析这张图片",
+            "input_image_asset_id": "llm-image",
+        },
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    provider_url = generation.text_requests[0]["image_url"]
+    assert isinstance(provider_url, str)
+    assert provider_url.startswith("https://")
+    assert "image_url" not in task.params
+    assert provider_url not in str(task.params)
+    assert provider_url not in execution.result.model_dump_json()
+    assert [
+        (reference.direction.value, reference.slot, reference.asset_id)
+        for reference in repository.list_aigc_task_assets(task.task_id)
+    ] == [("input", "image", "llm-image")]
+
+
+def test_gateway_rejects_unavailable_llm_image_without_provider_call(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_media_asset(
+        repository,
+        "unavailable-image",
+        AssetType.UPLOADED_IMAGE,
+        status=Status.FAILED,
+    )
+    generation = FakeAigcGeneration()
+    gateway = AigcModelGateway(repository, generation, test_asset_storage)  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.LLM,
+        {
+            "model": AIGC_DEFAULT_TEXT_MODEL,
+            "prompt": "不应调用",
+            "input_image_asset_id": "unavailable-image",
+        },
+    )
+
+    with pytest.raises(AigcGatewayError, match="invalid or unavailable"):
+        asyncio.run(gateway.execute(task))
+    assert generation.text_requests == []
 
 
 def test_gateway_persists_text_to_image_output_asset(
@@ -835,9 +1015,253 @@ def test_gateway_persists_text_to_image_output_asset(
     ]
     assert generation.image_requests[0]["size"] == "2K"
     assert "画幅比例：16:9" in generation.image_requests[0]["prompt"]
+    naming_request = generation.naming_requests[0]
+    assert naming_request.prompt == generation.image_requests[0]["prompt"]
+    assert naming_request.visual_inputs == ()
     assert saved.metadata["size"] == "2K"
     assert saved.metadata["aspect_ratio"] == "16:9"
     assert "target_width" not in saved.metadata
+
+
+def test_gateway_starts_generation_and_naming_concurrently(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    generation = CoordinatedAigcGeneration()
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.TEXT_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "并发测试",
+            "size": "2K",
+            "format": "png",
+        },
+    )
+
+    async def run():
+        execution_task = asyncio.create_task(gateway.execute(task))
+        await asyncio.wait_for(generation.image_started.wait(), timeout=0.2)
+        await asyncio.wait_for(generation.naming_started.wait(), timeout=0.2)
+        assert not execution_task.done()
+        generation.naming_release.set()
+        generation.image_release.set()
+        return await execution_task
+
+    execution = asyncio.run(run())
+
+    assert len(generation.image_requests) == 1
+    assert len(generation.naming_requests) == 1
+    assert execution.result.naming is not None
+    assert execution.result.naming.status.value == "succeeded"
+    assert execution.result.naming.name == "并发命名"
+
+
+def test_gateway_naming_timeout_does_not_block_successful_generation(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    generation = CoordinatedAigcGeneration()
+    generation.image_release.set()
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+        naming_timeout_seconds=0.01,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.TEXT_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "命名超时测试",
+            "size": "2K",
+            "format": "png",
+        },
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    assert execution.result.kind == AigcResultKind.ASSETS
+    assert execution.result.naming is not None
+    assert execution.result.naming.status.value == "timeout"
+    assert execution.result.naming.name is None
+    assert generation.naming_cancelled is True
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        (
+            ModelArkProviderError(
+                "secret provider body",
+                phase="media_naming",
+                provider_code="429",
+            ),
+            "provider_error",
+        ),
+        (
+            ModelArkTextParseError(
+                "raw invalid response",
+                phase="media_naming",
+            ),
+            "invalid_response",
+        ),
+    ],
+)
+def test_gateway_naming_failure_is_non_blocking(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    error: Exception,
+    expected_status: str,
+) -> None:
+    generation = FakeAigcGeneration()
+    generation.naming_error = error
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.TEXT_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "降级测试",
+            "size": "2K",
+            "format": "png",
+        },
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    assert execution.result.kind == AigcResultKind.ASSETS
+    assert execution.result.naming is not None
+    assert execution.result.naming.status.value == expected_status
+    assert execution.result.naming.name is None
+    assert len(generation.naming_requests) == 1
+
+
+def test_gateway_generation_failure_cancels_and_discards_naming(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    generation = CoordinatedAigcGeneration()
+
+    async def fail_after_naming_starts(**kwargs):
+        generation.image_requests.append(kwargs)
+        await generation.naming_started.wait()
+        raise ModelArkProviderError(
+            "generation failed",
+            phase="image_generate",
+            provider_code="InternalError",
+        )
+
+    generation.generate_aigc_image = fail_after_naming_starts  # type: ignore[method-assign]
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.TEXT_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "主生成失败",
+            "size": "2K",
+            "format": "png",
+        },
+    )
+
+    with pytest.raises(AigcGatewayError):
+        asyncio.run(gateway.execute(task))
+
+    assert len(generation.naming_requests) == 1
+    assert generation.naming_cancelled is True
+    assert repository.list_aigc_task_assets(task.task_id) == []
+
+
+def test_gateway_cancellation_cancels_naming(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    generation = CoordinatedAigcGeneration()
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.TEXT_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "取消测试",
+            "size": "2K",
+            "format": "png",
+        },
+    )
+
+    async def run() -> None:
+        execution_task = asyncio.create_task(gateway.execute(task))
+        await generation.image_started.wait()
+        await generation.naming_started.wait()
+        execution_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await execution_task
+
+    asyncio.run(run())
+
+    assert generation.naming_cancelled is True
+    assert repository.list_aigc_task_assets(task.task_id) == []
+
+
+def test_gateway_new_retry_attempt_can_name_once_again(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    generation = FakeAigcGeneration()
+    gateway = AigcModelGateway(
+        repository,
+        generation,
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    first = create_persisted_task(
+        repository,
+        AigcTaskType.TEXT_TO_IMAGE,
+        {
+            "model": AIGC_DEFAULT_IMAGE_MODEL,
+            "prompt": "自动重试测试",
+            "size": "2K",
+            "format": "png",
+        },
+    )
+    asyncio.run(gateway.execute(first))
+    repository.update_aigc_task_attempt(first.task_id, status="failed")
+    retry = repository.create_aigc_task_attempt(
+        AigcPipelineTaskAttempt(
+            pipeline_id=first.pipeline_id,
+            run_id=first.run_id,
+            node_id=first.node_id,
+            type=first.type,
+            params=first.params,
+        ),
+        idempotency_key="retry-generated-media-naming",
+        retry_of_task_id=first.task_id,
+    )
+
+    retry_execution = asyncio.run(gateway.execute(retry))
+
+    assert (first.attempt, retry.attempt) == (1, 2)
+    assert retry_execution.result.naming is not None
+    assert retry_execution.result.naming.status.value == "succeeded"
+    assert len(generation.naming_requests) == 2
 
 
 @pytest.mark.parametrize(
@@ -894,6 +1318,16 @@ def test_gateway_forwards_custom_size_without_aspect_ratio_prompt(
     assert len(request["reference_image_urls"]) == max(
         0,
         len(reference_asset_ids) - 1,
+    )
+    assert [
+        item.url for item in generation.naming_requests[0].visual_inputs
+    ] == (
+        [
+            request["source_image_url"],
+            *request["reference_image_urls"],
+        ]
+        if reference_asset_ids
+        else []
     )
     saved = repository.get_asset(execution.result.assets[0].asset_id)
     assert saved.metadata["size"] == "2048x1024"
@@ -1112,6 +1546,9 @@ def test_gateway_resolves_img2img_asset_by_id(
         "https://local-assets.tos.local/"
     )
     assert generation.image_requests[0]["reference_image_urls"] == []
+    assert [
+        item.url for item in generation.naming_requests[0].visual_inputs
+    ] == [generation.image_requests[0]["source_image_url"]]
     references = repository.list_aigc_task_assets(task.task_id)
     assert [
         (item.direction.value, item.slot, item.ordinal, item.asset_id)
@@ -1255,6 +1692,10 @@ def test_gateway_plain_image_edit_remains_compatible(
             ),
         }
     ]
+    assert generation.naming_requests[0].prompt == "移除背景文字"
+    assert [
+        item.url for item in generation.naming_requests[0].visual_inputs
+    ] == [generation.image_requests[0]["source_image_url"]]
     output = execution.result.assets[0]
     saved = repository.get_asset(output.asset_id)
     assert saved.asset_role == AssetRole.PUBLIC
@@ -1919,6 +2360,10 @@ def test_gateway_resolves_multi_track_assets_and_uses_mock_mediakit(
     test_asset_storage: AssetStorageService,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    custom_font_url = (
+        "https://xujianhua-utils.tos-cn-beijing.volces.com/"
+        "ECOVACS/centurygothic.ttf"
+    )
     for asset_id, asset_type in (
         ("video-input", AssetType.UPLOADED_VIDEO),
         ("image-input", AssetType.UPLOADED_IMAGE),
@@ -1973,11 +2418,11 @@ def test_gateway_resolves_multi_track_assets_and_uses_mock_mediakit(
                             "target_time": {"start_ms": 0, "end_ms": 2000},
                             "loop": False,
                             "transform": {
-                                "x": 0,
-                                "y": 0,
-                                "width": 1920,
-                                "height": 1080,
-                                "rotation": 0,
+                                "x": 0.4,
+                                "y": 0.6,
+                                "width": 1919.6,
+                                "height": 1079.4,
+                                "rotation": 0.4,
                             },
                             "speed": 1,
                             "volume": 1,
@@ -2007,13 +2452,37 @@ def test_gateway_resolves_multi_track_assets_and_uses_mock_mediakit(
                             "target_time": {"start_ms": 0, "end_ms": 2000},
                             "loop": False,
                             "transform": {
+                                "x": 100.4,
+                                "y": 100.6,
+                                "width": 600.4,
+                                "height": 100.6,
+                                "rotation": 1.6,
+                            },
+                            "style": {
+                                "font_type": "SY_Black",
+                                "font_size": 48.6,
+                                "color": "#FFFFFFFF",
+                                "bold": False,
+                                "italic": False,
+                                "underline": False,
+                                "background_color": "#00000000",
+                            },
+                        },
+                        {
+                            "id": "default-text-element",
+                            "type": "text",
+                            "inline_text": "默认字体文本",
+                            "target_time": {"start_ms": 2000, "end_ms": 3000},
+                            "loop": False,
+                            "transform": {
                                 "x": 100,
-                                "y": 100,
+                                "y": 220,
                                 "width": 600,
                                 "height": 100,
                                 "rotation": 0,
                             },
                             "style": {
+                                "font_type": None,
                                 "font_size": 48,
                                 "color": "#FFFFFFFF",
                                 "bold": False,
@@ -2098,6 +2567,7 @@ def test_gateway_resolves_multi_track_assets_and_uses_mock_mediakit(
                                 "rotation": 0,
                             },
                             "style": {
+                                "font_type": custom_font_url,
                                 "font_size": 48,
                                 "color": "#FFFFFFFF",
                                 "bold": False,
@@ -2115,6 +2585,10 @@ def test_gateway_resolves_multi_track_assets_and_uses_mock_mediakit(
             "image-element": {"type": "image", "asset_id": "image-input"},
             "audio-element": {"type": "audio", "asset_id": "audio-input"},
             "text-element": {"type": "text", "text": "当前 Run 文本"},
+            "default-text-element": {
+                "type": "text",
+                "text": "默认字体文本",
+            },
             "subtitle-element": {
                 "type": "subtitle",
                 "asset_id": "subtitle-input",
@@ -2214,8 +2688,8 @@ def test_gateway_resolves_multi_track_assets_and_uses_mock_mediakit(
         "provider_task_id": "multitrack-task-safe",
         "provider_request_id": "poll-request-safe",
         "track_count": 5,
-        "element_count": 5,
-        "duration_ms": 2000,
+        "element_count": 6,
+        "duration_ms": 3000,
         "width": 1920,
         "height": 1080,
         "fps": 30,
@@ -2234,19 +2708,158 @@ def test_gateway_resolves_multi_track_assets_and_uses_mock_mediakit(
     provider_project = submit["project"]
     assert isinstance(provider_project, dict)
     assert set(provider_project) == {"canvas", "track", "output"}
-    assert provider_project["track"][0][0]["url"].startswith(  # type: ignore[index,union-attr]
+    assert provider_project["canvas"] == {
+        "width": 1920,
+        "height": 1080,
+        "background_color": "#000000FF",
+    }
+    provider_tracks = provider_project["track"]
+    assert isinstance(provider_tracks, list)
+    assert [track[0]["type"] for track in provider_tracks] == [
+        "subtitle",
+        "audio",
+        "image",
+        "text",
+        "video",
+    ]
+    assert provider_tracks[4][0]["source"].startswith(
         "https://"
     )
-    assert provider_project["track"][1][0]["text"] == "当前 Run 文本"  # type: ignore[index]
-    assert "/subtitle-input.srt?" in provider_project["track"][4][0]["url"]  # type: ignore[index]
-    assert "source" not in provider_project["track"][0][0]  # type: ignore[index]
+    provider_text_track = provider_tracks[3]
+    assert [element["text"] for element in provider_text_track] == [
+        "当前 Run 文本",
+        "默认字体文本",
+    ]
+    provider_text = provider_text_track[0]
+    provider_default_text = provider_text_track[1]
+    provider_subtitle = provider_tracks[0][0]
+    provider_image = provider_tracks[2][0]
+    provider_video = provider_tracks[4][0]
+
+    def assert_transform(
+        provider_element: dict[str, object],
+        expected: dict[str, object],
+    ) -> None:
+        assert provider_element["extra"] == [
+            {"type": "transform", **expected}
+        ]
+        assert "transform" not in provider_element
+
+    assert_transform(
+        provider_video,
+        {
+            "pos_x": 0,
+            "pos_y": 1,
+            "width": 1920,
+            "height": 1079,
+            "rotation": 0,
+        },
+    )
+    assert_transform(
+        provider_image,
+        {
+            "pos_x": 0,
+            "pos_y": 0,
+            "width": 640,
+            "height": 360,
+            "rotation": 0,
+        },
+    )
+    assert_transform(
+        provider_text,
+        {
+            "pos_x": 100,
+            "pos_y": 101,
+            "width": 600,
+            "height": 101,
+            "rotation": 2,
+        },
+    )
+    assert_transform(
+        provider_subtitle,
+        {
+            "pos_x": 100,
+            "pos_y": 900,
+            "width": 1720,
+            "height": 100,
+            "rotation": 0,
+        },
+    )
+    assert {
+        key: provider_text[key]
+        for key in (
+            "font_type",
+            "font_size",
+            "font_color",
+            "bold",
+            "italic",
+            "underline",
+            "background_color",
+        )
+    } == {
+        "font_type": "SY_Black",
+        "font_size": 49,
+        "font_color": "#FFFFFFFF",
+        "bold": False,
+        "italic": False,
+        "underline": False,
+        "background_color": "#00000000",
+    }
+    assert {
+        key: provider_subtitle[key]
+        for key in (
+            "font_type",
+            "font_size",
+            "font_color",
+            "bold",
+            "italic",
+            "underline",
+            "background_color",
+        )
+    } == {
+        "font_type": custom_font_url,
+        "font_size": 48,
+        "font_color": "#FFFFFFFF",
+        "bold": False,
+        "italic": False,
+        "underline": False,
+        "background_color": "#00000000",
+    }
+    assert "font_type" not in provider_default_text
+    for provider_element in (
+        provider_text,
+        provider_default_text,
+        provider_subtitle,
+    ):
+        assert "style" not in provider_element
+        assert "asset_id" not in provider_element
+        assert "inline_text" not in provider_element
+    assert task.params["project"]["tracks"][1]["elements"][0]["style"][  # type: ignore[index]
+        "font_type"
+    ] == "SY_Black"
+    assert task.params["project"]["tracks"][1]["elements"][0]["transform"][  # type: ignore[index]
+        "x"
+    ] == 100.4
+    assert task.params["project"]["tracks"][4]["elements"][0]["style"][  # type: ignore[index]
+        "font_type"
+    ] == custom_font_url
+    assert [
+        track["type"]  # type: ignore[index]
+        for track in task.params["project"]["tracks"]  # type: ignore[index]
+    ] == ["video", "text", "image", "audio", "subtitle"]
+    assert "/subtitle-input.srt?" in provider_subtitle["text"]
+    assert "source" not in provider_subtitle
+    assert "url" not in provider_video
+    assert provider_video["target_time"] == [0, 2000]
+    assert provider_video["source_trim"] == [0, 2000]
+    assert provider_tracks[3][0]["target_time"] == [0, 2000]
     assert captured[0].input_asset_ids == {
         "video": ("video-input",),
         "image": ("image-input",),
         "audio": ("audio-input",),
         "subtitle": ("subtitle-input",),
     }
-    assert captured[0].duration_ms == 2000
+    assert captured[0].duration_ms == 3000
     assert captured[0].width == 1920
     assert captured[0].height == 1080
     assert captured[0].fps == 30
@@ -2542,6 +3155,60 @@ def _layer_composite_params(
     }
 
 
+def test_gateway_flattens_layer_set_without_replacement(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    params = _layer_composite_params(repository, test_asset_storage)
+    params.pop("replacement")
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.LAYER_COMPOSITE,
+        params,
+    )
+    gateway = AigcModelGateway(
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+
+    execution = asyncio.run(gateway.execute(task))
+
+    assert execution.executor_version == "aigc-layer-v1"
+    assert execution.result.kind == AigcResultKind.LAYER_COMPOSITE
+    output_layer_set = execution.result.layer_set
+    assert output_layer_set is not None
+    assert output_layer_set.model_dump(mode="json") == params["input_layer_set"]
+
+    output = execution.result.assets[0]
+    saved = repository.get_asset(output.asset_id)
+    client = test_asset_storage.client
+    assert client is not None
+    assert saved.object_key is not None
+    with Image.open(BytesIO(client.get_object(key=saved.object_key))) as image:
+        rgba = image.convert("RGBA")
+        assert rgba.getpixel((0, 0)) == (255, 0, 0, 255)
+        assert rgba.getpixel((3, 1)) == (0, 255, 0, 255)
+        assert rgba.getpixel((5, 3)) == (0, 0, 0, 255)
+
+    references = repository.list_aigc_task_assets(task.task_id)
+    assert [
+        (item.direction.value, item.slot, item.ordinal, item.asset_id)
+        for item in references
+    ] == [
+        ("input", "base", 0, "base-asset"),
+        ("input", "layers", 0, "layer-old"),
+        ("input", "layers", 1, "layer-other"),
+        ("input", "layers", 2, "layer-hidden"),
+        ("output", "base", 0, "base-asset"),
+        ("output", "image", 0, saved.id),
+        ("output", "layers", 0, "layer-old"),
+        ("output", "layers", 1, "layer-other"),
+        ("output", "layers", 2, "layer-hidden"),
+    ]
+    assert all(item.slot != "replacement" for item in references)
+
+
 def test_gateway_composites_replacement_into_immutable_derived_layer_set(
     repository: InMemoryRepository,
     test_asset_storage: AssetStorageService,
@@ -2806,6 +3473,21 @@ def test_gateway_executes_video_with_ordered_inputs_and_persists_output(
     assert request.reference_audio_urls[0].endswith(
         "/aigc/audio-a.mp3?X-Tos-Expires=3600&X-Tos-Signature=test"
     )
+    naming_request = generation.naming_requests[0]
+    assert naming_request.prompt == task.params["prompt"]
+    assert [item.type for item in naming_request.visual_inputs] == [
+        "image",
+        "image",
+        "video",
+    ]
+    assert [item.url for item in naming_request.visual_inputs] == [
+        *request.reference_image_urls,
+        *request.reference_video_urls,
+    ]
+    assert naming_request.visual_inputs[-1].fps == 0.3
+    assert request.reference_audio_urls[0] not in {
+        item.url for item in naming_request.visual_inputs
+    }
     assert request.generate_audio is False
     references = repository.list_aigc_task_assets(task.task_id)
     assert [
@@ -2869,6 +3551,9 @@ def test_gateway_maps_first_and_last_frames_to_seedance_roles(
     assert "/aigc/first.png?" in request.first_frame_url
     assert request.last_frame_url is not None
     assert "/aigc/last.png?" in request.last_frame_url
+    assert [
+        item.url for item in generation.naming_requests[0].visual_inputs
+    ] == [request.first_frame_url, request.last_frame_url]
     input_references = repository.list_aigc_task_assets(task.task_id)[:2]
     assert [
         (item.slot, item.ordinal, item.asset_id) for item in input_references
@@ -2954,6 +3639,147 @@ def test_gateway_classifies_seedance_task_timeout_as_retryable(
     assert error.value.error.code == "timeout"
     assert error.value.error.stage == "poll"
     assert error.value.retryable is True
+
+
+def test_gateway_extracts_video_subtitles_to_srt_asset(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 1920,
+            "height": 1080,
+            "duration_seconds": 8.5,
+            "fps": 30,
+            "video_codec": "h264",
+        },
+    )
+    client = FakeVideoOcrClient(
+        segments=(
+            SubtitleSegment(1, 2, "第一句"),
+            SubtitleSegment(3, 4.5, "Second line"),
+        )
+    )
+    captured: list[AigcVideoSubtitleAssetInput] = []
+
+    def store_subtitles(repo, data):
+        captured.append(data)
+        output = repo.create_asset(
+            AssetCreate(
+                id="subtitle-output",
+                tool_asset_role=ToolAssetRole.OUTPUT,
+                type=AssetType.SUBTITLE,
+                asset_role=AssetRole.PUBLIC,
+                status=Status.SUCCEEDED,
+                object_key="aigc/subtitle-output.srt",
+                mime_type="application/x-subrip",
+                metadata={
+                    "provider": "mediakit",
+                    "operation": "video_ocr",
+                    "mode": "Subtitle",
+                    "segment_count": data.segment_count,
+                    "duration_seconds": data.duration_seconds,
+                },
+            )
+        )
+        repo.add_aigc_task_assets(
+            [
+                AigcPipelineTaskAssetReference(
+                    task_id=data.task_id,
+                    direction=AigcAssetDirection.OUTPUT,
+                    slot="subtitle",
+                    ordinal=0,
+                    asset_id=output.id,
+                )
+            ]
+        )
+        return output
+
+    monkeypatch.setattr(
+        test_asset_storage,
+        "store_aigc_video_subtitles",
+        store_subtitles,
+    )
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        video_ocr_client_factory=lambda: client,
+        video_ocr_poll_interval_seconds=0.001,
+        video_ocr_timeout_seconds=1,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_SUBTITLE_EXTRACTION,
+        video_subtitle_params(),
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    assert (
+        execution.executor_version
+        == AIGC_VIDEO_SUBTITLE_EXTRACTION_EXECUTOR_VERSION
+    )
+    assert execution.result.kind == AigcResultKind.ASSETS
+    assert execution.result.assets[0].asset_id == "subtitle-output"
+    assert captured[0].srt_text == (
+        "1\n00:00:01,000 --> 00:00:02,000\n第一句\n\n"
+        "2\n00:00:03,000 --> 00:00:04,500\nSecond line\n"
+    )
+    assert captured[0].segment_count == 2
+    assert client.submit_calls[0]["mode"] == "Subtitle"
+    assert str(client.submit_calls[0]["client_token"]).startswith(
+        "aigc-video-ocr-"
+    )
+
+
+def test_gateway_video_subtitle_empty_result_succeeds_without_asset(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_media_asset(
+        repository,
+        "source-video",
+        AssetType.UPLOADED_VIDEO,
+        metadata={
+            "inspection_version": 1,
+            "container": "mp4",
+            "width": 1280,
+            "height": 720,
+            "duration_seconds": 5,
+            "fps": 30,
+            "video_codec": "h264",
+        },
+    )
+    client = FakeVideoOcrClient(segments=())
+    gateway = AigcModelGateway(  # type: ignore[arg-type]
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+        media_inspector=object(),
+        video_ocr_client_factory=lambda: client,
+        video_ocr_poll_interval_seconds=0.001,
+        video_ocr_timeout_seconds=1,
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_SUBTITLE_EXTRACTION,
+        video_subtitle_params(),
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    assert execution.result.kind == AigcResultKind.NONE
+    assert execution.result.assets == []
+    assert execution.result.metadata["empty"] is True
+    assert execution.result.metadata["segment_count"] == 0
 
 
 def test_gateway_applies_independent_video_timeout(

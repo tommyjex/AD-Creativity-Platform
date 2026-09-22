@@ -1,22 +1,34 @@
 "use client";
 
+import * as Popover from "@radix-ui/react-popover";
 import {
   ChevronDown,
   ChevronUp,
   Eye,
   EyeOff,
   GripVertical,
+  MoreHorizontal,
   Scissors,
   Trash2,
   Volume2,
   VolumeX
 } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import type {
-  AigcMultitrackEditorAction
+  AigcMultitrackEditorAction,
+  AigcTimelineSource
 } from "@/lib/aigc/multitrack-editor-store";
+import { resolveMultitrackTextPreview } from "@/lib/aigc/multitrack-text-preview";
 import type {
   MultiTrackEditConfig,
   MultiTrackElement,
@@ -45,20 +57,24 @@ const CLIP_STYLES: Record<MultiTrackKind, string> = {
 export function AigcMultitrackTimeline({
   config,
   dispatch,
+  onDeleteTrack,
   onSelectElement,
   onSelectTrack,
   playheadMs,
   selectedElementId,
   selectedTrackId,
+  sources,
   zoom
 }: {
   config: MultiTrackEditConfig;
   dispatch: (action: AigcMultitrackEditorAction) => void;
+  onDeleteTrack: (track: MultiTrackTrack) => void;
   onSelectElement: (elementId: string) => void;
   onSelectTrack: (trackId: string) => void;
   playheadMs: number;
   selectedElementId: string | null;
   selectedTrackId: string | null;
+  sources: AigcTimelineSource[];
   zoom: number;
 }) {
   const pixelsPerMs = (BASE_PIXELS_PER_SECOND * zoom) / 1000;
@@ -100,6 +116,7 @@ export function AigcMultitrackTimeline({
             )}
             isSelected={selectedTrackId === track.id}
             key={track.id}
+            onDelete={() => onDeleteTrack(track)}
             onSelect={() => onSelectTrack(track.id)}
             track={track}
             trackCount={config.tracks.length}
@@ -159,6 +176,7 @@ export function AigcMultitrackTimeline({
                     onSelect={() => onSelectElement(element.id)}
                     pixelsPerMs={pixelsPerMs}
                     playheadMs={playheadMs}
+                    sources={sources}
                   />
                 ))}
               </div>
@@ -181,6 +199,7 @@ function TrackHeader({
   dispatch,
   index,
   isSelected,
+  onDelete,
   onSelect,
   track,
   trackCount
@@ -188,63 +207,200 @@ function TrackHeader({
   dispatch: (action: AigcMultitrackEditorAction) => void;
   index: number;
   isSelected: boolean;
+  onDelete: () => void;
   onSelect: () => void;
   track: MultiTrackTrack;
   trackCount: number;
 }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  function closeMenuThen(action: () => void) {
+    setMenuOpen(false);
+    action();
+  }
+
+  function requestDelete() {
+    setMenuOpen(false);
+    if (track.elements.length === 0) {
+      onDelete();
+      return;
+    }
+    setConfirmOpen(true);
+  }
+
   return (
-    <div
+    <>
+      <div
+        className={cn(
+          "flex items-center gap-1 border-b border-white/[0.06] px-1.5",
+          isSelected && "bg-blue-500/[0.08]"
+        )}
+        style={{ height: TRACK_HEIGHT }}
+      >
+        <GripVertical className="h-3 w-3 shrink-0 text-zinc-600" />
+        <button
+          className="min-w-0 flex-1 text-left"
+          onClick={onSelect}
+          title={track.name}
+          type="button"
+        >
+          <span className="block truncate text-[11px] text-zinc-300">
+            {track.name}
+          </span>
+          <span className="block text-[9px] text-zinc-600">
+            {TRACK_LABELS[track.type]} · {track.elements.length}
+          </span>
+        </button>
+        <MiniButton
+          disabled={index === trackCount - 1}
+          label="轨道上移"
+          onClick={() =>
+            dispatch({
+              type: "track/reorder",
+              trackId: track.id,
+              toIndex: index + 1
+            })
+          }
+        >
+          <ChevronUp />
+        </MiniButton>
+        <MiniButton
+          disabled={index === 0}
+          label="轨道下移"
+          onClick={() =>
+            dispatch({
+              type: "track/reorder",
+              trackId: track.id,
+              toIndex: index - 1
+            })
+          }
+        >
+          <ChevronDown />
+        </MiniButton>
+        <Popover.Root onOpenChange={setMenuOpen} open={menuOpen}>
+          <Popover.Trigger asChild>
+            <Button
+              aria-label={`轨道操作：${track.name}`}
+              className="h-6 w-6 shrink-0 p-0 text-zinc-500 hover:text-white"
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </Button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              align="end"
+              aria-label={`${track.name}轨道菜单`}
+              className="z-[70] w-36 border border-[#3c424b] bg-[#1b1f25] p-1 text-zinc-200 shadow-xl shadow-black/50 outline-none"
+              collisionPadding={8}
+              role="menu"
+              sideOffset={4}
+            >
+              <TrackMenuItem
+                icon={track.hidden ? Eye : EyeOff}
+                label={track.hidden ? "显示轨道" : "隐藏轨道"}
+                onClick={() =>
+                  closeMenuThen(() =>
+                    dispatch({
+                      type: "track/toggle-hidden",
+                      trackId: track.id
+                    })
+                  )
+                }
+              />
+              <TrackMenuItem
+                icon={track.muted ? Volume2 : VolumeX}
+                label={track.muted ? "取消静音" : "轨道静音"}
+                onClick={() =>
+                  closeMenuThen(() =>
+                    dispatch({
+                      type: "track/toggle-muted",
+                      trackId: track.id
+                    })
+                  )
+                }
+              />
+              <div className="my-1 h-px bg-[#343a43]" />
+              <TrackMenuItem
+                destructive
+                icon={Trash2}
+                label="删除轨道"
+                onClick={requestDelete}
+              />
+              <Popover.Arrow className="fill-[#3c424b]" />
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+      </div>
+
+      <Dialog onOpenChange={setConfirmOpen} open={confirmOpen}>
+        <DialogContent
+          className="max-w-sm rounded-lg border-[#3c424b] bg-[#1b1f25] p-5 text-zinc-100"
+          closeButtonClassName="rounded-md border-[#3c424b] bg-[#20252c]"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-base text-zinc-100">
+              删除轨道“{track.name}”
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-400">
+              轨道内 {track.elements.length} 个片段将一并删除。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5">
+            <Button
+              onClick={() => setConfirmOpen(false)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              取消
+            </Button>
+            <Button
+              aria-label="确认删除轨道"
+              onClick={() => {
+                setConfirmOpen(false);
+                onDelete();
+              }}
+              size="sm"
+              type="button"
+              variant="destructive"
+            >
+              删除轨道
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function TrackMenuItem({
+  destructive = false,
+  icon: Icon,
+  label,
+  onClick
+}: {
+  destructive?: boolean;
+  icon: typeof Eye;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
       className={cn(
-        "flex items-center gap-1 border-b border-white/[0.06] px-1.5",
-        isSelected && "bg-blue-500/[0.08]"
+        "flex h-8 w-full items-center gap-2 px-2 text-left text-[11px] outline-none hover:bg-white/[0.06] focus-visible:bg-white/[0.08]",
+        destructive ? "text-red-300" : "text-zinc-300"
       )}
-      style={{ height: TRACK_HEIGHT }}
+      onClick={onClick}
+      role="menuitem"
+      type="button"
     >
-      <GripVertical className="h-3 w-3 shrink-0 text-zinc-600" />
-      <button
-        className="min-w-0 flex-1 text-left"
-        onClick={onSelect}
-        title={track.name}
-        type="button"
-      >
-        <span className="block truncate text-[11px] text-zinc-300">
-          {track.name}
-        </span>
-        <span className="block text-[9px] text-zinc-600">
-          {TRACK_LABELS[track.type]} · {track.elements.length}
-        </span>
-      </button>
-      <MiniButton
-        disabled={index === trackCount - 1}
-        label="轨道上移"
-        onClick={() =>
-          dispatch({ type: "track/reorder", trackId: track.id, toIndex: index + 1 })
-        }
-      >
-        <ChevronUp />
-      </MiniButton>
-      <MiniButton
-        disabled={index === 0}
-        label="轨道下移"
-        onClick={() =>
-          dispatch({ type: "track/reorder", trackId: track.id, toIndex: index - 1 })
-        }
-      >
-        <ChevronDown />
-      </MiniButton>
-      <MiniButton
-        label={track.hidden ? "显示轨道" : "隐藏轨道"}
-        onClick={() => dispatch({ type: "track/toggle-hidden", trackId: track.id })}
-      >
-        {track.hidden ? <EyeOff /> : <Eye />}
-      </MiniButton>
-      <MiniButton
-        label={track.muted ? "取消静音" : "轨道静音"}
-        onClick={() => dispatch({ type: "track/toggle-muted", trackId: track.id })}
-      >
-        {track.muted ? <VolumeX /> : <Volume2 />}
-      </MiniButton>
-    </div>
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </button>
   );
 }
 
@@ -254,7 +410,8 @@ function TimelineClip({
   isSelected,
   onSelect,
   pixelsPerMs,
-  playheadMs
+  playheadMs,
+  sources
 }: {
   dispatch: (action: AigcMultitrackEditorAction) => void;
   element: MultiTrackElement;
@@ -262,6 +419,7 @@ function TimelineClip({
   onSelect: () => void;
   pixelsPerMs: number;
   playheadMs: number;
+  sources: AigcTimelineSource[];
 }) {
   const drag = useRef<{ clientX: number; startMs: number } | null>(null);
   const trim = useRef<{
@@ -272,7 +430,7 @@ function TimelineClip({
   const duration = element.target_time.end_ms - element.target_time.start_ms;
   const label =
     element.type === "text"
-      ? element.inline_text?.trim() || "上游文字"
+      ? compactText(resolveMultitrackTextPreview(element, sources).text)
       : element.type === "subtitle"
         ? element.asset_id || "待上传字幕"
         : element.source.source_node_id;
@@ -400,6 +558,10 @@ function TimelineClip({
       />
     </button>
   );
+}
+
+function compactText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function MiniButton({

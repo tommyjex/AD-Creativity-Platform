@@ -388,7 +388,7 @@ def test_invalid_optimization_output_fails_without_side_effects(
     assert errors == [{
         "code": "generation_failed",
         "message": "storyboard video prompt optimization failed",
-        "detail": "provider_code=UnknownProviderError",
+        "detail": "phase=response_validation",
     }]
     assert adapter.calls == 1
     assert repository.get_project(project_id).model_dump(mode="json") == before

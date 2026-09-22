@@ -25,6 +25,7 @@ const AIGC_MODALITY_COLORS = {
   image_asset: modalityColors("image"),
   video_asset: modalityColors("video"),
   audio_asset: modalityColors("audio"),
+  subtitle_asset: modalityColors("video"),
   layer_set: modalityColors("image"),
   image_layer: modalityColors("image"),
   edited_layer: modalityColors("image")

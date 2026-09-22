@@ -48,7 +48,7 @@
 
 ### 排除
 
-- `type === "uploaded_image"` 的上传参考图片。
+- 项目资产中 `type === "uploaded_image"` 的上传参考图片。
 - `tool_asset_role === "input"` 的工具输入素材。
 - `asset_role === "internal_base"` 或 `asset_role === "internal_layer"` 的内部中间资产。
 - 音频、字幕、文本和无法识别为图片或视频的资产。

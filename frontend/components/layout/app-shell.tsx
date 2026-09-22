@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Route } from "next";
-import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Menu, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -15,14 +14,21 @@ const navItems = [
   { label: "AIGC工作台", href: "/workspace/aigc" }
 ] as const;
 
+const navigationBackgroundUrl =
+  "/images/navigation-generative-constellation.webp";
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isFullscreenAigcEditorRoute =
-    /^\/workspace\/aigc\/pipelines\/[^/]+\/nodes\/[^/]+\/(?:layers|timeline)\/?$/.test(
+  const [mobileNavPathname, setMobileNavPathname] = useState<string | null>(
+    null
+  );
+  const isMobileNavOpen = mobileNavPathname === pathname;
+  const isImmersiveAigcEditorRoute =
+    /^\/workspace\/aigc\/(?:(?:pipelines|templates)\/[^/]+|pipelines\/[^/]+\/nodes\/[^/]+\/(?:layers|timeline))\/?$/.test(
       pathname
     );
 
-  if (isFullscreenAigcEditorRoute) {
+  if (isImmersiveAigcEditorRoute) {
     return (
       <div
         className="min-h-[100dvh] overflow-hidden bg-[#0b0d10] text-[#f2f4f7]"
@@ -39,21 +45,37 @@ export function AppShell({ children }: { children: ReactNode }) {
       data-testid="app-shell"
     >
       <AtmosphereLayer />
-      <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-card/90 backdrop-blur-xl">
-        <div className="container flex h-16 items-center justify-between gap-6">
+      <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-white/10 bg-[#14191f] text-white">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-cover bg-center"
+          data-testid="app-shell-navigation-background"
+          style={{ backgroundImage: `url("${navigationBackgroundUrl}")` }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(3,7,11,0.04)_0%,rgba(3,7,11,0.22)_100%),linear-gradient(90deg,rgba(11,15,20,0.92)_0%,rgba(12,17,23,0.56)_22%,rgba(10,15,21,0.34)_52%,rgba(9,14,20,0.48)_74%,rgba(8,12,17,0.82)_100%)]"
+        />
+        <div
+          className="container relative z-10 flex h-full items-center justify-between gap-6 2xl:max-w-[1600px]"
+          data-testid="app-shell-navigation-layout"
+        >
           <Link className="group flex items-center gap-3" href="/">
-            <BrandMark />
+            <BrandMark className="border-blue-400/40 bg-blue-500/15" />
             <div className="leading-none">
-              <div className="text-sm font-semibold tracking-[0.18em] text-foreground">
+              <div className="text-sm font-semibold tracking-[0.18em] text-white">
                 AD CREATIVITY
               </div>
-              <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.24em] text-muted-foreground">
+              <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.24em] text-slate-400">
                 Campaign generation deck
               </div>
             </div>
           </Link>
 
-          <nav className="hidden items-center gap-1 rounded-full border border-border bg-secondary/70 p-1 md:flex">
+          <nav
+            aria-label="主导航"
+            className="hidden items-center gap-1 rounded-full border border-white/10 bg-black/30 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-xl md:flex"
+          >
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -62,10 +84,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "rounded-full px-4 py-2 text-xs font-medium transition hover:bg-card hover:text-primary hover:shadow-sm",
+                    "rounded-full px-4 py-2 text-xs font-medium transition",
                     isActive
-                      ? "bg-card text-primary shadow-sm"
-                      : "text-muted-foreground"
+                      ? "bg-primary/90 text-white shadow-sm"
+                      : "text-slate-300 hover:bg-white/10 hover:text-white"
                   )}
                   href={item.href as Route}
                   key={item.href}
@@ -76,13 +98,54 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          <div className="hidden items-center gap-3 sm:flex">
-            <Badge variant="signal">BRIEF READY</Badge>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/workspace/projects">进入工作台</Link>
-            </Button>
-          </div>
+          <button
+            aria-controls="mobile-navigation-menu"
+            aria-expanded={isMobileNavOpen}
+            aria-label={isMobileNavOpen ? "关闭导航菜单" : "打开导航菜单"}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/15 bg-black/25 text-slate-100 transition hover:bg-white/10 md:hidden"
+            onClick={() =>
+              setMobileNavPathname(isMobileNavOpen ? null : pathname)
+            }
+            type="button"
+          >
+            {isMobileNavOpen ? (
+              <X aria-hidden="true" size={19} />
+            ) : (
+              <Menu aria-hidden="true" size={19} />
+            )}
+          </button>
         </div>
+
+        {isMobileNavOpen ? (
+          <nav
+            aria-label="移动导航"
+            className="absolute inset-x-4 top-[calc(100%+0.5rem)] grid gap-1 rounded-md border border-white/10 bg-[#171c23]/95 p-2 shadow-2xl backdrop-blur-xl md:hidden"
+            data-testid="mobile-navigation-menu"
+            id="mobile-navigation-menu"
+          >
+            {navItems.map((item) => {
+              const isActive =
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+              return (
+                <Link
+                  aria-current={isActive ? "page" : undefined}
+                  className={cn(
+                    "rounded px-3 py-2.5 text-sm transition",
+                    isActive
+                      ? "bg-primary/90 text-white"
+                      : "text-slate-300 hover:bg-white/10 hover:text-white"
+                  )}
+                  href={item.href as Route}
+                  key={item.href}
+                  onClick={() => setMobileNavPathname(null)}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        ) : null}
       </header>
 
       <div className="relative z-10 pt-16" data-testid="app-shell-content">

@@ -10,6 +10,7 @@ import {
   type EdgeChange,
   type NodeChange,
   type NodeTypes,
+  type ReactFlowInstance,
   type Viewport
 } from "@xyflow/react";
 import type { Route } from "next";
@@ -26,6 +27,7 @@ import {
   ImageIcon,
   LoaderCircle,
   PanelLeft,
+  PanelLeftClose,
   PanelRight,
   PanelRightClose,
   Play,
@@ -51,6 +53,11 @@ import {
   AigcFlowNodeCard,
   type AigcFlowNode
 } from "@/components/workspace/aigc/aigc-flow-node";
+import {
+  AigcCanvasNodePicker,
+  AigcNodeContextMenu,
+  type AigcContextMenuPosition
+} from "@/components/workspace/aigc/aigc-canvas-context-menu";
 import { AigcImageDimensionsField } from "@/components/workspace/aigc/aigc-image-dimensions-field";
 import { AigcMediaAssetDialog } from "@/components/workspace/aigc/aigc-media-asset-dialog";
 import { AigcPromptEditor } from "@/components/workspace/aigc/aigc-prompt-editor";
@@ -112,6 +119,7 @@ import {
   jsonPathInputFeedback,
   managedTextSource
 } from "@/lib/aigc/json-parser-ui";
+import { resolveAigcLlmImageInput } from "@/lib/aigc/llm-image-input";
 export {
   connectionValidationFeedback,
   getAigcConnectionValidationError,
@@ -120,6 +128,7 @@ export {
 import {
   getAigcAudioDownload,
   getAigcImageDownload,
+  getAigcSubtitleDownload,
   getAigcVideoDownload
 } from "@/lib/aigc/download";
 import { isSelectableMediaAsset } from "@/lib/aigc/media-assets";
@@ -185,7 +194,8 @@ import {
 } from "@/lib/aigc/queries";
 import {
   createAigcRunProjection,
-  getConnectedAigcNodeIds,
+  getAigcProjectionNodeIds,
+  getDownstreamAigcNodeIds,
   selectAigcProjectionRunIds
 } from "@/lib/aigc/run-scope";
 import {
@@ -235,10 +245,24 @@ import { cn } from "@/lib/utils";
 const AIGC_NODE_TYPES = Object.fromEntries(
   AIGC_EDITOR_NODE_REGISTRY.map((item) => [item.type, AigcFlowNodeCard])
 ) as NodeTypes;
+const subscribeToHydration = () => () => undefined;
 
 type EditorEntity = AigcPipeline | AigcPipelineTemplate;
 type InspectorTab = "config" | "result" | "run";
 type EditorPanel = "nodes" | "inspector" | null;
+const NODE_PALETTE_VISIBILITY_KEY = "aigc.node-palette.visible.v1";
+type CanvasContextMenu =
+  | {
+      kind: "picker";
+      flowPosition: { x: number; y: number };
+      position: AigcContextMenuPosition;
+    }
+  | {
+      kind: "node";
+      nodeId: string;
+      position: AigcContextMenuPosition;
+    }
+  | null;
 const FULL_RUN_PENDING = "__full__";
 interface AigcEditorDraft {
   definition: AigcPipelineDefinitionV2;
@@ -294,17 +318,24 @@ function AigcEditorContent({
   const editorStore = useAigcEditorStoreApi();
   const queryClient = useQueryClient();
   const definition = useAigcEditorStore((state) => state.definition);
+  const name = useAigcEditorStore((state) => state.name);
   const selectedNodeId = useAigcEditorStore((state) => state.selectedNodeId);
   const addNode = useAigcEditorStore((state) => state.addNode);
   const connect = useAigcEditorStore((state) => state.connect);
   const applyServerRevision = useAigcEditorStore(
     (state) => state.applyServerRevision
   );
+  const applyGeneratedNodeNames = useAigcEditorStore(
+    (state) => state.applyGeneratedNodeNames
+  );
   const markSaved = useAigcEditorStore((state) => state.markSaved);
   const moveNode = useAigcEditorStore((state) => state.moveNode);
   const removeEdge = useAigcEditorStore((state) => state.removeEdge);
   const removeNode = useAigcEditorStore((state) => state.removeNode);
   const selectNode = useAigcEditorStore((state) => state.selectNode);
+  const setRenamingNodeId = useAigcEditorStore(
+    (state) => state.setRenamingNodeId
+  );
   const setDescription = useAigcEditorStore((state) => state.setDescription);
   const setName = useAigcEditorStore((state) => state.setName);
   const setViewport = useAigcEditorStore((state) => state.setViewport);
@@ -365,12 +396,24 @@ function AigcEditorContent({
   const [templateName, setTemplateName] = useState(entity.name);
   const [templateError, setTemplateError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<CanvasContextMenu>(null);
+  const canvasContainerRef = useRef<HTMLElement>(null);
+  const reactFlowRef = useRef<
+    ReactFlowInstance<AigcFlowNode, Edge> | null
+  >(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [pendingRunStarts, setPendingRunStarts] = useState<Set<string>>(
     () => new Set()
   );
   const pendingRunStartsRef = useRef(pendingRunStarts);
   const [openPanel, setOpenPanel] = useState<EditorPanel>(null);
+  const [desktopNodePaletteVisible, setDesktopNodePaletteVisible] =
+    useState(readNodePaletteVisibility);
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false
+  );
   const isDesktop = useDesktopLayout();
   const runsQuery = useAigcRuns(entity.id, undefined, mode === "pipeline");
   const pipelineQuery = useQuery({
@@ -436,7 +479,8 @@ function AigcEditorContent({
   const createRun = useCreateAigcRun(entity.id);
   const retryNode = useRetryAigcNode(entity.id);
   const cancelRun = useCancelAigcRun(entity.id);
-  const refreshedParserRunsRef = useRef(new Set<string>());
+  const refreshedPipelineRunsRef = useRef(new Set<string>());
+  const authoritativeNodeNamesRef = useRef(new Map<string, string>());
 
   useEffect(() => {
     autosaveCoordinator.activate();
@@ -468,31 +512,72 @@ function AigcEditorContent({
         node.type === "json_parser" ? [node.id] : []
       )
     );
-    const completedParserRunIds = [...runDetails.values()].flatMap((detail) =>
-      detail.nodes.some(
+    const completedMutations = [...runDetails.values()]
+      .sort((left, right) => left.run.run_number - right.run.run_number)
+      .flatMap((detail) => {
+      const hasParserMutation = detail.nodes.some(
         (node) =>
           parserNodeIds.has(node.node_id) &&
           (node.status === "succeeded" || node.status === "reused")
-      )
-        ? [detail.run.id]
-        : []
-    );
-    const unseen = completedParserRunIds.filter(
-      (runId) => !refreshedParserRunsRef.current.has(runId)
+      );
+      const namedNodes = new Map(
+        detail.nodes.flatMap((node) => {
+          const generatedName =
+            node.status === "succeeded" &&
+            node.result.naming?.status === "succeeded"
+              ? node.result.naming.name
+              : null;
+          if (!generatedName) return [];
+          return generatedMediaNameTargetNodeIds(
+            definition,
+            node.node_id
+          ).map((nodeId) => [nodeId, generatedName] as const);
+        })
+      );
+        return hasParserMutation || namedNodes.size > 0
+          ? [{ runId: detail.run.id, namedNodes }]
+          : [];
+      });
+    const unseen = completedMutations.filter(
+      ({ runId }) => !refreshedPipelineRunsRef.current.has(runId)
     );
     if (unseen.length === 0) return;
-    unseen.forEach((runId) => refreshedParserRunsRef.current.add(runId));
+    const immediateNodeNames = new Map<string, string>();
+    unseen.forEach(({ runId, namedNodes }) => {
+      refreshedPipelineRunsRef.current.add(runId);
+      namedNodes.forEach((name, nodeId) => {
+        authoritativeNodeNamesRef.current.set(nodeId, name)
+        immediateNodeNames.set(nodeId, name);
+      });
+    });
+    applyGeneratedNodeNames(immediateNodeNames);
     void queryClient.invalidateQueries({
       queryKey: aigcQueryKeys.pipeline(entity.id)
     });
-  }, [definition.nodes, entity.id, mode, queryClient, runDetails]);
+  }, [
+    applyGeneratedNodeNames,
+    definition,
+    entity.id,
+    mode,
+    queryClient,
+    runDetails
+  ]);
 
   useEffect(() => {
     const server = pipelineQuery.data;
     if (mode !== "pipeline" || !server) return;
+    const authoritativeNodeNames = new Map(
+      authoritativeNodeNamesRef.current
+    );
     void autosaveCoordinator
       .rebase({
-        merge: mergeAigcServerRevision,
+        merge: (base, local, remote) =>
+          mergeAigcServerRevision(
+            base,
+            local,
+            remote,
+            authoritativeNodeNames
+          ),
         revision: server.revision,
         snapshot: editorDraftFromEntity(server)
       })
@@ -509,8 +594,12 @@ function AigcEditorContent({
             draft: structuredClone(
               result.snapshot
             ) as AigcEditorSnapshot,
-            dirty: result.dirty
+            dirty: result.dirty,
+            authoritativeNodeNames
           }
+        );
+        authoritativeNodeNames.forEach((_, nodeId) =>
+          authoritativeNodeNamesRef.current.delete(nodeId)
         );
       })
       .catch((error: unknown) => {
@@ -567,10 +656,14 @@ function AigcEditorContent({
       pendingStarts: ReadonlySet<string> = pendingRunStarts
     ): boolean => {
       if (pendingStarts.has(FULL_RUN_PENDING)) return true;
-      const nodeScope = getConnectedAigcNodeIds(definition, nodeId);
-      return [...pendingStarts].some((startNodeId) =>
-        nodeScope.has(startNodeId)
-      );
+      const nodeScope = getDownstreamAigcNodeIds(definition, nodeId);
+      return [...pendingStarts].some((startNodeId) => {
+        const pendingScope = getDownstreamAigcNodeIds(
+          definition,
+          startNodeId
+        );
+        return setsOverlap(nodeScope, pendingScope);
+      });
     },
     [definition, pendingRunStarts]
   );
@@ -615,8 +708,94 @@ function AigcEditorContent({
 
   const dismissInspectorFromPane = useCallback(() => {
     selectNode(null);
+    setContextMenu(null);
     setOpenPanel(null);
   }, [selectNode, setOpenPanel]);
+
+  const contextPosition = useCallback(
+    (
+      event: globalThis.MouseEvent | MouseEvent,
+      width: number,
+      height: number
+    ) => {
+      const bounds = canvasContainerRef.current?.getBoundingClientRect();
+      if (!bounds) return { left: 8, top: 8 };
+      return {
+        left: Math.max(
+          8,
+          Math.min(event.clientX - bounds.left, bounds.width - width - 8)
+        ),
+        top: Math.max(
+          8,
+          Math.min(event.clientY - bounds.top, bounds.height - height - 8)
+        )
+      };
+    },
+    []
+  );
+
+  const openNodePicker = useCallback(
+    (event: globalThis.MouseEvent | MouseEvent) => {
+      event.preventDefault();
+      const instance = reactFlowRef.current;
+      if (!instance) return;
+      const flowPosition = instance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY
+      });
+      if (
+        !Number.isFinite(flowPosition.x) ||
+        !Number.isFinite(flowPosition.y)
+      ) {
+        return;
+      }
+      setRenamingNodeId(null);
+      setContextMenu({
+        kind: "picker",
+        flowPosition,
+        position: contextPosition(event, 288, 420)
+      });
+    },
+    [contextPosition, setRenamingNodeId]
+  );
+
+  const openNodeMenu = useCallback(
+    (event: MouseEvent, node: AigcFlowNode) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectNode(node.id);
+      setRenamingNodeId(null);
+      setContextMenu({
+        kind: "node",
+        nodeId: node.id,
+        position: contextPosition(event, 160, 42)
+      });
+    },
+    [contextPosition, selectNode, setRenamingNodeId]
+  );
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = (event: globalThis.MouseEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          "[data-testid='aigc-canvas-node-picker'], [data-testid='aigc-node-context-menu']"
+        )
+      ) {
+        return;
+      }
+      setContextMenu(null);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [contextMenu]);
+
+  const setDesktopNodePalettePreference = useCallback((visible: boolean) => {
+    setDesktopNodePaletteVisible(visible);
+    writeNodePaletteVisibility(visible);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 1024px)");
@@ -909,20 +1088,20 @@ function AigcEditorContent({
 
   return (
     <main
-      className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-[#101318] text-[#e8eaed] [--accent-foreground:210_17%_92%] [--accent:218_11%_18%] [--background:220_20%_8%] [--border:218_12%_20%] [--card:220_13%_11%] [--foreground:210_17%_92%] [--input:218_12%_24%] [--muted-foreground:218_9%_60%] [--muted:220_11%_16%] [--secondary-foreground:210_17%_88%] [--secondary:218_11%_16%]"
+      className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#101318] text-[#e8eaed] [--accent-foreground:210_17%_92%] [--accent:218_11%_18%] [--background:220_20%_8%] [--border:218_12%_20%] [--card:220_13%_11%] [--foreground:210_17%_92%] [--input:218_12%_24%] [--muted-foreground:218_9%_60%] [--muted:220_11%_16%] [--secondary-foreground:210_17%_88%] [--secondary:218_11%_16%]"
       data-testid="aigc-editor-shell"
     >
       <header
-        className="flex h-12 shrink-0 flex-row items-center border-b border-[#30353d] bg-[#171a1f] px-3"
+        className="relative flex h-14 shrink-0 flex-row items-center gap-1 overflow-hidden border-b border-[#30353d] bg-[#171a1f] px-2 shadow-[0_3px_12px_rgba(0,0,0,0.22)] sm:px-3"
         data-testid="aigc-editor-header"
       >
         <div
-          className="flex shrink-0 items-center"
+          className="relative z-10 flex min-w-0 flex-1 items-center gap-2"
           data-testid="aigc-editor-title-row"
         >
           <Button
             asChild
-            className="text-zinc-400 hover:bg-[#252a31] hover:text-white"
+            className="h-10 w-10 shrink-0 text-zinc-400 hover:bg-[#252a31] hover:text-white"
             size="icon"
             title="返回 AIGC 工作台"
             variant="ghost"
@@ -931,97 +1110,180 @@ function AigcEditorContent({
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <span
-            aria-live="polite"
-            className="sr-only"
-            data-testid="aigc-autosave-status"
+          <div className="min-w-0">
+            <h1
+              className="truncate text-sm font-medium text-zinc-100"
+              data-testid="aigc-editor-title"
+              title={name}
+            >
+              {name}
+            </h1>
+          </div>
+          <Badge
+            className="hidden shrink-0 border-zinc-700 bg-zinc-800/80 px-2 py-0.5 text-[10px] font-medium text-zinc-400 md:inline-flex"
+            data-testid="aigc-editor-mode"
+            variant="outline"
           >
-            {autosaveStatusText(autosaveState)}
-          </span>
+            {mode === "pipeline" ? "画布" : "模板"}
+          </Badge>
         </div>
         <div
-          className="ml-auto flex shrink-0 items-center justify-end gap-1"
+          aria-label={`自动保存状态：${autosaveStatusText(autosaveState)}`}
+          aria-live="polite"
+          className="sr-only"
+          data-status={autosaveState.status}
+          data-testid="aigc-autosave-status"
+        >
+          {autosaveStatusText(autosaveState)}
+        </div>
+        <ToolbarStarMap />
+        <div
+          aria-label="画布命令"
+          className="relative z-10 flex shrink-0 items-center justify-end gap-1"
           data-testid="aigc-editor-actions"
         >
-          <Button
-            aria-label="详情"
-            aria-pressed={openPanel === "inspector" && inspectorTab === "config"}
-            className="text-zinc-400 hover:bg-[#252a31] hover:text-white"
-            data-testid="aigc-command-inspector"
-            onClick={toggleDetails}
-            size="icon"
-            title="详情"
-            type="button"
-            variant="ghost"
+          <div
+            aria-label="面板命令"
+            className="flex items-center"
+            data-testid="aigc-command-group-panel"
+            role="group"
           >
-            <PanelRight className="h-4 w-4" />
-          </Button>
+            <Button
+              aria-label="详情"
+              aria-pressed={openPanel === "inspector" && inspectorTab === "config"}
+              className="h-10 w-10 text-zinc-400 hover:bg-[#252a31] hover:text-white"
+              data-testid="aigc-command-inspector"
+              onClick={toggleDetails}
+              size="icon"
+              title="详情"
+              type="button"
+              variant="ghost"
+            >
+              {openPanel === "inspector" && inspectorTab === "config" ? (
+                <PanelRightClose className="h-4 w-4" />
+              ) : (
+                <PanelRight className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
           {mode === "pipeline" ? (
             <>
-              <Button
-                aria-label="另存为模板"
-                className="text-zinc-300 hover:bg-[#252a31] hover:text-white"
-                data-testid="aigc-command-save-template"
-                disabled={isSavingTemplate}
-                onClick={() => {
-                  setTemplateName(editorStore.getState().name);
-                  setTemplateError(null);
-                  setSaveTemplateOpen(true);
-                }}
-                size="sm"
-                title="另存为模板"
-                type="button"
-                variant="ghost"
+              <div
+                aria-label="文档命令"
+                className="flex items-center border-l border-zinc-700/70 pl-1"
+                data-testid="aigc-command-group-document"
+                role="group"
               >
-                {isSavingTemplate ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Files className="h-4 w-4" />
-                )}
-                <span className="hidden xl:inline">另存为模板</span>
-              </Button>
-              <Button
-                aria-label={fullExecutionInProgress ? "运行中" : "执行"}
-                data-testid="aigc-command-execute"
-                disabled={
-                  !allowExecution ||
-                  fullExecutionBlocked ||
-                  !definition.nodes.some((node) =>
-                    isAigcExecutionNodeType(node.type)
-                  )
-                }
-                onClick={() => void execute()}
-                size="sm"
-                title={fullExecutionInProgress ? "运行中" : "执行"}
-                className="bg-blue-600 text-white hover:bg-blue-500"
+                <Button
+                  aria-label="另存为模板"
+                  className="h-10 min-w-10 px-0 text-zinc-300 hover:bg-[#252a31] hover:text-white lg:px-3"
+                  data-testid="aigc-command-save-template"
+                  disabled={isSavingTemplate}
+                  onClick={() => {
+                    setTemplateName(editorStore.getState().name);
+                    setTemplateError(null);
+                    setSaveTemplateOpen(true);
+                  }}
+                  size="sm"
+                  title="另存为模板"
+                  type="button"
+                  variant="ghost"
+                >
+                  {isSavingTemplate ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Files className="h-4 w-4" />
+                  )}
+                  <span className="hidden lg:inline">另存为模板</span>
+                </Button>
+              </div>
+              <div
+                aria-label="执行命令"
+                className="flex items-center border-l border-zinc-700/70 pl-1"
+                data-testid="aigc-command-group-execution"
+                role="group"
               >
-                {hasPendingRun ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4" />
-                )}
-                <span className="hidden xl:inline">
-                  {fullExecutionInProgress ? "运行中" : "执行"}
-                </span>
-              </Button>
+                <Button
+                  aria-label={fullExecutionInProgress ? "运行中" : "执行"}
+                  className="h-10 min-w-10 bg-blue-600 px-0 text-white hover:bg-blue-500 lg:px-3"
+                  data-testid="aigc-command-execute"
+                  disabled={
+                    !allowExecution ||
+                    fullExecutionBlocked ||
+                    !definition.nodes.some((node) =>
+                      isAigcExecutionNodeType(node.type)
+                    )
+                  }
+                  onClick={() => void execute()}
+                  size="sm"
+                  title={fullExecutionInProgress ? "运行中" : "执行"}
+                >
+                  {hasPendingRun ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                  <span className="hidden lg:inline">
+                    {fullExecutionInProgress ? "运行中" : "执行"}
+                  </span>
+                </Button>
+              </div>
             </>
           ) : null}
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {isDesktop ? <NodePalette onAdd={addNode} /> : null}
-        <section className="relative min-w-0 flex-1">
-          {!isDesktop && openPanel !== "inspector" ? (
-            <div className="absolute left-3 top-3 z-30 flex gap-1 border border-[#30353d] bg-[#181b20] p-1 shadow-lg shadow-black/30">
+        {isDesktop && hydrated && desktopNodePaletteVisible ? (
+          <NodePalette
+            onAdd={addNode}
+            onClose={() => setDesktopNodePalettePreference(false)}
+          />
+        ) : null}
+        <section
+          className="relative min-w-0 flex-1"
+          ref={canvasContainerRef}
+        >
+          {isDesktop && (!hydrated || !desktopNodePaletteVisible) ? (
+            <div className="absolute left-3 top-3 z-30 border border-[#30353d] bg-[#181b20] p-1 shadow-lg shadow-black/30">
               <Button
-                aria-label="打开节点面板"
+                aria-controls="aigc-node-palette"
+                aria-expanded={false}
+                aria-label="打开节点库"
+                onClick={() => setDesktopNodePalettePreference(true)}
+                size="icon"
+                title="打开节点库"
+                type="button"
+                variant="ghost"
+              >
+                <PanelLeft className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : null}
+          {!isDesktop && openPanel !== "inspector" ? (
+            <div
+              className={cn(
+                "absolute z-30 flex gap-1 border border-[#30353d] bg-[#181b20] p-1 shadow-lg shadow-black/30",
+                openPanel === "nodes"
+                  ? "left-[252px] top-[60px]"
+                  : "left-3 top-3"
+              )}
+            >
+              <Button
+                aria-controls="aigc-node-palette"
+                aria-expanded={openPanel === "nodes"}
+                aria-label={
+                  openPanel === "nodes" ? "关闭节点面板" : "打开节点面板"
+                }
                 onClick={() =>
                   setOpenPanel((current) =>
                     current === "nodes" ? null : "nodes"
                   )
                 }
                 size="icon"
+                title={
+                  openPanel === "nodes" ? "关闭节点面板" : "打开节点面板"
+                }
                 type="button"
                 variant="ghost"
               >
@@ -1076,13 +1338,37 @@ function AigcEditorContent({
                     onEdgesChange,
                     onMoveEnd: (_, viewport: Viewport) => setViewport(viewport),
                     onNodeClick: (_, node) => selectNodeAndInspect(node.id),
+                    onNodeContextMenu: openNodeMenu,
+                    onInit: (instance) => {
+                      reactFlowRef.current = instance;
+                    },
                     onPaneClick: dismissInspectorFromPane,
+                    onPaneContextMenu: openNodePicker,
                     snapGrid: [16, 16],
                     snapToGrid: true
                   }}
               />
             </AigcRunProvider>
           </AigcRunActionsProvider>
+          {contextMenu?.kind === "picker" ? (
+            <AigcCanvasNodePicker
+              onAdd={(type) => {
+                addNode(type, contextMenu.flowPosition);
+                setContextMenu(null);
+              }}
+              onClose={() => setContextMenu(null)}
+              position={contextMenu.position}
+            />
+          ) : contextMenu?.kind === "node" ? (
+            <AigcNodeContextMenu
+              onClose={() => setContextMenu(null)}
+              onRename={() => {
+                setRenamingNodeId(contextMenu.nodeId);
+                setContextMenu(null);
+              }}
+              position={contextMenu.position}
+            />
+          ) : null}
           {feedback ? (
             <div
               className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 border border-border bg-card px-3 py-2 text-xs shadow-md"
@@ -1223,10 +1509,12 @@ function AigcEditorContent({
 
 function NodePalette({
   className,
-  onAdd
+  onAdd,
+  onClose
 }: {
   className?: string;
   onAdd: (type: AigcV2NodeType) => void;
+  onClose?: () => void;
 }) {
   return (
     <aside
@@ -1234,9 +1522,27 @@ function NodePalette({
         "w-[184px] shrink-0 overflow-y-auto border-r border-[#30353d] bg-[#181b20] px-2 py-3",
         className
       )}
+      id="aigc-node-palette"
       data-testid="aigc-node-palette"
     >
-      <h2 className="text-xs font-semibold text-foreground">节点</h2>
+      <div className="flex h-7 items-center justify-between gap-1">
+        <h2 className="text-xs font-semibold text-foreground">节点</h2>
+        {onClose ? (
+          <Button
+            aria-controls="aigc-node-palette"
+            aria-expanded={true}
+            aria-label="隐藏节点库"
+            className="h-7 w-7 shrink-0"
+            onClick={onClose}
+            size="icon"
+            title="隐藏节点库"
+            type="button"
+            variant="ghost"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </Button>
+        ) : null}
+      </div>
       <p className="mt-1 text-[11px] text-muted-foreground">点击添加到画布</p>
       {(["modality", "model", "control"] as const).map((category) => (
         <div className="mt-4" key={category}>
@@ -1328,6 +1634,7 @@ function Inspector({
 }) {
   const name = useAigcEditorStore((state) => state.name);
   const description = useAigcEditorStore((state) => state.description);
+  const definition = useAigcEditorStore((state) => state.definition);
   return (
     <aside
       className={cn(
@@ -1393,11 +1700,17 @@ function Inspector({
             </div>
             <div className="border-t border-border pt-4">
               {node ? (
-                <NodeConfig
-                  mode={mode}
-                  node={node}
-                  runDetail={nodeRunDetail}
-                />
+                <div className="space-y-4">
+                  <NodeCustomNameField
+                    key={`${node.id}:${node.custom_name ?? ""}`}
+                    node={node}
+                  />
+                  <NodeConfig
+                    mode={mode}
+                    node={node}
+                    runDetail={nodeRunDetail}
+                  />
+                </div>
               ) : (
                 <InspectorEmpty />
               )}
@@ -1420,7 +1733,11 @@ function Inspector({
             ) : null}
           </div>
         ) : tab === "result" ? (
-          <ResultPanel nodeId={node?.id ?? null} runDetail={nodeRunDetail} />
+          <ResultPanel
+            definition={definition}
+            nodeId={node?.id ?? null}
+            runDetail={nodeRunDetail}
+          />
         ) : (
           mode === "template" ? (
             <InspectorPlaceholder
@@ -1444,6 +1761,50 @@ function Inspector({
   );
 }
 
+function NodeCustomNameField({ node }: { node: AigcV2Node }) {
+  const setNodeCustomName = useAigcEditorStore(
+    (state) => state.setNodeCustomName
+  );
+  const [draft, setDraft] = useState(node.custom_name ?? "");
+  const cancelBlurRef = useRef(false);
+
+  return (
+    <div>
+      <Label htmlFor={`node-custom-name-${node.id}`}>节点名称</Label>
+      <Input
+        className="mt-1.5"
+        id={`node-custom-name-${node.id}`}
+        maxLength={120}
+        onBlur={() => {
+          if (cancelBlurRef.current) {
+            cancelBlurRef.current = false;
+            return;
+          }
+          setNodeCustomName(node.id, draft);
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            setNodeCustomName(node.id, draft);
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            cancelBlurRef.current = true;
+            setDraft(node.custom_name ?? "");
+            event.currentTarget.blur();
+          }
+        }}
+        placeholder="使用系统自动名称"
+        value={draft}
+      />
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        清空后恢复系统自动名称
+      </p>
+    </div>
+  );
+}
+
 function NodeConfig({
   mode,
   node,
@@ -1456,9 +1817,14 @@ function NodeConfig({
   const update = useAigcEditorStore((state) => state.updateNodeConfig);
   const definition = useAigcEditorStore((state) => state.definition);
   const registration = AIGC_NODE_REGISTRY_BY_TYPE.get(node.type);
-  const displayName =
+  const automaticDisplayName =
     deriveAigcNodeDisplayNames(definition.nodes).get(node.id)?.displayName ??
     aigcNodeBaseDisplayName(node);
+  const managedSource = managedTextSource(node, definition.nodes);
+  const displayName =
+    node.custom_name?.trim() ||
+    managedSource?.itemLabel ||
+    automaticDisplayName;
   const modalityNode = asModalityNode(node);
 
   if (modalityNode) {
@@ -1473,8 +1839,14 @@ function NodeConfig({
   }
 
   if (node.type === "llm") {
+    const imageInput = resolveAigcLlmImageInput(
+      definition,
+      node.id,
+      runDetail
+    );
     return (
       <ConfigGroup title={displayName}>
+        <LlmImageInputStatus input={imageInput} />
         <Label htmlFor="node-model">模型</Label>
         <select
           className="mt-1.5 h-10 w-full rounded-md border border-input bg-card px-2 text-xs"
@@ -1545,6 +1917,32 @@ function NodeConfig({
     );
   }
   return null;
+}
+
+function LlmImageInputStatus({
+  input
+}: {
+  input: ReturnType<typeof resolveAigcLlmImageInput>;
+}) {
+  return (
+    <div
+      aria-label={`LLM 图片输入：${input.sourceLabel ?? "未连接"}，${input.statusLabel}`}
+      className={cn(
+        "mb-3 rounded border px-2.5 py-2 text-xs",
+        input.state === "ready"
+          ? "border-success/30 bg-success/10 text-success"
+          : input.state === "unavailable"
+            ? "border-destructive/30 bg-destructive/10 text-destructive"
+            : "border-border bg-muted/50 text-muted-foreground"
+      )}
+      data-testid="aigc-llm-image-input-inspector"
+    >
+      <p className="font-medium text-foreground">图片输入</p>
+      <p className="mt-1 break-words">
+        {input.sourceLabel ?? "未连接"} · {input.statusLabel}
+      </p>
+    </div>
+  );
 }
 
 function JsonParserNodeConfig({
@@ -2308,11 +2706,12 @@ function ModalityNodeConfig({
         : projectAigcModalityRunResult(runDetail, node.id)
       : null;
   const managedSource = managedTextSource(node, definition.nodes);
-  const resolvedDisplayName = managedSource?.itemLabel ?? displayName;
+  const resolvedDisplayName =
+    node.custom_name?.trim() || managedSource?.itemLabel || displayName;
 
   return (
     <ConfigGroup title={resolvedDisplayName}>
-      <Label htmlFor={`node-title-${node.id}`}>显示标题</Label>
+      <Label htmlFor={`node-title-${node.id}`}>内容标题</Label>
       <Input
         className="mt-1.5"
         disabled={upstream || Boolean(managedSource)}
@@ -2402,6 +2801,7 @@ function ModalityProjectionPreview({
   projection: ReturnType<typeof projectAigcModalityRunResult>;
   runDetail: AigcPipelineRunDetail | undefined;
 }) {
+  const definition = useAigcEditorStore((state) => state.definition);
   if (!projection || ["idle", "ready", "queued", "running"].includes(projection.status)) {
     return <ModalityStatus copy="等待上游结果" />;
   }
@@ -2437,6 +2837,7 @@ function ModalityProjectionPreview({
   return (
     <ModalityAsset
       asset={projection.asset}
+      definition={definition}
       nodeId={node.id}
       runDetail={runDetail}
       title={displayName}
@@ -2770,15 +3171,25 @@ function SelectField({
 }
 
 function ResultPanel({
+  definition,
   nodeId,
   runDetail
 }: {
+  definition: AigcPipelineDefinitionV2;
   nodeId: string | null;
   runDetail: AigcPipelineRunDetail | undefined;
 }) {
+  const snapshotDefinition = runDetail?.run.definition_snapshot;
+  const snapshotNodes =
+    snapshotDefinition?.schemaVersion === 2
+      ? snapshotDefinition.nodes
+      : [];
+  const currentDisplayNames = deriveAigcNodeDisplayNames(definition.nodes);
+  const snapshotDisplayNames = deriveAigcNodeDisplayNames(snapshotNodes);
   const resultNodes = runDetail?.nodes.filter(
     (item) =>
-      item.result.kind !== "none" &&
+      (item.result.kind !== "none" ||
+        item.result.metadata?.empty === true) &&
       (!nodeId || item.node_id === nodeId)
   ) ?? [];
   if (!runDetail || resultNodes.length === 0) {
@@ -2792,6 +3203,18 @@ function ResultPanel({
   return (
     <div className="space-y-3">
       {resultNodes.map((item) => {
+        const sourceNode = snapshotNodes.find(
+          (candidate) => candidate.id === item.node_id
+        );
+        const sourceManagedLabel = sourceNode
+          ? managedTextSource(sourceNode, snapshotNodes)?.itemLabel
+          : null;
+        const sourceName =
+          currentDisplayNames.get(item.node_id)?.displayName ||
+          sourceNode?.custom_name?.trim() ||
+          sourceManagedLabel ||
+          snapshotDisplayNames.get(item.node_id)?.displayName ||
+          item.node_id;
         const modalityProjection = projectAigcModalityRunResult(
           runDetail,
           item.node_id
@@ -2808,7 +3231,7 @@ function ResultPanel({
           <div className="border border-border bg-background p-3" key={item.node_id}>
           <div className="flex items-center justify-between gap-2">
             <span className="truncate font-mono text-[10px] text-muted-foreground">
-              {modalityProjection?.title ?? item.node_id}
+              {sourceName}
             </span>
             <Badge variant={item.status === "reused" ? "info" : "success"}>
               {item.status === "reused" ? "复用" : "完成"}
@@ -2841,20 +3264,30 @@ function ResultPanel({
               {item.result.assets.map((asset) => (
                 <ResultAsset
                   asset={asset}
+                  definition={definition}
                   key={asset.asset_id}
                   nodeId={item.node_id}
                   runDetail={runDetail}
+                  title={sourceName}
                 />
               ))}
             </div>
+          ) : null}
+          {item.result.kind === "none" &&
+          item.result.metadata?.empty === true ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              未识别到字幕
+            </p>
           ) : null}
           {compositeProjection ? (
             <div className="mt-3 space-y-2">
               {compositeProjection.imageAsset ? (
                 <ResultAsset
                   asset={compositeProjection.imageAsset}
+                  definition={definition}
                   nodeId={item.node_id}
                   runDetail={runDetail}
+                  title={sourceName}
                 />
               ) : (
                 <p className="text-xs text-muted-foreground">
@@ -2888,18 +3321,39 @@ function ResultPanel({
 
 function ResultAsset({
   asset,
+  definition,
   nodeId,
-  runDetail
+  runDetail,
+  title
 }: {
   asset: AigcPipelineRunDetail["nodes"][number]["result"]["assets"][number];
+  definition: AigcPipelineDefinitionV2;
   nodeId: string;
   runDetail: AigcPipelineRunDetail;
+  title: string;
 }) {
-  const definition = runDetail.run.definition_snapshot;
+  const snapshotDefinition = runDetail.run.definition_snapshot;
   const resultUrl = asset.available
     ? getSafeAssetContentUrl(asset.download_url)
     : null;
   const modalityProjection = projectAigcModalityRunResult(runDetail, nodeId);
+  const sourceNode = snapshotDefinition.nodes.find(
+    (candidate) => candidate.id === nodeId
+  );
+  const resultTitle = title ||
+    AIGC_NODE_REGISTRY_BY_TYPE.get(sourceNode?.type ?? "")?.label ||
+    "字幕结果";
+  if (
+    asset.mime_type === "application/x-subrip" ||
+    asset.mime_type === "text/srt"
+  ) {
+    return (
+      <SubtitleResultAsset
+        asset={asset}
+        title={resultTitle}
+      />
+    );
+  }
   if (
     modalityProjection &&
     modalityProjection.modality !== "text" &&
@@ -2908,6 +3362,7 @@ function ResultAsset({
     return (
       <ModalityAsset
         asset={asset}
+        definition={definition}
         nodeId={nodeId}
         runDetail={runDetail}
         title={modalityProjection.title}
@@ -2915,9 +3370,21 @@ function ResultAsset({
       />
     );
   }
-  if (isAigcVideoResult(definition, nodeId, asset)) {
-    const projection = projectAigcVideoResult(definition, nodeId, [asset]);
-    const download = getAigcVideoDownload(asset, projection.title);
+  if (isAigcVideoResult(snapshotDefinition, nodeId, asset)) {
+    const projection = projectAigcVideoResult(
+      snapshotDefinition,
+      nodeId,
+      [asset]
+    );
+    const generatedMediaTitle =
+      sourceNode?.type === "video_generation"
+        ? resultTitle
+        : projection.title;
+    const download = getAigcVideoDownload(
+      asset,
+      generatedMediaTitle,
+      definition
+    );
     return (
       <div className="space-y-2">
         <AigcVideoPlayer
@@ -2951,13 +3418,7 @@ function ResultAsset({
     );
   }
 
-  const sourceNode = definition.nodes.find(
-    (candidate) => candidate.id === nodeId
-  );
-  const resultTitle =
-    AIGC_NODE_REGISTRY_BY_TYPE.get(sourceNode?.type ?? "")?.label ??
-    "图片结果";
-  const download = getAigcImageDownload(asset, resultTitle);
+  const download = getAigcImageDownload(asset, resultTitle, definition);
   return resultUrl ? (
     <div className="space-y-2">
       <a
@@ -2990,14 +3451,114 @@ function ResultAsset({
   );
 }
 
+function SubtitleResultAsset({
+  asset,
+  title
+}: {
+  asset: AigcResultAsset;
+  title: string;
+}) {
+  const resultUrl = asset.available
+    ? getSafeAssetContentUrl(asset.download_url)
+    : null;
+  const subtitleQuery = useQuery({
+    enabled: Boolean(resultUrl),
+    queryKey: ["aigc", "subtitle-preview", asset.asset_id],
+    queryFn: async () => {
+      const response = await fetch(resultUrl as string);
+      if (!response.ok) throw new Error("字幕预览加载失败");
+      return response.text();
+    }
+  });
+  const preview = parseSrtPreview(subtitleQuery.data ?? "");
+  const download = getAigcSubtitleDownload(asset, title);
+  if (!resultUrl) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        字幕结果已不可用，预览和下载已禁用
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <div className="max-h-52 space-y-2 overflow-y-auto border border-border bg-card p-2.5">
+        {subtitleQuery.isPending ? (
+          <p className="text-xs text-muted-foreground">正在加载字幕预览</p>
+        ) : subtitleQuery.isError ? (
+          <p className="text-xs text-destructive">字幕预览加载失败</p>
+        ) : preview.length === 0 ? (
+          <p className="text-xs text-muted-foreground">未识别到字幕</p>
+        ) : (
+          preview.map((segment) => (
+            <div className="grid grid-cols-[112px_1fr] gap-2 text-xs" key={segment.key}>
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {segment.time}
+              </span>
+              <span className="whitespace-pre-wrap break-words text-foreground">
+                {segment.text}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-[10px] text-muted-foreground">
+        <span>片段 {resultAssetMetadataNumber(asset, "segment_count") ?? preview.length}</span>
+        <span>
+          时长{" "}
+          {formatVideoDuration(
+            resultAssetMetadataNumber(asset, "duration_seconds") ?? 0
+          )}
+        </span>
+      </div>
+      {download ? (
+        <Button asChild className="w-full" size="sm" variant="outline">
+          <a download={download.filename} href={download.url}>
+            <Download className="h-4 w-4" />
+            下载字幕
+          </a>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function parseSrtPreview(
+  content: string
+): Array<{ key: string; text: string; time: string }> {
+  return content
+    .replace(/\r\n?/g, "\n")
+    .trim()
+    .split(/\n{2,}/)
+    .map((block, index) => {
+      const lines = block.split("\n").map((line) => line.trim());
+      const timeIndex = lines.findIndex((line) => line.includes("-->"));
+      if (timeIndex < 0) return null;
+      const text = lines.slice(timeIndex + 1).filter(Boolean).join(" ");
+      if (!text) return null;
+      return {
+        key: `${index}:${lines[timeIndex]}`,
+        text,
+        time: lines[timeIndex]
+      };
+    })
+    .filter(
+      (
+        value
+      ): value is { key: string; text: string; time: string } =>
+        value !== null
+    );
+}
+
 function ModalityAsset({
   asset,
+  definition,
   nodeId,
   runDetail,
   title,
   type
 }: {
   asset: AigcResultAsset;
+  definition: AigcPipelineDefinitionV2;
   nodeId: string;
   runDetail: AigcPipelineRunDetail | undefined;
   title: string;
@@ -3014,7 +3575,7 @@ function ModalityAsset({
           [asset]
         )
       : null;
-    const download = getAigcVideoDownload(asset, title);
+    const download = getAigcVideoDownload(asset, title, definition);
     return (
       <div className="space-y-2">
         <AigcVideoPlayer
@@ -3071,7 +3632,7 @@ function ModalityAsset({
     );
   }
 
-  const download = getAigcImageDownload(asset, title);
+  const download = getAigcImageDownload(asset, title, definition);
   return resultUrl ? (
     <div className="space-y-2">
       <a
@@ -3512,6 +4073,26 @@ function useDesktopLayout(): boolean {
   );
 }
 
+function readNodePaletteVisibility(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(NODE_PALETTE_VISIBILITY_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeNodePaletteVisibility(visible: boolean): void {
+  try {
+    window.localStorage.setItem(
+      NODE_PALETTE_VISIBILITY_KEY,
+      String(visible)
+    );
+  } catch {
+    // Keep the in-memory preference usable when browser storage is unavailable.
+  }
+}
+
 function InspectorEmpty() {
   return (
     <div className="py-8 text-center text-xs text-muted-foreground">
@@ -3527,6 +4108,21 @@ function InspectorPlaceholder({ copy, title }: { copy: string; title: string }) 
       <p className="mt-2 text-xs leading-5 text-muted-foreground">{copy}</p>
     </div>
   );
+}
+
+function generatedMediaNameTargetNodeIds(
+  definition: AigcPipelineDefinitionV2,
+  sourceNodeId: string
+): string[] {
+  const nodesById = new Map(definition.nodes.map((node) => [node.id, node]));
+  const targets = definition.edges.flatMap((edge) => {
+    if (edge.sourceNodeId !== sourceNodeId) return [];
+    const target = nodesById.get(edge.targetNodeId);
+    return target?.type === "image" || target?.type === "video"
+      ? [target.id]
+      : [];
+  });
+  return [...new Set(targets.length > 0 ? targets : [sourceNodeId])];
 }
 
 function asModalityNode(node: AigcV2Node): ModalityNode | null {
@@ -3620,7 +4216,7 @@ function definitionValidationIssue(
 function definitionForNodeScope<
   TDefinition extends AigcPipelineDefinition | AigcPipelineDefinitionV2
 >(definition: TDefinition, startNodeId: string): TDefinition {
-  const nodeIds = getConnectedAigcNodeIds(definition, startNodeId);
+  const nodeIds = getAigcProjectionNodeIds(definition, startNodeId);
   return {
     ...definition,
     nodes: definition.nodes.filter((node) => nodeIds.has(node.id)),
@@ -3629,6 +4225,16 @@ function definitionForNodeScope<
         nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId)
     )
   } as TDefinition;
+}
+
+function setsOverlap(
+  left: ReadonlySet<string>,
+  right: ReadonlySet<string>
+): boolean {
+  for (const value of left) {
+    if (right.has(value)) return true;
+  }
+  return false;
 }
 
 function editorDraftFromEntity(entity: EditorEntity): AigcEditorDraft {
@@ -3698,6 +4304,66 @@ function autosaveStatusText(state: AutosaveState): string {
     return `草稿无效：${state.message ?? "请检查画布内容。"}`;
   }
   return `已保存 Revision ${state.revision}`;
+}
+
+function ToolbarStarMap() {
+  const modalities = ["text", "image", "video", "audio"] as const;
+  const pointPositions = [
+    { left: "1%", top: 12 },
+    { left: "9%", top: 27 },
+    { left: "17%", top: 11 },
+    { left: "25%", top: 28 },
+    { left: "33%", top: 14 },
+    { left: "41%", top: 25 },
+    { left: "49%", top: 10 },
+    { left: "57%", top: 29 },
+    { left: "65%", top: 13 },
+    { left: "73%", top: 26 },
+    { left: "81%", top: 11 },
+    { left: "89%", top: 28 }
+  ] as const;
+  const lineRotations = [
+    7.5, -8, 8.5, -7, 5.5, -7.5, 9.5, -8, 6.5, -7.5, 8.5
+  ] as const;
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-2 top-0 z-0 hidden h-full xl:block"
+      data-testid="aigc-toolbar-star-map"
+    >
+      {pointPositions.slice(0, -1).map((point, index) => (
+        <span
+          className="absolute h-px w-[8.1%] origin-left bg-[#718096]/25"
+          data-testid="aigc-toolbar-star-line"
+          key={`line-${index}`}
+          style={{
+            left: point.left,
+            top: point.top + 2,
+            transform: `rotate(${lineRotations[index]}deg)`
+          }}
+        />
+      ))}
+      {pointPositions.map((point, index) => {
+        const modality = modalities[index % modalities.length];
+        const color = `var(--aigc-modality-${modality})`;
+        return (
+          <span
+            className="absolute h-[5px] w-[5px] rounded-full shadow-[0_0_9px_currentColor]"
+            data-modality={modality}
+            data-testid="aigc-toolbar-star-point"
+            key={`${modality}-${index}`}
+            style={{
+              backgroundColor: color,
+              color,
+              left: point.left,
+              top: point.top
+            }}
+          />
+        );
+      })}
+    </div>
+  );
 }
 
 function useLatestCallback<TArgs extends unknown[], TResult>(

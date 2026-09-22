@@ -23,7 +23,6 @@ __all__ = [
     "MultiTrackTaskStatus",
 ]
 
-
 class MultiTrackTaskStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"

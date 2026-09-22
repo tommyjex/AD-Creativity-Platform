@@ -1,5 +1,4 @@
 import pytest
-
 from backend.app.core.config import ConfigurationError, Settings
 
 
@@ -21,6 +20,59 @@ def test_multitrack_limits_have_isolated_defaults() -> None:
     assert settings.mediakit_multitrack_timeout_seconds == 1800
     assert settings.mediakit_multitrack_transfer_timeout_seconds == 600
     assert settings.mediakit_multitrack_transfer_max_bytes == 2 * 1024 * 1024 * 1024
+
+
+def test_tls_logging_defaults_are_disabled_and_safe() -> None:
+    settings = Settings()
+
+    assert settings.tls_enabled is False
+    assert settings.tls_endpoint == "https://tls-cn-beijing.volces.com"
+    assert settings.tls_project_id == "da00add8-5793-44ad-af84-a9de004161d5"
+    assert settings.tls_topic_id == "4a3842fc-1201-46b7-994c-1368564e5e77"
+    assert settings.tls_access_key_id is None
+    assert settings.tls_secret_access_key is None
+    assert settings.tls_batch_size == 100
+    assert settings.tls_queue_capacity == 1000
+    assert settings.tls_flush_interval_seconds == 5
+    assert settings.tls_max_retries == 3
+    assert settings.tls_retry_initial_seconds == 1
+    assert settings.tls_timeout_seconds == 5
+
+
+def test_tls_logging_settings_read_secret_environment_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TLS_ENABLED", "true")
+    monkeypatch.setenv("TLS_ENDPOINT", "https://tls.example.test")
+    monkeypatch.setenv("TLS_PROJECT_ID", "project-1")
+    monkeypatch.setenv("TLS_TOPIC_ID", "topic-1")
+    monkeypatch.setenv("TLS_ACCESS_KEY_ID", "tls-access-secret")
+    monkeypatch.setenv("TLS_SECRET_ACCESS_KEY", "tls-secret-secret")
+    monkeypatch.setenv("TLS_BATCH_SIZE", "50")
+    monkeypatch.setenv("TLS_QUEUE_CAPACITY", "500")
+    monkeypatch.setenv("TLS_FLUSH_INTERVAL_SECONDS", "10")
+    monkeypatch.setenv("TLS_MAX_RETRIES", "0")
+    monkeypatch.setenv("TLS_RETRY_INITIAL_SECONDS", "2")
+    monkeypatch.setenv("TLS_TIMEOUT_SECONDS", "15")
+
+    settings = Settings.from_env()
+
+    assert settings.tls_enabled is True
+    assert settings.tls_endpoint == "https://tls.example.test"
+    assert settings.tls_project_id == "project-1"
+    assert settings.tls_topic_id == "topic-1"
+    assert settings.tls_access_key_id is not None
+    assert settings.tls_access_key_id.get_secret_value() == "tls-access-secret"
+    assert settings.tls_secret_access_key is not None
+    assert settings.tls_secret_access_key.get_secret_value() == "tls-secret-secret"
+    assert settings.tls_batch_size == 50
+    assert settings.tls_queue_capacity == 500
+    assert settings.tls_flush_interval_seconds == 10
+    assert settings.tls_max_retries == 0
+    assert settings.tls_retry_initial_seconds == 2
+    assert settings.tls_timeout_seconds == 15
+    assert "tls-access-secret" not in str(settings)
+    assert "tls-secret-secret" not in str(settings)
 
 
 def test_settings_reads_database_and_tos_environment(monkeypatch: pytest.MonkeyPatch) -> None:

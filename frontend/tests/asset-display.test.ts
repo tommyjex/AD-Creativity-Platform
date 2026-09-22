@@ -46,7 +46,7 @@ describe("asset display helpers", () => {
     );
   });
 
-  it("prefers the unified AIGC name for display and download", () => {
+  it("shows the historical AIGC name while letting the backend resolve downloads", () => {
     const namedAsset: Asset = {
       ...asset,
       id: "aigc-output",
@@ -64,7 +64,7 @@ describe("asset display helpers", () => {
       "商品主图-图生图1-图片1.png"
     );
     expect(getAssetDownloadUrl(namedAsset)).toBe(
-      "http://localhost:8000/api/assets/aigc-output/content?download=1&filename=%E5%95%86%E5%93%81%E4%B8%BB%E5%9B%BE-%E5%9B%BE%E7%94%9F%E5%9B%BE1-%E5%9B%BE%E7%89%871.png"
+      "http://localhost:8000/api/assets/aigc-output/content?download=1"
     );
   });
 

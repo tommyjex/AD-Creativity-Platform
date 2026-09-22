@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import mimetypes
 import os
 import re
@@ -16,10 +17,15 @@ import httpx
 from PIL import Image, UnidentifiedImageError
 
 from backend.app.core.config import ConfigurationError, Settings, get_settings
-from backend.app.repositories import Repository
+from backend.app.core.logging import log_event
+from backend.app.repositories import NotFoundError, Repository
 from backend.app.schemas import (
     AigcAssetDirection,
+    AigcImagePromptOptimizationMode,
+    AigcNodeType,
     AigcPipelineTaskAssetReference,
+    AigcPromptOptimizeRequest,
+    AigcRunNodeStatus,
     Asset,
     AssetCategory,
     AssetCreate,
@@ -34,6 +40,8 @@ from backend.app.services.aigc_asset_naming import (
     AigcAssetNamingContext,
     aigc_output_name_metadata,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ObjectStorageClient(Protocol):
@@ -66,6 +74,24 @@ class GeneratedImageValidationError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         self.code = code
         super().__init__(message)
+
+
+class PromptOptimizationContextError(ValueError):
+    """The prompt optimization source context failed provenance validation."""
+
+
+class PromptOptimizationRevisionConflictError(PromptOptimizationContextError):
+    """The submitted editor snapshot no longer matches the persisted pipeline."""
+
+
+@dataclass(frozen=True)
+class PromptOptimizationImageContext:
+    source_image_url: str | None
+    reference_image_count: int
+
+    @property
+    def allowed_mode(self) -> AigcImagePromptOptimizationMode:
+        return "local_edit" if self.source_image_url else "full_design"
 
 
 @dataclass(frozen=True)
@@ -111,6 +137,22 @@ class AigcVideoFaceBlurAssetInput:
     provider_task_id: str
     mask_mode: str
     mask_strength: str
+    executor_version: str
+    provider_request_id: str | None = None
+    duration_seconds: float | None = None
+    naming_context: AigcAssetNamingContext | None = None
+
+
+@dataclass(frozen=True)
+class AigcVideoSubtitleAssetInput:
+    srt_text: str
+    pipeline_id: str
+    run_id: str
+    node_id: str
+    task_id: str
+    input_asset_id: str
+    provider_task_id: str
+    segment_count: int
     executor_version: str
     provider_request_id: str | None = None
     duration_seconds: float | None = None
@@ -560,7 +602,7 @@ class AssetStorageService:
             filename=data.filename,
             mime_type=data.mime_type,
         )
-        return repository.create_asset(
+        persisted = repository.create_asset(
             asset.model_copy(
                 update={
                     "object_key": object_key,
@@ -569,6 +611,14 @@ class AssetStorageService:
                 deep=True,
             )
         )
+        log_event(
+            logger,
+            "asset.persistence",
+            outcome="succeeded",
+            operation="register",
+            asset_type=persisted.type.value,
+        )
+        return persisted
 
     def upload_asset(
         self,
@@ -612,7 +662,7 @@ class AssetStorageService:
             content_type=data.mime_type,
         )
         try:
-            return repository.create_asset(
+            persisted = repository.create_asset(
                 asset.model_copy(
                     update={
                         "object_key": object_key,
@@ -621,6 +671,14 @@ class AssetStorageService:
                     deep=True,
                 )
             )
+            log_event(
+                logger,
+                "asset.persistence",
+                outcome="succeeded",
+                operation="upload",
+                asset_type=persisted.type.value,
+            )
+            return persisted
         except Exception:
             try:
                 self.client.delete_object(key=object_key)
@@ -664,6 +722,196 @@ class AssetStorageService:
             return asset.url
         return self.client.signed_url(key=asset.object_key)
 
+    async def resolve_prompt_optimization_image(
+        self,
+        repository: Repository,
+        request: AigcPromptOptimizeRequest,
+    ) -> PromptOptimizationImageContext:
+        context = request.pipeline_context
+        if context is None:
+            return PromptOptimizationImageContext(
+                source_image_url=None,
+                reference_image_count=_prompt_reference_image_count(request),
+            )
+        try:
+            pipeline = repository.get_aigc_pipeline(context.pipeline_id)
+        except NotFoundError as exc:
+            raise PromptOptimizationContextError(
+                "pipeline context is invalid"
+            ) from exc
+
+        snapshot = context.definition_snapshot
+        if pipeline.revision != context.base_revision and (
+            pipeline.definition.model_dump(mode="json", by_alias=True)
+            != snapshot.model_dump(mode="json", by_alias=True)
+        ):
+            raise PromptOptimizationRevisionConflictError(
+                "pipeline definition revision conflict"
+            )
+
+        target = next(
+            (node for node in snapshot.nodes if node.id == request.target_node_id),
+            None,
+        )
+        if target is None or target.type != AigcNodeType.IMAGE_TO_IMAGE:
+            raise PromptOptimizationContextError(
+                "prompt target does not match the pipeline snapshot"
+            )
+        target_config = request.target_config.model_dump(mode="json")
+        node_config = target.config.model_dump(mode="json")
+        for field in ("model", "operation", "aspect_ratio", "size"):
+            if target_config.get(field) != node_config.get(field):
+                raise PromptOptimizationContextError(
+                    "prompt target config does not match the pipeline snapshot"
+                )
+
+        operation = target_config["operation"]
+        target_handle = "edit_image" if operation == "image_edit" else "image"
+        ordinary_reference_edges = [
+            edge
+            for edge in snapshot.edges
+            if edge.target_node_id == request.target_node_id
+            and edge.target_handle == "image"
+        ]
+        direct_edges = [
+            edge
+            for edge in snapshot.edges
+            if edge.target_node_id == request.target_node_id
+            and edge.target_handle == target_handle
+        ]
+        image_input_edges = [
+            edge
+            for edge in snapshot.edges
+            if edge.target_node_id == request.target_node_id
+            and edge.target_handle in {"edit_image", "edit_layer", "image"}
+        ]
+        reference_count = len(ordinary_reference_edges)
+        if target_config["reference_image_count"] != reference_count:
+            raise PromptOptimizationContextError(
+                "reference image count does not match the pipeline snapshot"
+            )
+
+        descriptor = context.source_image
+        eligible_single_source = (
+            (
+                operation == "image_to_image"
+                and len(direct_edges) == 1
+                and len(image_input_edges) == 1
+            )
+            or (
+                operation == "image_edit"
+                and len(direct_edges) == 1
+                and len(image_input_edges) == 1
+            )
+        )
+        if descriptor is None:
+            return PromptOptimizationImageContext(
+                source_image_url=None,
+                reference_image_count=reference_count,
+            )
+        if not eligible_single_source or descriptor.target_handle != target_handle:
+            raise PromptOptimizationContextError(
+                "source image is not eligible for local editing"
+            )
+        matching_edges = [
+            edge
+            for edge in direct_edges
+            if edge.source_node_id == descriptor.source_node_id
+            and edge.source_handle == descriptor.source_handle
+        ]
+        if len(matching_edges) != 1:
+            raise PromptOptimizationContextError(
+                "source image does not match a unique direct edge"
+            )
+        source_node = next(
+            (
+                node
+                for node in snapshot.nodes
+                if node.id == descriptor.source_node_id
+            ),
+            None,
+        )
+        if source_node is None:
+            raise PromptOptimizationContextError(
+                "source image node is missing from the pipeline snapshot"
+            )
+
+        if descriptor.run_id is None:
+            if (
+                source_node.type != AigcNodeType.IMAGE
+                or getattr(source_node.config, "asset_id", None)
+                != descriptor.asset_id
+            ):
+                raise PromptOptimizationContextError(
+                    "local source image provenance is invalid"
+                )
+        else:
+            try:
+                run_detail = repository.get_aigc_run(descriptor.run_id)
+            except NotFoundError as exc:
+                raise PromptOptimizationContextError(
+                    "source image run provenance is invalid"
+                ) from exc
+            if run_detail.run.pipeline_id != context.pipeline_id or not any(
+                node.id == descriptor.source_node_id
+                for node in run_detail.run.definition_snapshot.nodes
+            ):
+                raise PromptOptimizationContextError(
+                    "source image run provenance is invalid"
+                )
+            run_node = next(
+                (
+                    node
+                    for node in run_detail.nodes
+                    if node.node_id == descriptor.source_node_id
+                ),
+                None,
+            )
+            if (
+                run_node is None
+                or run_node.status
+                not in {
+                    AigcRunNodeStatus.SUCCEEDED,
+                    AigcRunNodeStatus.REUSED,
+                }
+                or not any(
+                    result.asset_id == descriptor.asset_id
+                    and result.available
+                    for result in run_node.result.assets
+                )
+            ):
+                raise PromptOptimizationContextError(
+                    "source image RunNode provenance is invalid"
+                )
+
+        try:
+            asset = repository.get_asset(descriptor.asset_id)
+        except NotFoundError:
+            return PromptOptimizationImageContext(
+                source_image_url=None,
+                reference_image_count=reference_count,
+            )
+        if (
+            asset.status != Status.SUCCEEDED
+            or asset.asset_role != AssetRole.PUBLIC
+            or asset.type
+            not in {AssetType.UPLOADED_IMAGE, AssetType.GENERATED_IMAGE}
+            or not (asset.mime_type or "").casefold().startswith("image/")
+        ):
+            return PromptOptimizationImageContext(
+                source_image_url=None,
+                reference_image_count=reference_count,
+            )
+        try:
+            await self.read_asset_content(asset)
+            source_image_url = self.signed_access_url(asset)
+        except Exception:
+            source_image_url = None
+        return PromptOptimizationImageContext(
+            source_image_url=source_image_url,
+            reference_image_count=reference_count,
+        )
+
     def signed_url_for_key(self, object_key: str) -> str | None:
         if self.client is None:
             return self.url_for_key(object_key)
@@ -689,6 +937,12 @@ class AssetStorageService:
             raise ConfigurationError("TOS client is not configured for asset upload.")
         if not items:
             return []
+        log_event(
+            logger,
+            "asset.persistence",
+            outcome="started",
+            operation="provider_transfer",
+        )
 
         downloaded: list[
             tuple[StoredAssetInput, DownloadedAsset, tuple[int, int] | None]
@@ -781,7 +1035,16 @@ class AssetStorageService:
                 )
                 uploaded_keys.append(asset.object_key)
             try:
-                return repository.create_assets([asset for asset, _ in prepared])
+                persisted = repository.create_assets(
+                    [asset for asset, _ in prepared]
+                )
+                log_event(
+                    logger,
+                    "asset.persistence",
+                    outcome="succeeded",
+                    operation="provider_transfer",
+                )
+                return persisted
             except Exception:
                 for asset, _ in prepared:
                     try:
@@ -789,8 +1052,16 @@ class AssetStorageService:
                     except Exception:
                         pass
                 raise
-        except Exception:
+        except Exception as exc:
             await self._delete_uploaded_objects(uploaded_keys)
+            log_event(
+                logger,
+                "asset.persistence",
+                outcome="failed",
+                level=logging.WARNING,
+                operation="provider_transfer",
+                exception=exc,
+            )
             raise
 
     async def store_aigc_video_enhancement(
@@ -832,6 +1103,54 @@ class AssetStorageService:
             max_bytes=self.face_blur_transfer_max_bytes,
             downloader=self.face_blur_downloader,
         )
+
+    def store_aigc_video_subtitles(
+        self,
+        repository: Repository,
+        data: AigcVideoSubtitleAssetInput,
+    ) -> Asset:
+        content = data.srt_text.encode("utf-8")
+        if not content:
+            raise ValueError("extracted subtitle content must not be empty")
+        metadata = _video_subtitle_metadata(data)
+        if data.naming_context is not None:
+            metadata.update(
+                aigc_output_name_metadata(
+                    data.naming_context,
+                    mime_type="application/x-subrip",
+                )
+            )
+        asset = self.upload_asset(
+            repository,
+            StoredAssetInput(
+                tool_asset_role=ToolAssetRole.OUTPUT,
+                type=AssetType.SUBTITLE,
+                asset_role=AssetRole.PUBLIC,
+                status=Status.SUCCEEDED,
+                mime_type="application/x-subrip",
+                size_bytes=len(content),
+                filename="extracted-subtitles.srt",
+                metadata=metadata,
+            ),
+            content=content,
+        )
+        try:
+            repository.add_aigc_task_assets(
+                [
+                    AigcPipelineTaskAssetReference(
+                        task_id=data.task_id,
+                        direction=AigcAssetDirection.OUTPUT,
+                        slot="subtitle",
+                        ordinal=0,
+                        asset_id=asset.id,
+                    )
+                ]
+            )
+        except Exception:
+            self.delete_asset_objects(asset)
+            repository.delete_tool_asset(asset.id)
+            raise
+        return asset
 
     async def store_aigc_multitrack_video(
         self,
@@ -1129,6 +1448,12 @@ class AssetStorageService:
         await self._delete_uploaded_objects(keys)
 
 
+def _prompt_reference_image_count(request: AigcPromptOptimizeRequest) -> int:
+    if request.target_type != "image_to_image":
+        return 0
+    return request.target_config.reference_image_count
+
+
 @lru_cache
 def get_asset_storage_service() -> AssetStorageService:
     return AssetStorageService.from_settings()
@@ -1237,6 +1562,29 @@ def _video_face_blur_metadata(
         "provider_request_id": data.provider_request_id,
         "mask_mode": data.mask_mode,
         "mask_strength": data.mask_strength,
+        "duration_seconds": data.duration_seconds,
+        "executor_version": data.executor_version,
+    }
+    return {key: value for key, value in metadata.items() if value is not None}
+
+
+def _video_subtitle_metadata(
+    data: AigcVideoSubtitleAssetInput,
+) -> dict[str, str | int | float | bool | None]:
+    metadata: dict[str, str | int | float | bool | None] = {
+        "origin": "aigc",
+        "aigc_role": "output",
+        "provider": "mediakit",
+        "operation": "video_ocr",
+        "mode": "Subtitle",
+        "pipeline_id": data.pipeline_id,
+        "run_id": data.run_id,
+        "node_id": data.node_id,
+        "task_id": data.task_id,
+        "input_asset_id": data.input_asset_id,
+        "provider_task_id": data.provider_task_id,
+        "provider_request_id": data.provider_request_id,
+        "segment_count": data.segment_count,
         "duration_seconds": data.duration_seconds,
         "executor_version": data.executor_version,
     }
@@ -1363,6 +1711,7 @@ def _sanitize_multitrack_element(
         "transform": {"x", "y", "width", "height", "rotation"},
         "transition": {"type", "duration_ms"},
         "style": {
+            "font_type",
             "font_size",
             "color",
             "bold",

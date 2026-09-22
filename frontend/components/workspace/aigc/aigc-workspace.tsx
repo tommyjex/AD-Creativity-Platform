@@ -11,6 +11,7 @@ import {
   Eraser,
   FileStack,
   GitFork,
+  ImageIcon,
   LoaderCircle,
   Pencil,
   Plus,
@@ -38,12 +39,18 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AigcThumbnailDialog } from "@/components/workspace/aigc/aigc-thumbnail-dialog";
 import { apiClient, getUserFacingErrorMessage } from "@/lib/api-client";
 import { migrateAigcDefinitionV2 } from "@/lib/aigc/definition-migration";
+import {
+  countWorkspacePreviewModels,
+  getWorkspacePreviewNodeTone,
+  normalizeWorkspaceTopology,
+  type WorkspacePreviewTone
+} from "@/lib/aigc/workspace-preview";
 import type {
   AigcPage,
   AigcPipeline,
-  AigcPipelineDefinition,
   AigcPipelineDefinitionV2,
   AigcPipelineTemplate,
   AigcPipelineRunStatus,
@@ -98,6 +105,8 @@ export function AigcWorkspace({
   const [newPipelineName, setNewPipelineName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [thumbnailPipeline, setThumbnailPipeline] =
+    useState<AigcPipeline | null>(null);
 
   const templatesQuery = useQuery({
     initialData:
@@ -211,25 +220,32 @@ export function AigcWorkspace({
   }
 
   return (
-    <main className="w-full max-w-none px-3 py-6 sm:px-4 sm:py-8 lg:px-5">
-      <header className="border-b border-border pb-5">
+    <main
+      className="w-full max-w-none bg-[#0b0f14] bg-[radial-gradient(circle_at_12%_14%,rgba(66,153,255,0.18)_0_1px,transparent_1.5px),radial-gradient(circle_at_83%_20%,rgba(255,130,73,0.15)_0_1px,transparent_1.5px),linear-gradient(rgba(116,142,171,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(116,142,171,0.08)_1px,transparent_1px)] bg-[size:auto,auto,36px_36px,36px_36px] px-3 py-6 text-slate-100 sm:px-4 sm:py-8 lg:px-5"
+      data-testid="aigc-workspace"
+    >
+      <header className="border-b border-slate-700/80 pb-5">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-primary">
+            <p className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-sky-400">
               DAG creation workspace
             </p>
-            <h1 className="mt-2 text-3xl font-semibold text-foreground">
-              AIGC 工作台
+            <h1 className="mt-2 text-3xl font-semibold text-slate-50">
+              星图创作台
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
               从模板快速建立生成流程，或维护可重复执行的节点画布。
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">
-              {activeData?.total ?? 0} {view === "templates" ? "Templates" : "Pipelines"}
-            </Badge>
-            <Button onClick={() => setIsCreateOpen(true)} type="button">
+            <span className="border border-slate-700 bg-slate-900/80 px-3 py-1.5 font-mono text-xs text-slate-300">
+              {activeData?.total ?? 0} 个{view === "templates" ? "模板" : "画布"}
+            </span>
+            <Button
+              className="bg-sky-500 text-slate-950 hover:bg-sky-400"
+              onClick={() => setIsCreateOpen(true)}
+              type="button"
+            >
               <Plus className="h-4 w-4" />
               新建空白画布
             </Button>
@@ -237,10 +253,10 @@ export function AigcWorkspace({
         </div>
       </header>
 
-      <section className="mt-5 flex flex-col gap-3 border-b border-border pb-5 lg:flex-row lg:items-center lg:justify-between">
+      <section className="mt-5 flex flex-col gap-3 border-b border-slate-700/80 pb-5 lg:flex-row lg:items-center lg:justify-between">
         <div
           aria-label="AIGC 视图"
-          className="flex w-full gap-1 rounded-lg border border-border bg-secondary/70 p-1 sm:w-fit"
+          className="flex w-full gap-1 border border-slate-700 bg-slate-950/60 p-1 sm:w-fit"
           role="tablist"
         >
           <ViewButton
@@ -262,7 +278,7 @@ export function AigcWorkspace({
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="按名称筛选"
-              className="pl-9"
+              className="border-slate-700 bg-slate-950/70 pl-9 text-slate-100 placeholder:text-slate-500"
               onChange={(event) => setDraftQuery(event.target.value)}
               placeholder="按名称筛选"
               value={draftQuery}
@@ -280,7 +296,11 @@ export function AigcWorkspace({
               <Eraser className="h-4 w-4" />
             </Button>
           ) : null}
-          <Button type="submit" variant="outline">
+          <Button
+            className="border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-white"
+            type="submit"
+            variant="outline"
+          >
             筛选
           </Button>
         </form>
@@ -288,7 +308,7 @@ export function AigcWorkspace({
 
       {errorMessage ? (
         <div
-          className="mt-5 flex items-center justify-between gap-4 border border-destructive/25 bg-destructive/[0.06] px-4 py-3 text-sm text-destructive"
+          className="mt-5 flex items-center justify-between gap-4 border border-red-400/35 bg-red-500/10 px-4 py-3 text-sm text-red-300"
           role="alert"
         >
           <span className="flex items-center gap-2">
@@ -314,7 +334,7 @@ export function AigcWorkspace({
       ) : activeData && activeData.items.length > 0 ? (
         <>
           <div
-            className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+            className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5"
             data-testid="aigc-card-grid"
           >
             {activeData.items.map((item) => (
@@ -328,6 +348,7 @@ export function AigcWorkspace({
                 key={item.id}
                 kind={view === "templates" ? "template" : "pipeline"}
                 onDelete={requestDelete}
+                onSelectThumbnail={(pipeline) => setThumbnailPipeline(pipeline)}
                 onOpen={() => {
                   setFeedback(null);
                   if (view === "templates") {
@@ -417,7 +438,7 @@ export function AigcWorkspace({
           </DialogHeader>
           {deleteError ? (
             <div
-              className="mt-4 flex items-start gap-2 border border-destructive/25 bg-destructive/[0.06] px-3 py-2 text-sm text-destructive"
+              className="mt-4 flex items-start gap-2 border border-red-400/35 bg-red-500/10 px-3 py-2 text-sm text-red-300"
               role="alert"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -451,6 +472,15 @@ export function AigcWorkspace({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AigcThumbnailDialog
+        onOpenChange={(open) => {
+          if (!open) setThumbnailPipeline(null);
+        }}
+        onUpdated={() => undefined}
+        open={thumbnailPipeline !== null}
+        pipeline={thumbnailPipeline}
+      />
     </main>
   );
 }
@@ -470,10 +500,10 @@ function ViewButton({
     <button
       aria-selected={active}
       className={cn(
-        "flex min-h-9 flex-1 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition sm:flex-none",
+        "flex min-h-9 flex-1 items-center justify-center gap-2 rounded px-4 text-sm font-semibold transition sm:flex-none",
         active
-          ? "bg-card text-primary shadow-sm"
-          : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
+          ? "bg-slate-800 text-sky-300 shadow-sm"
+          : "text-slate-400 hover:bg-slate-900 hover:text-slate-100"
       )}
       onClick={onClick}
       role="tab"
@@ -490,18 +520,25 @@ function AigcCard({
   item,
   kind,
   onDelete,
+  onSelectThumbnail,
   onOpen
 }: {
   busy: boolean;
   item: AigcListItem;
   kind: "pipeline" | "template";
   onDelete: (target: DeleteTarget) => void;
+  onSelectThumbnail: (pipeline: AigcPipeline) => void;
   onOpen: () => void;
 }) {
   const pipeline = kind === "pipeline" ? (item as AigcPipeline) : null;
-  const modelCount = item.definition.nodes.filter((node) =>
-    ["llm", "text_to_image", "image_to_image"].includes(node.type)
-  ).length;
+  const [failedThumbnailUrl, setFailedThumbnailUrl] = useState<string | null>(
+    null
+  );
+  const normalizedDefinition = useMemo(
+    () => migrateAigcDefinitionV2(item.definition),
+    [item.definition]
+  );
+  const modelCount = countWorkspacePreviewModels(normalizedDefinition.nodes);
   const typeLabel = kind === "template" ? "模板" : "画布";
 
   function handleDelete(event: MouseEvent<HTMLButtonElement>) {
@@ -510,18 +547,38 @@ function AigcCard({
     onDelete({ id: item.id, kind, name: item.name });
   }
 
+  function handleThumbnail(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (pipeline) onSelectThumbnail(pipeline);
+  }
+
+  const thumbnail = pipeline?.thumbnail ?? null;
+  const shouldUseTopology =
+    thumbnail === null || failedThumbnailUrl === thumbnail.url;
+
   return (
-    <article className="group min-w-0 overflow-hidden border border-border bg-card shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
+    <article
+      className="group min-w-0 overflow-hidden border border-slate-700 bg-slate-950/90 shadow-[0_12px_28px_rgba(0,0,0,0.2)] transition hover:border-sky-400/65 hover:shadow-[0_16px_36px_rgba(14,165,233,0.16)] focus-within:border-sky-400/65"
+      data-testid="aigc-card"
+    >
       <button
         aria-label={`${kind === "template" ? "使用模板" : "打开画布"}：${item.name}`}
-        className="block w-full text-left"
+        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-400"
         disabled={busy}
         onClick={onOpen}
         type="button"
       >
-        <TopologyPreview definition={item.definition} />
+        {shouldUseTopology ? (
+          <TopologyPreview definition={normalizedDefinition} />
+        ) : (
+          <PipelineThumbnailPreview
+            onError={() => setFailedThumbnailUrl(thumbnail.url)}
+            thumbnail={thumbnail}
+          />
+        )}
       </button>
-      <div className="border-t border-border px-3 py-3">
+      <div className="border-t border-slate-700 px-3 py-3">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <button
             className="min-w-0 text-left"
@@ -529,7 +586,7 @@ function AigcCard({
             onClick={onOpen}
             type="button"
           >
-            <span className="block truncate text-sm font-semibold text-foreground group-hover:text-primary">
+            <span className="block truncate text-sm font-semibold text-slate-100 group-hover:text-sky-300">
               {item.name}
             </span>
           </button>
@@ -547,7 +604,20 @@ function AigcCard({
                 </a>
               </Button>
             ) : (
-              <StatusBadge status={pipeline?.latest_run_status ?? null} />
+              <>
+                <StatusBadge status={pipeline?.latest_run_status ?? null} />
+                <Button
+                  aria-label={`选择缩略图：${item.name}`}
+                  disabled={busy}
+                  onClick={handleThumbnail}
+                  size="icon"
+                  title="选择缩略图"
+                  type="button"
+                  variant="ghost"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </Button>
+              </>
             )}
             <Button
               aria-label={`删除${typeLabel}：${item.name}`}
@@ -563,20 +633,29 @@ function AigcCard({
             </Button>
           </div>
         </div>
-        <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground">
-          {item.description || "暂无描述"}
+        <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-slate-400">
+          {item.description || "未填写说明"}
         </p>
-        <div className="mt-3 flex items-center justify-between border-t border-border/70 pt-2 text-[0.68rem] text-muted-foreground">
-          <span className="flex items-center gap-1">
+        <div className="mt-3 flex flex-col gap-1 border-t border-slate-800 pt-2 text-[0.68rem] text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <span className="flex items-center gap-1 whitespace-nowrap">
             <GitFork className="h-3.5 w-3.5" />
             {item.definition.nodes.length} 节点 · {modelCount} 模型
           </span>
-          <time dateTime={item.updated_at} suppressHydrationWarning>
+          <time
+            className="whitespace-nowrap"
+            dateTime={item.updated_at}
+            suppressHydrationWarning
+          >
             {formatDate(item.updated_at)}
           </time>
         </div>
         <Button
-          className="mt-3 w-full"
+          className={cn(
+            "mt-3 w-full",
+            kind === "template"
+              ? "bg-sky-500 text-slate-950 hover:bg-sky-400"
+              : "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+          )}
           disabled={busy}
           onClick={onOpen}
           size="sm"
@@ -592,26 +671,61 @@ function AigcCard({
   );
 }
 
+function PipelineThumbnailPreview({
+  onError,
+  thumbnail
+}: {
+  onError: () => void;
+  thumbnail: NonNullable<AigcPipeline["thumbnail"]>;
+}) {
+  if (thumbnail.kind === "video") {
+    return (
+      <video
+        aria-label="画布缩略图视频"
+        className="aspect-[16/10] w-full bg-[#101821] object-contain"
+        muted
+        onError={onError}
+        playsInline
+        preload="metadata"
+        src={thumbnail.url}
+      />
+    );
+  }
+  return (
+    <>
+      {/* Signed URLs are remote and short-lived, so Next optimization is unsuitable. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        alt="画布缩略图"
+        className="aspect-[16/10] w-full bg-[#101821] object-contain"
+        onError={onError}
+        src={thumbnail.url}
+      />
+    </>
+  );
+}
+
 function TopologyPreview({
   definition
 }: {
-  definition: AigcPipelineDefinition | AigcPipelineDefinitionV2;
+  definition: AigcPipelineDefinitionV2;
 }) {
-  const normalized = useMemo(
-    () => migrateAigcDefinitionV2(definition),
-    [definition]
-  );
-  const layout = useMemo(
-    () => normalizeTopology(normalized.nodes),
-    [normalized.nodes]
-  );
+  const layout = useMemo(() => normalizeWorkspaceTopology(definition.nodes), [
+    definition.nodes
+  ]);
   const points = new Map(layout.map((entry) => [entry.node.id, entry]));
 
   return (
-    <div className="relative aspect-[16/10] overflow-hidden bg-secondary/55">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--border)/0.42)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--border)/0.42)_1px,transparent_1px)] bg-[size:20px_20px]" />
-      {normalized.nodes.length === 0 ? (
-        <div className="absolute inset-0 grid place-items-center text-muted-foreground">
+    <div
+      className="relative aspect-[16/10] overflow-hidden bg-[#101821]"
+      data-testid="aigc-topology-preview"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[linear-gradient(to_right,rgba(100,145,185,0.14)_1px,transparent_1px),linear-gradient(to_bottom,rgba(100,145,185,0.14)_1px,transparent_1px)] bg-[size:20px_20px]"
+      />
+      {definition.nodes.length === 0 ? (
+        <div className="absolute inset-0 grid place-items-center text-slate-500">
           <span className="flex items-center gap-2 text-xs">
             <Plus className="h-4 w-4" />
             空白画布
@@ -620,13 +734,13 @@ function TopologyPreview({
       ) : (
         <>
           <svg aria-hidden="true" className="absolute inset-0 h-full w-full">
-            {normalized.edges.map((edge) => {
+            {definition.edges.map((edge) => {
               const source = points.get(edge.sourceNodeId);
               const target = points.get(edge.targetNodeId);
               if (!source || !target) return null;
               return (
                 <line
-                  className="stroke-primary/35"
+                  className="stroke-sky-400/35"
                   key={edge.id}
                   strokeWidth="1.5"
                   x1={`${source.x}%`}
@@ -638,15 +752,7 @@ function TopologyPreview({
             })}
           </svg>
           {layout.map(({ node, x, y }) => (
-            <span
-              className={cn(
-                "absolute h-5 w-8 -translate-x-1/2 -translate-y-1/2 border shadow-sm",
-                nodeTone(node)
-              )}
-              key={node.id}
-              style={{ left: `${x}%`, top: `${y}%` }}
-              title={node.type}
-            />
+            <TopologyNode key={node.id} node={node} x={x} y={y} />
           ))}
         </>
       )}
@@ -654,30 +760,39 @@ function TopologyPreview({
   );
 }
 
-function normalizeTopology(nodes: AigcV2Node[]) {
-  if (nodes.length === 0) return [];
-  const minX = Math.min(...nodes.map((node) => node.position.x));
-  const maxX = Math.max(...nodes.map((node) => node.position.x));
-  const minY = Math.min(...nodes.map((node) => node.position.y));
-  const maxY = Math.max(...nodes.map((node) => node.position.y));
-  const width = Math.max(maxX - minX, 1);
-  const height = Math.max(maxY - minY, 1);
+const previewToneClasses: Record<WorkspacePreviewTone, string> = {
+  audio:
+    "border-pink-400/60 bg-pink-400/25 shadow-[0_0_14px_rgba(244,114,182,0.22)]",
+  image:
+    "border-emerald-400/60 bg-emerald-400/25 shadow-[0_0_14px_rgba(52,211,153,0.22)]",
+  neutral: "border-slate-500/60 bg-slate-500/25",
+  text: "border-sky-400/60 bg-sky-400/25 shadow-[0_0_14px_rgba(56,189,248,0.22)]",
+  video:
+    "border-orange-400/60 bg-orange-400/25 shadow-[0_0_14px_rgba(251,146,60,0.22)]"
+};
 
-  return nodes.map((node) => ({
-    node,
-    x: 14 + ((node.position.x - minX) / width) * 72,
-    y: 18 + ((node.position.y - minY) / height) * 64
-  }));
-}
+function TopologyNode({
+  node,
+  x,
+  y
+}: {
+  node: AigcV2Node;
+  x: number;
+  y: number;
+}) {
+  const tone = getWorkspacePreviewNodeTone(node);
 
-function nodeTone(node: AigcV2Node): string {
-  if (node.type === "text" || node.type === "image") {
-    return "border-info/45 bg-info/20";
-  }
-  if (node.type === "video" || node.type === "audio") {
-    return "border-success/45 bg-success/20";
-  }
-  return "border-primary/45 bg-primary/20";
+  return (
+    <span
+      className={cn(
+        "absolute h-5 w-8 -translate-x-1/2 -translate-y-1/2 border",
+        previewToneClasses[tone]
+      )}
+      data-testid={`aigc-preview-node-${tone}`}
+      style={{ left: `${x}%`, top: `${y}%` }}
+      title={node.type}
+    />
+  );
 }
 
 function StatusBadge({ status }: { status: AigcPipelineRunStatus | null }) {
@@ -703,10 +818,10 @@ function StatusBadge({ status }: { status: AigcPipelineRunStatus | null }) {
 function LoadingState() {
   return (
     <div
-      className="mt-5 grid min-h-64 place-items-center border border-border bg-card/60"
+      className="mt-5 grid min-h-64 place-items-center border border-slate-700 bg-slate-950/70"
       role="status"
     >
-      <span className="flex items-center gap-2 text-sm text-muted-foreground">
+      <span className="flex items-center gap-2 text-sm text-slate-400">
         <LoaderCircle className="h-4 w-4 animate-spin" />
         正在加载画布
       </span>
@@ -726,21 +841,21 @@ function EmptyState({
   view: AigcView;
 }) {
   return (
-    <div className="mt-5 grid min-h-72 place-items-center border border-dashed border-border bg-card/55 px-6 text-center">
+    <div className="mt-5 grid min-h-72 place-items-center border border-dashed border-slate-700 bg-slate-950/70 px-6 text-center">
       <div>
-        <Workflow className="mx-auto h-8 w-8 text-primary" />
-        <h2 className="mt-4 text-base font-semibold text-foreground">
+        <Workflow className="mx-auto h-8 w-8 text-sky-400" />
+        <h2 className="mt-4 text-base font-semibold text-slate-100">
           {hasQuery
             ? "没有匹配的画布"
             : view === "templates"
               ? "暂无画布模板"
               : "还没有我的画布"}
         </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm text-slate-400">
           {hasQuery ? "调整名称关键词后重新筛选。" : "从空白画布开始建立生成流程。"}
         </p>
         <Button
-          className="mt-5"
+          className="mt-5 border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
           onClick={hasQuery ? onReset : onCreate}
           type="button"
           variant="outline"
@@ -768,9 +883,9 @@ function Pagination({
   return (
     <nav
       aria-label="画布分页"
-      className="mt-5 flex items-center justify-between border-t border-border pt-4"
+      className="mt-5 flex items-center justify-between border-t border-slate-700 pt-4"
     >
-      <span className="text-xs text-muted-foreground">共 {total} 项</span>
+      <span className="text-xs text-slate-400">共 {total} 项</span>
       <div className="flex items-center gap-2">
         <Button
           aria-label="上一页"
@@ -782,7 +897,7 @@ function Pagination({
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="min-w-16 text-center text-xs text-muted-foreground">
+        <span className="min-w-16 text-center text-xs text-slate-400">
           {page} / {totalPages}
         </span>
         <Button

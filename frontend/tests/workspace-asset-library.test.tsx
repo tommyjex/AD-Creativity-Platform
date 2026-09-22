@@ -498,9 +498,7 @@ describe("WorkspaceAssetLibrary", () => {
     expect(within(dialog).getByText("AIGC 输出")).toBeInTheDocument();
     expect(within(dialog).getByRole("link", { name: "下载资产" })).toHaveAttribute(
       "href",
-      expect.stringContaining(
-        "filename=%E5%95%86%E5%93%81%E4%B8%BB%E5%9B%BE-%E5%9B%BE%E7%94%9F%E5%9B%BE1-%E5%9B%BE%E7%89%871.png"
-      )
+      "http://backend.local/api/assets/aigc-output/content?download=1"
     );
   });
 

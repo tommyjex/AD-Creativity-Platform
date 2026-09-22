@@ -8,8 +8,14 @@
           {
             "id": "text-source",
             "type": "text_input",
-            "position": { "x": 10, "y": 20 },
-            "size": { "width": 260, "height": 180 },
+            "position": {
+              "x": 10,
+              "y": 20
+            },
+            "size": {
+              "width": 260,
+              "height": 180
+            },
             "config": {
               "text": "保留包装",
               "bbox_references": [
@@ -22,7 +28,11 @@
           }
         ],
         "edges": [],
-        "viewport": { "x": 1, "y": 2, "zoom": 1.25 }
+        "viewport": {
+          "x": 1,
+          "y": 2,
+          "zoom": 1.25
+        }
       },
       "expected": {
         "schemaVersion": 2,
@@ -30,8 +40,14 @@
           {
             "id": "text-source",
             "type": "text",
-            "position": { "x": 10, "y": 20 },
-            "size": { "width": 260, "height": 180 },
+            "position": {
+              "x": 10,
+              "y": 20
+            },
+            "size": {
+              "width": 260,
+              "height": 180
+            },
             "config": {
               "text": "保留包装",
               "bbox_references": [
@@ -42,11 +58,16 @@
               ],
               "title": null,
               "upstream_text_override": null
-            }
+            },
+            "custom_name": null
           }
         ],
         "edges": [],
-        "viewport": { "x": 1, "y": 2, "zoom": 1.25 }
+        "viewport": {
+          "x": 1,
+          "y": 2,
+          "zoom": 1.25
+        }
       }
     },
     {
@@ -57,8 +78,14 @@
           {
             "id": "llm",
             "type": "llm",
-            "position": { "x": 40, "y": 20 },
-            "size": { "width": 280, "height": 200 },
+            "position": {
+              "x": 40,
+              "y": 20
+            },
+            "size": {
+              "width": 280,
+              "height": 200
+            },
             "config": {
               "model": "doubao-seed-evolving",
               "system_prompt": "",
@@ -68,9 +95,17 @@
           {
             "id": "text-result",
             "type": "text_output",
-            "position": { "x": 400, "y": 20 },
-            "size": { "width": 280, "height": 190 },
-            "config": { "title": "广告文案" }
+            "position": {
+              "x": 400,
+              "y": 20
+            },
+            "size": {
+              "width": 280,
+              "height": 190
+            },
+            "config": {
+              "title": "广告文案"
+            }
           }
         ],
         "edges": [
@@ -82,7 +117,11 @@
             "targetHandle": "text"
           }
         ],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       },
       "expected": {
         "schemaVersion": 2,
@@ -90,25 +129,39 @@
           {
             "id": "llm",
             "type": "llm",
-            "position": { "x": 40, "y": 20 },
-            "size": { "width": 280, "height": 200 },
+            "position": {
+              "x": 40,
+              "y": 20
+            },
+            "size": {
+              "width": 280,
+              "height": 200
+            },
             "config": {
               "model": "doubao-seed-evolving",
               "system_prompt": "",
               "temperature": 0.7
-            }
+            },
+            "custom_name": null
           },
           {
             "id": "text-result",
             "type": "text",
-            "position": { "x": 400, "y": 20 },
-            "size": { "width": 280, "height": 190 },
+            "position": {
+              "x": 400,
+              "y": 20
+            },
+            "size": {
+              "width": 280,
+              "height": 190
+            },
             "config": {
               "text": "",
               "bbox_references": [],
               "title": "广告文案",
               "upstream_text_override": null
-            }
+            },
+            "custom_name": null
           }
         ],
         "edges": [
@@ -120,7 +173,11 @@
             "targetHandle": "text"
           }
         ],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       }
     },
     {
@@ -130,17 +187,33 @@
           {
             "id": "image-source",
             "type": "image_input",
-            "position": { "x": 10, "y": 240 },
-            "size": { "width": 300, "height": 220 },
+            "position": {
+              "x": 10,
+              "y": 240
+            },
+            "size": {
+              "width": 300,
+              "height": 220
+            },
             "config": {
               "asset_id": "asset-image",
-              "bbox": { "type": "bbox", "x1": 10, "y1": 20, "x2": 300, "y2": 400 },
+              "bbox": {
+                "type": "bbox",
+                "x1": 10,
+                "y1": 20,
+                "x2": 300,
+                "y2": 400
+              },
               "bbox_asset_id": "asset-image"
             }
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       },
       "expected": {
         "schemaVersion": 2,
@@ -148,20 +221,37 @@
           {
             "id": "image-source",
             "type": "image",
-            "position": { "x": 10, "y": 240 },
-            "size": { "width": 300, "height": 220 },
+            "position": {
+              "x": 10,
+              "y": 240
+            },
+            "size": {
+              "width": 300,
+              "height": 220
+            },
             "config": {
               "asset_id": "asset-image",
-              "bbox": { "type": "bbox", "x1": 10, "y1": 20, "x2": 300, "y2": 400 },
+              "bbox": {
+                "type": "bbox",
+                "x1": 10,
+                "y1": 20,
+                "x2": 300,
+                "y2": 400
+              },
               "bbox_asset_id": "asset-image",
               "title": null,
               "upstream_bbox": null,
               "upstream_bbox_asset_id": null
-            }
+            },
+            "custom_name": null
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       }
     },
     {
@@ -172,13 +262,25 @@
           {
             "id": "image-result",
             "type": "image_output",
-            "position": { "x": 720, "y": 240 },
-            "size": { "width": 320, "height": 240 },
-            "config": { "title": "主视觉" }
+            "position": {
+              "x": 720,
+              "y": 240
+            },
+            "size": {
+              "width": 320,
+              "height": 240
+            },
+            "config": {
+              "title": "主视觉"
+            }
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       },
       "expected": {
         "schemaVersion": 2,
@@ -186,8 +288,14 @@
           {
             "id": "image-result",
             "type": "image",
-            "position": { "x": 720, "y": 240 },
-            "size": { "width": 320, "height": 240 },
+            "position": {
+              "x": 720,
+              "y": 240
+            },
+            "size": {
+              "width": 320,
+              "height": 240
+            },
             "config": {
               "asset_id": null,
               "bbox": null,
@@ -195,11 +303,16 @@
               "title": "主视觉",
               "upstream_bbox": null,
               "upstream_bbox_asset_id": null
-            }
+            },
+            "custom_name": null
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       }
     },
     {
@@ -210,13 +323,25 @@
           {
             "id": "video-source",
             "type": "video_input",
-            "position": { "x": 10, "y": 500 },
-            "size": { "width": 320, "height": 200 },
-            "config": { "asset_id": "asset-video" }
+            "position": {
+              "x": 10,
+              "y": 500
+            },
+            "size": {
+              "width": 320,
+              "height": 200
+            },
+            "config": {
+              "asset_id": "asset-video"
+            }
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       },
       "expected": {
         "schemaVersion": 2,
@@ -224,13 +349,27 @@
           {
             "id": "video-source",
             "type": "video",
-            "position": { "x": 10, "y": 500 },
-            "size": { "width": 320, "height": 200 },
-            "config": { "asset_id": "asset-video", "title": null }
+            "position": {
+              "x": 10,
+              "y": 500
+            },
+            "size": {
+              "width": 320,
+              "height": 200
+            },
+            "config": {
+              "asset_id": "asset-video",
+              "title": null
+            },
+            "custom_name": null
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       }
     },
     {
@@ -241,13 +380,25 @@
           {
             "id": "video-result",
             "type": "video_output",
-            "position": { "x": 720, "y": 500 },
-            "size": { "width": 340, "height": 210 },
-            "config": { "title": "成片" }
+            "position": {
+              "x": 720,
+              "y": 500
+            },
+            "size": {
+              "width": 340,
+              "height": 210
+            },
+            "config": {
+              "title": "成片"
+            }
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       },
       "expected": {
         "schemaVersion": 2,
@@ -255,13 +406,27 @@
           {
             "id": "video-result",
             "type": "video",
-            "position": { "x": 720, "y": 500 },
-            "size": { "width": 340, "height": 210 },
-            "config": { "asset_id": null, "title": "成片" }
+            "position": {
+              "x": 720,
+              "y": 500
+            },
+            "size": {
+              "width": 340,
+              "height": 210
+            },
+            "config": {
+              "asset_id": null,
+              "title": "成片"
+            },
+            "custom_name": null
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       }
     },
     {
@@ -272,13 +437,25 @@
           {
             "id": "audio-source",
             "type": "audio_input",
-            "position": { "x": 10, "y": 760 },
-            "size": { "width": 300, "height": 160 },
-            "config": { "asset_id": "asset-audio" }
+            "position": {
+              "x": 10,
+              "y": 760
+            },
+            "size": {
+              "width": 300,
+              "height": 160
+            },
+            "config": {
+              "asset_id": "asset-audio"
+            }
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       },
       "expected": {
         "schemaVersion": 2,
@@ -286,13 +463,27 @@
           {
             "id": "audio-source",
             "type": "audio",
-            "position": { "x": 10, "y": 760 },
-            "size": { "width": 300, "height": 160 },
-            "config": { "asset_id": "asset-audio", "title": null }
+            "position": {
+              "x": 10,
+              "y": 760
+            },
+            "size": {
+              "width": 300,
+              "height": 160
+            },
+            "config": {
+              "asset_id": "asset-audio",
+              "title": null
+            },
+            "custom_name": null
           }
         ],
         "edges": [],
-        "viewport": { "x": 0, "y": 0, "zoom": 1 }
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        }
       }
     }
   ]

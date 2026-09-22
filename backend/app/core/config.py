@@ -23,6 +23,33 @@ def _parse_positive_int_env(name: str, default: int) -> int:
     return value
 
 
+def _parse_nonnegative_int_env(name: str, default: int) -> int:
+    raw_value = getenv(name)
+    if raw_value is None:
+        return default
+
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ConfigurationError(f"{name} must be a non-negative integer.") from exc
+
+    if value < 0:
+        raise ConfigurationError(f"{name} must be a non-negative integer.")
+    return value
+
+
+def _parse_bool_env(name: str, default: bool) -> bool:
+    raw_value = getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigurationError(f"{name} must be a boolean.")
+
+
 def _get_env_first(*names: str) -> str | None:
     for name in names:
         value = getenv(name)
@@ -63,6 +90,9 @@ class Settings(BaseModel):
     mediakit_asr_poll_interval_seconds: int = Field(default=3, gt=0)
     mediakit_asr_timeout_seconds: int = Field(default=1800, gt=0)
     mediakit_asr_language: str | None = None
+    aigc_video_subtitle_extraction_concurrency: int = Field(default=1, gt=0)
+    mediakit_video_ocr_poll_interval_seconds: int = Field(default=3, gt=0)
+    mediakit_video_ocr_timeout_seconds: int = Field(default=1800, gt=0)
     aigc_video_enhancement_concurrency: int = Field(default=1, gt=0)
     mediakit_video_enhancement_poll_interval_seconds: int = Field(default=3, gt=0)
     mediakit_video_enhancement_timeout_seconds: int = Field(default=1800, gt=0)
@@ -107,6 +137,19 @@ class Settings(BaseModel):
     tos_public_endpoint: str | None = None
     tos_region: str | None = None
     tos_bucket: str | None = None
+
+    tls_enabled: bool = False
+    tls_endpoint: str = "https://tls-cn-beijing.volces.com"
+    tls_project_id: str = "da00add8-5793-44ad-af84-a9de004161d5"
+    tls_topic_id: str = "4a3842fc-1201-46b7-994c-1368564e5e77"
+    tls_access_key_id: SecretStr | None = None
+    tls_secret_access_key: SecretStr | None = None
+    tls_batch_size: int = Field(default=100, gt=0)
+    tls_queue_capacity: int = Field(default=1000, gt=0)
+    tls_flush_interval_seconds: int = Field(default=5, gt=0)
+    tls_max_retries: int = Field(default=3, ge=0)
+    tls_retry_initial_seconds: int = Field(default=1, gt=0)
+    tls_timeout_seconds: int = Field(default=5, gt=0)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -180,6 +223,22 @@ class Settings(BaseModel):
                 cls.model_fields["mediakit_asr_timeout_seconds"].default,
             ),
             mediakit_asr_language=_get_env_first("MEDIAKIT_ASR_LANGUAGE"),
+            aigc_video_subtitle_extraction_concurrency=_parse_positive_int_env(
+                "AIGC_VIDEO_SUBTITLE_EXTRACTION_CONCURRENCY",
+                cls.model_fields[
+                    "aigc_video_subtitle_extraction_concurrency"
+                ].default,
+            ),
+            mediakit_video_ocr_poll_interval_seconds=_parse_positive_int_env(
+                "MEDIAKIT_VIDEO_OCR_POLL_INTERVAL_SECONDS",
+                cls.model_fields[
+                    "mediakit_video_ocr_poll_interval_seconds"
+                ].default,
+            ),
+            mediakit_video_ocr_timeout_seconds=_parse_positive_int_env(
+                "MEDIAKIT_VIDEO_OCR_TIMEOUT_SECONDS",
+                cls.model_fields["mediakit_video_ocr_timeout_seconds"].default,
+            ),
             aigc_video_enhancement_concurrency=_parse_positive_int_env(
                 "AIGC_VIDEO_ENHANCEMENT_CONCURRENCY",
                 cls.model_fields["aigc_video_enhancement_concurrency"].default,
@@ -289,6 +348,45 @@ class Settings(BaseModel):
             tos_public_endpoint=_get_env_first("TOS_PUBLIC_ENDPOINT"),
             tos_region=_get_env_first("TOS_REGION"),
             tos_bucket=_get_env_first("TOS_BUCKET"),
+            tls_enabled=_parse_bool_env("TLS_ENABLED", False),
+            tls_endpoint=getenv(
+                "TLS_ENDPOINT",
+                cls.model_fields["tls_endpoint"].default,
+            ),
+            tls_project_id=getenv(
+                "TLS_PROJECT_ID",
+                cls.model_fields["tls_project_id"].default,
+            ),
+            tls_topic_id=getenv(
+                "TLS_TOPIC_ID",
+                cls.model_fields["tls_topic_id"].default,
+            ),
+            tls_access_key_id=_get_secret_env_first("TLS_ACCESS_KEY_ID"),
+            tls_secret_access_key=_get_secret_env_first("TLS_SECRET_ACCESS_KEY"),
+            tls_batch_size=_parse_positive_int_env(
+                "TLS_BATCH_SIZE",
+                cls.model_fields["tls_batch_size"].default,
+            ),
+            tls_queue_capacity=_parse_positive_int_env(
+                "TLS_QUEUE_CAPACITY",
+                cls.model_fields["tls_queue_capacity"].default,
+            ),
+            tls_flush_interval_seconds=_parse_positive_int_env(
+                "TLS_FLUSH_INTERVAL_SECONDS",
+                cls.model_fields["tls_flush_interval_seconds"].default,
+            ),
+            tls_max_retries=_parse_nonnegative_int_env(
+                "TLS_MAX_RETRIES",
+                cls.model_fields["tls_max_retries"].default,
+            ),
+            tls_retry_initial_seconds=_parse_positive_int_env(
+                "TLS_RETRY_INITIAL_SECONDS",
+                cls.model_fields["tls_retry_initial_seconds"].default,
+            ),
+            tls_timeout_seconds=_parse_positive_int_env(
+                "TLS_TIMEOUT_SECONDS",
+                cls.model_fields["tls_timeout_seconds"].default,
+            ),
         )
 
     def require_database_config(self) -> None:

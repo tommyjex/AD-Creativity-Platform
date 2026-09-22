@@ -219,11 +219,95 @@ describe("AIGC image nodes", () => {
     });
   });
 
-  it("keeps modality color on input card borders without tinting the title row", () => {
+  it.each([
+    {
+      assetId: "generated-image",
+      downloadUrl: "/api/assets/generated-image/content",
+      filename: "雨夜霓虹跑车.png",
+      label: "下载图片：雨夜霓虹跑车",
+      mimeType: "image/png",
+      node: {
+        id: "image-model",
+        type: "text_to_image",
+        custom_name: "雨夜霓虹跑车",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 160 },
+        config: {
+          model: "doubao-seedream-5-0-pro-260628",
+          aspect_ratio: "1:1",
+          size: "2K",
+          format: "png"
+        }
+      } satisfies AigcV2Node
+    },
+    {
+      assetId: "generated-video",
+      downloadUrl: "/api/assets/generated-video/content",
+      filename: "海岸日落短片.mp4",
+      label: "下载视频：海岸日落短片",
+      mimeType: "video/mp4",
+      node: {
+        id: "video-model",
+        type: "video_generation",
+        custom_name: "海岸日落短片",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 180 },
+        config: {
+          model: "doubao-seedance-2-5-260628",
+          generation_mode: "text_to_video",
+          resolution: "1080p",
+          aspect_ratio: "16:9",
+          duration_seconds: 12,
+          generate_audio: true
+        }
+      } satisfies AigcV2Node
+    }
+  ])("offers the generated media download from its node card", (scenario) => {
+    const runDetail = {
+      run: {
+        id: "run-generated-media",
+        status: "succeeded",
+        definition_snapshot: {
+          schemaVersion: 2,
+          nodes: [scenario.node],
+          edges: [],
+          viewport: { x: 0, y: 0, zoom: 1 }
+        }
+      },
+      nodes: [
+        {
+          node_id: scenario.node.id,
+          result: {
+            kind: "assets",
+            text: null,
+            text_digest: null,
+            assets: [
+              {
+                asset_id: scenario.assetId,
+                ordinal: 0,
+                mime_type: scenario.mimeType,
+                download_url: scenario.downloadUrl,
+                available: true
+              }
+            ]
+          },
+          status: "succeeded"
+        }
+      ]
+    } as unknown as AigcPipelineRunDetail;
+
+    renderNode(scenario.node, runDetail);
+
+    expect(screen.getByRole("link", { name: scenario.label })).toHaveAttribute(
+      "download",
+      scenario.filename
+    );
+  });
+
+  it("uses neutral borders on modality cards without tinting the title row", () => {
     const cases: Array<{
       label: string;
       node: AigcV2Node;
-      token: string;
     }> = [
       {
         label: "文本节点",
@@ -233,8 +317,7 @@ describe("AIGC image nodes", () => {
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
           config: { text: "产品描述", bbox_references: [], title: null }
-        },
-        token: "text"
+        }
       },
       {
         label: "图片节点",
@@ -249,8 +332,7 @@ describe("AIGC image nodes", () => {
             bbox_asset_id: null,
             title: null
           }
-        },
-        token: "image"
+        }
       },
       {
         label: "视频节点",
@@ -260,8 +342,7 @@ describe("AIGC image nodes", () => {
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
           config: { asset_id: null, title: null }
-        },
-        token: "video"
+        }
       },
       {
         label: "音频节点",
@@ -271,19 +352,17 @@ describe("AIGC image nodes", () => {
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
           config: { asset_id: null, title: null }
-        },
-        token: "audio"
+        }
       }
     ];
 
-    for (const { label, node, token } of cases) {
+    for (const { label, node } of cases) {
       const { container, unmount } = renderNode(node);
       const card = container.firstElementChild as HTMLElement;
       const header = screen.getByTestId("aigc-node-title-row");
 
-      expect(card).toHaveStyle({
-        borderColor: `var(--aigc-modality-${token}-border)`
-      });
+      expect(card).toHaveClass("border-border");
+      expect(card.style.borderColor).toBe("");
       expect(screen.getByText(label)).toBeInTheDocument();
       expect(header.style.backgroundColor).toBe("");
       expect(header.style.borderBottomColor).toBe("");
@@ -296,11 +375,10 @@ describe("AIGC image nodes", () => {
     }
   });
 
-  it("keeps model cards neutral and modality cards color coded", () => {
+  it("uses neutral borders on model and modality cards", () => {
     const cases: Array<{
       label: string;
       node: AigcV2Node;
-      token: "text" | null;
     }> = [
       {
         label: "图生图",
@@ -315,8 +393,7 @@ describe("AIGC image nodes", () => {
             size: "2K",
             format: "png"
           }
-        },
-        token: null
+        }
       },
       {
         label: "文本节点",
@@ -330,24 +407,17 @@ describe("AIGC image nodes", () => {
             bbox_references: [],
             title: "文案结果"
           }
-        },
-        token: "text"
+        }
       }
     ];
 
-    for (const { label, node, token } of cases) {
+    for (const { label, node } of cases) {
       const { container, unmount } = renderNode(node);
       const card = container.firstElementChild as HTMLElement;
       const header = screen.getByTestId("aigc-node-title-row");
 
-      if (token) {
-        expect(card).toHaveStyle({
-          borderColor: `var(--aigc-modality-${token}-border)`
-        });
-      } else {
-        expect(card).toHaveClass("border-border");
-        expect(card.style.borderColor).toBe("");
-      }
+      expect(card).toHaveClass("border-border");
+      expect(card.style.borderColor).toBe("");
       expect(screen.getByText(label)).toBeInTheDocument();
       expect(header).toHaveClass("h-7", "px-2.5");
       expect(header).not.toHaveClass("border-b");
@@ -484,7 +554,52 @@ describe("AIGC image nodes", () => {
     });
   });
 
-  it("preserves the modality border, primary selection ring, and dimensions", () => {
+  it("renames the node title inline and cancels with Escape", () => {
+    const node: AigcV2Node = {
+      id: "rename-text",
+      type: "text",
+      custom_name: null,
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: { text: "内容", bbox_references: [], title: null }
+    };
+    store.getState().initialize({
+      definition: {
+        schemaVersion: 2,
+        nodes: [node],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      },
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "重命名测试",
+      revision: 1
+    });
+    renderNode(node);
+
+    act(() => store.getState().setRenamingNodeId(node.id));
+    const input = screen.getByRole("textbox", { name: "节点名称" });
+    fireEvent.change(input, { target: { value: "商品文案输入" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(store.getState().definition.nodes[0]?.custom_name).toBe(
+      "商品文案输入"
+    );
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent(
+      "商品文案输入"
+    );
+
+    act(() => store.getState().setRenamingNodeId(node.id));
+    const renamedInput = screen.getByRole("textbox", { name: "节点名称" });
+    fireEvent.change(renamedInput, { target: { value: "不保存" } });
+    fireEvent.keyDown(renamedInput, { key: "Escape" });
+    expect(store.getState().definition.nodes[0]?.custom_name).toBe(
+      "商品文案输入"
+    );
+  });
+
+  it("preserves the neutral border, primary selection ring, and dimensions", () => {
     const node: AigcV2Node = {
       id: "selected-text",
       type: "text",
@@ -502,13 +617,12 @@ describe("AIGC image nodes", () => {
       "w-full",
       "rounded-md",
       "border",
+      "border-border",
       "ring-2",
       "ring-primary/20"
     );
     expect(card).not.toHaveClass("border-primary");
-    expect(card).toHaveStyle({
-      borderColor: "var(--aigc-modality-text-border)"
-    });
+    expect(card.style.borderColor).toBe("");
     expect(header).toHaveClass("h-7", "shrink-0", "px-2.5");
     expect(header).not.toHaveClass("border-b");
     expect(title).toHaveClass("text-[11px]", "font-medium");
@@ -914,16 +1028,12 @@ describe("AIGC image nodes", () => {
       screen.queryByRole("link", { name: "下载视频：最终/成片" })
     ).toBeNull();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "放大预览：最终/成片" })
-    );
-    const preview = screen.getByLabelText("最终/成片 放大预览");
-    expect(preview).toHaveAttribute("controls");
-    expect(preview).toHaveAttribute("autoplay");
-    expect(preview).toHaveClass("object-contain");
+    expect(
+      screen.queryByRole("button", { name: "放大预览：最终/成片" })
+    ).toBeNull();
   });
 
-  it("renders video enhancement summaries, orange modality, and cost badges", () => {
+  it("renders video enhancement with a neutral border, orange ports, and cost badges", () => {
     const node: AigcV2Node = {
       id: "video-enhancement",
       type: "video_enhancement",
@@ -945,9 +1055,9 @@ describe("AIGC image nodes", () => {
     };
     const { container } = renderNode(node);
 
-    expect(container.firstElementChild).toHaveStyle({
-      borderColor: "var(--aigc-modality-video-border)"
-    });
+    const card = container.firstElementChild as HTMLElement;
+    expect(card).toHaveClass("border-border");
+    expect(card.style.borderColor).toBe("");
     expect(
       screen.getByText("专业版 · 8K · 原帧率 · 自然")
     ).toBeInTheDocument();
@@ -968,7 +1078,7 @@ describe("AIGC image nodes", () => {
     });
   });
 
-  it("renders the face blur summary with video modality colors", () => {
+  it("renders face blur with a neutral border and video modality ports", () => {
     const node: AigcV2Node = {
       id: "face-blur",
       type: "video_face_blur",
@@ -978,9 +1088,9 @@ describe("AIGC image nodes", () => {
     };
     const { container } = renderNode(node);
 
-    expect(container.firstElementChild).toHaveStyle({
-      borderColor: "var(--aigc-modality-video-border)"
-    });
+    const card = container.firstElementChild as HTMLElement;
+    expect(card).toHaveClass("border-border");
+    expect(card.style.borderColor).toBe("");
     expect(screen.getByText("高斯模糊 · 高强度")).toBeInTheDocument();
     expect(screen.getByLabelText("视频输入")).toHaveStyle({
       backgroundColor: "var(--aigc-modality-video)"
@@ -1054,11 +1164,11 @@ describe("AIGC image nodes", () => {
       "object-contain"
     );
     expect(
-      screen.getByRole("button", { name: "全屏播放：脱敏/成片" })
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "全屏播放：脱敏/成片" })
+    ).toBeNull();
     expect(
-      screen.getByRole("button", { name: "放大预览：脱敏/成片" })
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "放大预览：脱敏/成片" })
+    ).toBeNull();
     expect(
       screen.queryByRole("link", { name: "下载视频：脱敏/成片" })
     ).toBeNull();
@@ -1147,8 +1257,8 @@ describe("AIGC image nodes", () => {
       )
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "全屏播放：增强/成片" })
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "全屏播放：增强/成片" })
+    ).toBeNull();
     expect(
       screen.queryByRole("link", { name: "下载视频：增强/成片" })
     ).toBeNull();
@@ -1324,14 +1434,9 @@ describe("AIGC image nodes", () => {
     fireEvent.loadedMetadata(video);
 
     expect(screen.getByText(/1920 × 1080 · 12.5s · video\/mp4/)).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "放大预览：产品演示.mp4" })
-    );
-    expect(screen.getByRole("heading", { name: "视频预览" })).toBeInTheDocument();
-    const preview = screen.getByLabelText("产品演示.mp4 放大预览");
-    expect(preview).toHaveAttribute("controls");
-    expect(preview).toHaveAttribute("autoplay");
-    expect(preview).toHaveClass("object-contain");
+    expect(
+      screen.queryByRole("button", { name: "放大预览：产品演示.mp4" })
+    ).toBeNull();
   });
 
   it("plays audio inputs and shows duration and MIME metadata", async () => {
@@ -1597,6 +1702,68 @@ describe("AIGC image nodes", () => {
       }
       view.unmount();
     }
+  });
+
+  it("shows the LLM image input source and unavailable upstream state", () => {
+    const image: AigcV2Node = {
+      id: "source-image",
+      type: "image",
+      custom_name: "商品主图",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        asset_id: "asset-image",
+        bbox: null,
+        bbox_asset_id: null,
+        title: null
+      }
+    };
+    const llm: AigcV2Node = {
+      id: "llm",
+      type: "llm",
+      position: { x: 320, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        model: "doubao-seed-evolving",
+        system_prompt: "",
+        temperature: 0.7
+      }
+    };
+    const definition = {
+      schemaVersion: 2,
+      nodes: [image, llm],
+      edges: [
+        {
+          id: "image-to-llm",
+          sourceNodeId: image.id,
+          sourceHandle: "image",
+          targetNodeId: llm.id,
+          targetHandle: "image"
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
+    renderNode(llm, {
+      run: {
+        id: "run-llm-image",
+        status: "failed",
+        definition_snapshot: definition
+      },
+      nodes: [
+        {
+          node_id: image.id,
+          status: "failed",
+          result: { assets: [], kind: "none", text: null, text_digest: null }
+        }
+      ]
+    } as unknown as AigcPipelineRunDetail);
+
+    expect(screen.getByLabelText(/^图片输入/)).toHaveStyle({
+      backgroundColor: "var(--aigc-modality-image)"
+    });
+    expect(screen.getByTestId("aigc-llm-image-input")).toHaveTextContent(
+      "商品主图 · 图片来源运行失败"
+    );
   });
 
   it("keeps an incompatible connected handle visible and disables it", () => {

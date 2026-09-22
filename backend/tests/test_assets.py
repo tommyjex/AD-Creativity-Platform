@@ -13,6 +13,9 @@ from backend.app.core.config import Settings
 from backend.app.repositories import InMemoryRepository
 from backend.app.repositories.mysql import MySQLRepository
 from backend.app.schemas import (
+    AigcPipelineCreate,
+    AigcPipelineDefinition,
+    AigcPipelineUpdate,
     Asset,
     AssetCategory,
     AssetCreate,
@@ -32,6 +35,7 @@ from backend.app.services.assets import (
     TosObjectStorageClient,
 )
 from backend.app.services.aigc_asset_naming import AigcAssetNamingContext
+from backend.app.api.routes import _asset_download_filename
 
 
 class FakeObjectStorageClient:
@@ -291,6 +295,210 @@ def test_asset_content_download_adds_attachment_disposition(
         'attachment; filename="download.png"; '
         "filename*=UTF-8''%E7%94%A8%E6%88%B7%E5%91%BD%E5%90%8D.png"
     )
+    preferred_response = client.get(
+        f"/api/assets/{asset.id}/content",
+        params={"download": 1, "filename": "节点建议名.webp"},
+    )
+    assert preferred_response.headers["content-disposition"] == (
+        'attachment; filename="download.png"; '
+        "filename*=UTF-8''%E7%94%A8%E6%88%B7%E5%91%BD%E5%90%8D.png"
+    )
+
+
+def test_aigc_download_filename_tracks_current_node_and_falls_back_safely(
+    repository: InMemoryRepository,
+) -> None:
+    definition = AigcPipelineDefinition.model_validate(
+        {
+            "nodes": [
+                {
+                    "id": "image-model",
+                    "type": "text_to_image",
+                    "custom_name": "生成时名称",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 280, "height": 200},
+                    "config": {},
+                }
+            ],
+            "edges": [],
+        }
+    )
+    pipeline = repository.create_aigc_pipeline(
+        AigcPipelineCreate(name="中文画布", definition=definition)
+    )
+    historical = repository.create_asset(
+        AssetCreate(
+            id="historical-aigc-image",
+            tool_asset_role=ToolAssetRole.OUTPUT,
+            type=AssetType.GENERATED_IMAGE,
+            status=Status.SUCCEEDED,
+            object_key="aigc/historical.png",
+            mime_type="image/png",
+            metadata={
+                "origin": "aigc",
+                "operation": "text_to_image",
+                "pipeline_id": pipeline.id,
+                "node_id": "image-model",
+                "name": "冻结历史名称-图片1.png",
+                "name_scheme": "aigc_canvas_node_v1",
+            },
+        )
+    )
+
+    repository.patch_aigc_pipeline_node_custom_name(
+        pipeline.id,
+        "image-model",
+        ' 城市/汽车:*?"<>|广告 ',
+    )
+    assert _asset_download_filename(
+        historical,
+        preferred="过时前端名称.png",
+        repository=repository,
+    ) == "城市-汽车-广告.png"
+
+    current = repository.get_aigc_pipeline(pipeline.id)
+    repository.update_aigc_pipeline(
+        pipeline.id,
+        AigcPipelineUpdate(
+            name=current.name,
+            description=current.description,
+            expected_revision=current.revision,
+            definition=AigcPipelineDefinition(nodes=[], edges=[]),
+        ),
+    )
+    assert _asset_download_filename(
+        historical,
+        preferred="过时前端名称.png",
+        repository=repository,
+    ) == "冻结历史名称-图片1.png"
+
+
+def test_generated_download_filename_tracks_display_output_node(
+    repository: InMemoryRepository,
+) -> None:
+    definition = AigcPipelineDefinition.model_validate(
+        {
+            "nodes": [
+                {
+                    "id": "image-model",
+                    "type": "text_to_image",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 280, "height": 200},
+                    "config": {},
+                },
+                {
+                    "id": "image-output",
+                    "type": "image_output",
+                    "custom_name": "当前产物名",
+                    "position": {"x": 320, "y": 0},
+                    "size": {"width": 240, "height": 200},
+                    "config": {},
+                },
+            ],
+            "edges": [
+                {
+                    "id": "edge-model-output",
+                    "sourceNodeId": "image-model",
+                    "sourceHandle": "image",
+                    "targetNodeId": "image-output",
+                    "targetHandle": "image",
+                }
+            ],
+        }
+    )
+    pipeline = repository.create_aigc_pipeline(
+        AigcPipelineCreate(name="中文画布", definition=definition)
+    )
+    asset = repository.create_asset(
+        AssetCreate(
+            id="generated-output-image",
+            tool_asset_role=ToolAssetRole.OUTPUT,
+            type=AssetType.GENERATED_IMAGE,
+            status=Status.SUCCEEDED,
+            object_key="aigc/generated-output.png",
+            mime_type="image/png",
+            metadata={
+                "origin": "aigc",
+                "operation": "text_to_image",
+                "pipeline_id": pipeline.id,
+                "node_id": "image-model",
+                "generated_name": "冻结产物名",
+                "name": "冻结产物名.png",
+                "name_scheme": "aigc_generated_node_v2",
+                "output_ordinal": 0,
+            },
+        )
+    )
+
+    assert _asset_download_filename(
+        asset,
+        preferred="过时前端名称.png",
+        repository=repository,
+    ) == "当前产物名.png"
+
+
+def test_aigc_download_filename_prioritizes_user_name_and_generated_fallback(
+    repository: InMemoryRepository,
+) -> None:
+    asset = repository.create_asset(
+        AssetCreate(
+            id="generated-aigc-video",
+            tool_asset_role=ToolAssetRole.OUTPUT,
+            type=AssetType.STORYBOARD_VIDEO,
+            status=Status.SUCCEEDED,
+            object_key="aigc/generated.bin",
+            mime_type="video/webm; codecs=vp9",
+            metadata={
+                "origin": "aigc",
+                "operation": "video_generation",
+                "pipeline_id": "deleted-pipeline",
+                "node_id": "deleted-node",
+                "generated_name": "冻结/视频名称",
+                "name": "旧资产名.mp4",
+                "name_scheme": "aigc_generated_node_v2",
+                "output_ordinal": 1,
+            },
+        )
+    )
+
+    assert _asset_download_filename(
+        asset,
+        preferred="前端建议名.mp4",
+        repository=repository,
+    ) == "冻结-视频名称-2.webm"
+
+    renamed = repository.rename_asset(asset.id, name="用户最终命名.mov")
+    assert _asset_download_filename(
+        renamed,
+        preferred="不可越权的节点名.mp4",
+        repository=repository,
+    ) == "用户最终命名.webm"
+
+
+def test_aigc_download_filename_keeps_unicode_within_180_utf8_bytes() -> None:
+    asset = AssetCreate(
+        id="long-aigc-image",
+        tool_asset_role=ToolAssetRole.OUTPUT,
+        type=AssetType.GENERATED_IMAGE,
+        status=Status.SUCCEEDED,
+        object_key="aigc/long-image",
+        mime_type="image/jpeg",
+        metadata={
+            "origin": "aigc",
+            "operation": "image_edit",
+            "pipeline_id": "deleted-pipeline",
+            "node_id": "deleted-node",
+            "generated_name": "中文名称" * 40,
+            "name_scheme": "aigc_generated_node_v2",
+            "output_ordinal": 0,
+        },
+    )
+
+    filename = _asset_download_filename(asset, repository=None)
+
+    assert filename is not None
+    assert filename.endswith(".jpg")
+    assert len(filename.encode("utf-8")) <= 180
 
 
 def test_asset_content_download_proxies_external_url_without_storage_client(
