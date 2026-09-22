@@ -1,0 +1,15 @@
+- [x] LLM 节点保留必填、单值 `prompt` 文本输入，并新增可选、单值 `image` 图片输入
+- [x] 纯文本 LLM Pipeline 保持合法且不向模型发送 `input_image`
+- [x] 本地图片节点可合法连接至 LLM 图片端口
+- [x] 成功或复用的上游图片节点可合法连接至 LLM 图片端口
+- [x] 非图片连接、第二条图片入边、自环和间接环路在前后端均被拒绝
+- [x] 有效图片输入以一项 `input_image` 与 `input_text` 共同发送给 Provider
+- [x] 图片输入使用 Run 中的有效资产，不回退至上游模式节点的本地备用资产
+- [x] 图片不可访问、不可用或上游失败时 LLM 不调用 Provider，并正确阻塞或失败
+- [x] 文本或有效图片资产变化会使 LLM 输入哈希变化，禁止复用旧结果
+- [x] 图片签名 URL、二进制和原始内容不写入 API 响应、Pipeline、Run、Task 参数、日志或错误
+- [x] 节点卡片和检查器能显示图片输入已连接、来源和运行状态
+- [x] 断开图片输入后 LLM 立即恢复纯文本执行，提示词和系统提示词配置不受影响
+- [x] 后端 schema、DAG、执行器、Gateway 与 Provider 定向测试通过
+- [x] 前端 Vitest、TypeScript、ESLint 和 production build 通过
+- [x] Playwright 在桌面与窄屏验证图片输入、纯文本回退和失败状态，且无布局、控制台或运行时错误

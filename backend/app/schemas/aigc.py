@@ -3,9 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime
 from enum import Enum
+from ipaddress import ip_address
 import math
 import re
 from typing import Annotated, Generic, Literal, TypeAlias, TypeVar
+import unicodedata
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from pydantic import (
@@ -47,6 +50,7 @@ AIGC_MAX_NODES = 100
 AIGC_MAX_EDGES = 200
 AIGC_DEFAULT_TEXT_MODEL = "doubao-seed-evolving"
 AIGC_DEFAULT_IMAGE_MODEL = "doubao-seedream-5-0-pro-260628"
+AIGC_GENERATED_MEDIA_NAMING_MODEL = "doubao-seed-2-0-mini-260428"
 AIGC_JSON_PARSER_DEFAULT_PATH = "$.items"
 AIGC_JSON_PARSER_MAX_ITEMS = 20
 VIDEO_ENHANCEMENT_16_BIT_MAX_DURATION_SECONDS = 40
@@ -57,6 +61,36 @@ MULTI_TRACK_MAX_SUBTITLE_TRACKS = 10
 MULTI_TRACK_CANVAS_MIN_SIZE = 160
 MULTI_TRACK_CANVAS_MAX_SIZE = 8192
 MULTI_TRACK_RGBA_PATTERN = re.compile(r"^#[0-9A-Fa-f]{8}$")
+MULTI_TRACK_FONT_TYPE_MAX_LENGTH = 2048
+MULTI_TRACK_FONT_FILE_PATTERN = re.compile(r"\.(?:ttf|otf)$", re.IGNORECASE)
+MULTI_TRACK_FONT_CONTROL_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
+MULTI_TRACK_NUMERIC_HOST_LABEL_PATTERN = re.compile(
+    r"^(?:\d+|0x[0-9a-f]+)$",
+    re.IGNORECASE,
+)
+MULTI_TRACK_LOCAL_HOST_SUFFIXES = (".local", ".internal", ".lan", ".home")
+MEDIAKIT_FONT_PRESET_IDS = frozenset(
+    {
+        "1187225",
+        "1187223",
+        "1187221",
+        "1187219",
+        "1187217",
+        "1187213",
+        "1187211",
+        "SY_Black",
+        "ALi_PuHui",
+        "PM_ZhengDao",
+    }
+)
+
+
+def _is_multitrack_numeric_hostname(hostname: str) -> bool:
+    labels = hostname.removesuffix(".").split(".")
+    return bool(labels) and all(
+        MULTI_TRACK_NUMERIC_HOST_LABEL_PATTERN.fullmatch(label)
+        for label in labels
+    )
 
 
 class AigcNodeCategory(str, Enum):
@@ -82,6 +116,7 @@ class AigcNodeType(str, Enum):
     VIDEO_GENERATION = "video_generation"
     VIDEO_ENHANCEMENT = "video_enhancement"
     VIDEO_FACE_BLUR = "video_face_blur"
+    VIDEO_SUBTITLE_EXTRACTION = "video_subtitle_extraction"
     MULTI_TRACK_EDIT = "multi_track_edit"
     JSON_PARSER = "json_parser"
     LAYER_CANVAS = "layer_canvas"
@@ -96,6 +131,7 @@ class AigcPortType(str, Enum):
     IMAGE_ASSET = "image_asset"
     VIDEO_ASSET = "video_asset"
     AUDIO_ASSET = "audio_asset"
+    SUBTITLE_ASSET = "subtitle_asset"
     LAYER_SET = "layer_set"
     IMAGE_LAYER = "image_layer"
     EDITED_LAYER = "edited_layer"
@@ -148,6 +184,7 @@ class AigcTaskType(str, Enum):
     VIDEO_GENERATION = "video_generation"
     VIDEO_ENHANCEMENT = "video_enhancement"
     VIDEO_FACE_BLUR = "video_face_blur"
+    VIDEO_SUBTITLE_EXTRACTION = "video_subtitle_extraction"
     MULTI_TRACK_EDIT = "multi_track_edit"
     JSON_PARSER = "json_parser"
 
@@ -170,6 +207,104 @@ class AigcAssetDirection(str, Enum):
     OUTPUT = "output"
 
 
+class AigcGeneratedMediaNamingStatus(str, Enum):
+    SUCCEEDED = "succeeded"
+    TIMEOUT = "timeout"
+    PROVIDER_ERROR = "provider_error"
+    INVALID_RESPONSE = "invalid_response"
+    SKIPPED = "skipped"
+
+
+class AigcGeneratedMediaVisualInput(SchemaModel):
+    type: Literal["image", "video"]
+    url: str = Field(..., min_length=1)
+    fps: float | None = None
+
+    @model_validator(mode="after")
+    def validate_media_options(self) -> "AigcGeneratedMediaVisualInput":
+        if self.type == "video" and self.fps != 0.3:
+            raise ValueError("generated media naming videos require fps=0.3")
+        if self.type == "image" and self.fps is not None:
+            raise ValueError("generated media naming images must not include fps")
+        return self
+
+
+class AigcGeneratedMediaNamingRequest(SchemaModel):
+    prompt: str = Field(default="", max_length=20000)
+    visual_inputs: tuple[AigcGeneratedMediaVisualInput, ...] = Field(
+        default_factory=tuple,
+        max_length=50,
+    )
+
+    @model_validator(mode="after")
+    def require_effective_input(self) -> "AigcGeneratedMediaNamingRequest":
+        if not self.prompt.strip() and not self.visual_inputs:
+            raise ValueError("generated media naming requires prompt or visual input")
+        return self
+
+
+class AigcGeneratedMediaName(SchemaModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not 1 <= len(normalized) <= 10:
+            raise ValueError(
+                "generated media name must contain 1-10 Unicode code points"
+            )
+        if any(
+            unicodedata.category(character) == "Cc"
+            or character in "\u2028\u2029"
+            for character in normalized
+        ):
+            raise ValueError(
+                "generated media name must not contain control characters"
+            )
+        if "/" in normalized or "\\" in normalized:
+            raise ValueError(
+                "generated media name must not contain path separators"
+            )
+        if re.search(r"\.[^\s.]{1,10}$", normalized):
+            raise ValueError(
+                "generated media name must not contain a file extension"
+            )
+        if normalized[0] in "\"'“”‘’" or normalized[-1] in "\"'“”‘’":
+            raise ValueError(
+                "generated media name must not contain surrounding quotes"
+            )
+        if (
+            re.match(r"^(?:\d+[\.\)、:：]|[-*#•`])", normalized)
+            or any(character in "#`" for character in normalized)
+            or ":" in normalized
+            or "：" in normalized
+        ):
+            raise ValueError(
+                "generated media name must not contain numbering or Markdown"
+            )
+        return normalized
+
+
+class AigcGeneratedMediaNamingResult(SchemaModel):
+    status: AigcGeneratedMediaNamingStatus
+    model: Literal["doubao-seed-2-0-mini-260428"] = (
+        AIGC_GENERATED_MEDIA_NAMING_MODEL
+    )
+    name: str | None = None
+
+    @model_validator(mode="after")
+    def validate_status_name(self) -> "AigcGeneratedMediaNamingResult":
+        if self.status == AigcGeneratedMediaNamingStatus.SUCCEEDED:
+            if self.name is None:
+                raise ValueError("successful generated media naming requires name")
+            validated = AigcGeneratedMediaName(name=self.name)
+            self.name = validated.name
+        elif self.name is not None:
+            raise ValueError("failed generated media naming must not include name")
+        return self
+
+
 AigcImageAspectRatio: TypeAlias = Literal["1:1", "16:9", "9:16", "4:3", "3:4"]
 AigcImagePresetSize: TypeAlias = SeedreamImagePresetSize
 AigcImageSize: TypeAlias = SeedreamImageSize
@@ -187,6 +322,12 @@ AigcPromptOptimizationMode: TypeAlias = Literal[
     "video_generation",
 ]
 AigcPromptOptimizationTargetType: TypeAlias = AigcPromptOptimizationMode
+AigcImagePromptOptimizationMode: TypeAlias = Literal["local_edit", "full_design"]
+AigcSeedreamGenerationType: TypeAlias = Literal[
+    "文生图",
+    "图像编辑",
+    "参考图生图",
+]
 AigcVideoEnhancementToolVersion: TypeAlias = Literal["standard", "professional"]
 AigcVideoEnhancementScene: TypeAlias = Literal[
     "common",
@@ -522,6 +663,21 @@ AigcPromptTargetConfig: TypeAlias = (
 )
 
 
+class AigcPromptSourceImage(SchemaModel):
+    source_node_id: str = Field(..., min_length=1, max_length=120)
+    source_handle: Literal["image"]
+    target_handle: Literal["image", "edit_image"]
+    asset_id: str = Field(..., min_length=1)
+    run_id: str | None = Field(default=None, min_length=1)
+
+
+class AigcPromptPipelineContext(SchemaModel):
+    pipeline_id: str = Field(..., min_length=1)
+    base_revision: int = Field(..., ge=0)
+    definition_snapshot: "AigcPipelineDefinitionV2"
+    source_image: AigcPromptSourceImage | None = None
+
+
 class AigcPromptOptimizeRequest(SchemaModel):
     target_node_id: str = Field(..., min_length=1, max_length=120)
     target_type: AigcPromptOptimizationTargetType
@@ -529,6 +685,7 @@ class AigcPromptOptimizeRequest(SchemaModel):
     optimization_direction: str = Field(default="", max_length=2000)
     text: str = Field(default="", max_length=20000)
     reference_instructions: list[str] = Field(default_factory=list, max_length=10)
+    pipeline_context: AigcPromptPipelineContext | None = None
 
     @field_validator("text")
     @classmethod
@@ -543,8 +700,6 @@ class AigcPromptOptimizeRequest(SchemaModel):
         for value in values:
             if len(value) > 4000:
                 raise ValueError("reference instruction exceeds 4000 characters")
-            if COORDINATE_TAG_PATTERN.search(value):
-                raise ValueError("coordinate_tag_forbidden")
         return values
 
     @model_validator(mode="after")
@@ -566,7 +721,64 @@ class AigcPromptOptimizeRequest(SchemaModel):
                 raise ValueError(
                     "reference_instructions are only supported for image targets"
                 )
+        if self.pipeline_context is not None and self.target_type != "image_to_image":
+            raise ValueError(
+                "pipeline_context is only supported for image_to_image targets"
+            )
         return self
+
+
+class AigcImagePromptSection(SchemaModel):
+    label: str = Field(..., min_length=1, max_length=80)
+    content: str = Field(..., min_length=1, max_length=20000)
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("image prompt section label must not be blank")
+        return normalized
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("image prompt section content must not be blank")
+        return normalized
+
+
+class AigcImagePromptSections(SchemaModel):
+    sections: list[AigcImagePromptSection] = Field(..., min_length=1, max_length=20)
+
+
+class AigcImagePromptLocalEditResult(SchemaModel):
+    optimization_mode: Literal["local_edit"]
+    optimized_text: str = Field(..., min_length=1, max_length=20000)
+    optimized_reference_instructions: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+    )
+
+
+class AigcImagePromptFullDesignResult(AigcImagePromptSections):
+    optimization_mode: Literal["full_design"]
+    optimized_reference_instructions: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+    )
+
+
+AigcImagePromptOptimizationResult: TypeAlias = (
+    AigcImagePromptLocalEditResult | AigcImagePromptFullDesignResult
+)
+
+
+class AigcSeedreamPromptOptimizationResult(SchemaModel):
+    generation_type: AigcSeedreamGenerationType
+    optimized_text: str = Field(..., min_length=1, max_length=20000)
+    optimization_explanation: str = Field(..., min_length=1, max_length=2000)
 
 
 class AigcPromptOptimizeResponse(SchemaModel):
@@ -575,6 +787,8 @@ class AigcPromptOptimizeResponse(SchemaModel):
         default_factory=list,
         max_length=10,
     )
+    generation_type: AigcSeedreamGenerationType | None = None
+    optimization_explanation: str = Field(default="", max_length=2000)
 
     @field_validator("optimized_text")
     @classmethod
@@ -589,9 +803,14 @@ class AigcPromptOptimizeResponse(SchemaModel):
         for value in values:
             if len(value) > 4000:
                 raise ValueError("optimized reference instruction exceeds 4000 characters")
-            if COORDINATE_TAG_PATTERN.search(value):
-                raise ValueError("coordinate_tag_forbidden")
         return values
+
+    @field_validator("optimization_explanation")
+    @classmethod
+    def reject_explanation_coordinate_tags(cls, value: str) -> str:
+        if COORDINATE_TAG_PATTERN.search(value):
+            raise ValueError("coordinate_tag_forbidden")
+        return value
 
 
 class ImageInputConfig(SchemaModel):
@@ -887,6 +1106,10 @@ class VideoFaceBlurConfig(SchemaModel):
     mask_strength: AigcVideoFaceBlurMaskStrength = "medium"
 
 
+class VideoSubtitleExtractionConfig(SchemaModel):
+    mode: Literal["Subtitle"] = "Subtitle"
+
+
 MultiTrackKind: TypeAlias = Literal["video", "audio", "image", "text", "subtitle"]
 MultiTrackFrameRate: TypeAlias = Literal[24, 25, 30, 50, 60]
 
@@ -922,12 +1145,56 @@ class MultiTrackTransform(SchemaModel):
 
 
 class MultiTrackTextStyle(SchemaModel):
+    font_type: str | None = None
     font_size: float = 48
     color: str = "#FFFFFFFF"
     bold: bool = False
     italic: bool = False
     underline: bool = False
     background_color: str = "#00000000"
+
+    @field_validator("font_type")
+    @classmethod
+    def validate_font_type(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if (
+            len(value) > MULTI_TRACK_FONT_TYPE_MAX_LENGTH
+            or value != value.strip()
+            or "\\" in value
+            or MULTI_TRACK_FONT_CONTROL_PATTERN.search(value)
+        ):
+            raise ValueError("invalid_font_type")
+        if value in MEDIAKIT_FONT_PRESET_IDS:
+            return value
+        try:
+            parsed = urlsplit(value)
+            _ = parsed.port
+        except ValueError as exc:
+            raise ValueError("invalid_font_type") from exc
+        hostname = (parsed.hostname or "").lower().removesuffix(".")
+        try:
+            ip_address(hostname)
+        except ValueError:
+            is_ip_literal = False
+        else:
+            is_ip_literal = True
+        is_local_hostname = (
+            hostname == "localhost"
+            or hostname.endswith(".localhost")
+            or hostname.endswith(MULTI_TRACK_LOCAL_HOST_SUFFIXES)
+        )
+        if (
+            parsed.scheme.lower() != "https"
+            or not hostname
+            or is_ip_literal
+            or _is_multitrack_numeric_hostname(hostname)
+            or is_local_hostname
+            or "@" in parsed.netloc
+            or not MULTI_TRACK_FONT_FILE_PATTERN.search(parsed.path)
+        ):
+            raise ValueError("invalid_font_type")
+        return value
 
 
 class MultiTrackTransition(SchemaModel):
@@ -1430,6 +1697,7 @@ class AigcNodeBase(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     id: str = Field(..., min_length=1, max_length=120)
+    custom_name: str | None = Field(default=None, max_length=120)
     position: AigcPoint
     size: AigcSize
 
@@ -1439,6 +1707,18 @@ class AigcNodeBase(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("node id must not be blank")
+        return stripped
+
+    @field_validator("custom_name", mode="before")
+    @classmethod
+    def normalize_custom_name(cls, value: object) -> object:
+        if value is None or not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        if not stripped:
+            return None
+        if any(character in "\r\n" or ord(character) < 32 for character in stripped):
+            raise ValueError("custom_name must be a single line without control characters")
         return stripped
 
 
@@ -1512,6 +1792,13 @@ class VideoFaceBlurNode(AigcNodeBase):
     config: VideoFaceBlurConfig = Field(default_factory=VideoFaceBlurConfig)
 
 
+class VideoSubtitleExtractionNode(AigcNodeBase):
+    type: Literal[AigcNodeType.VIDEO_SUBTITLE_EXTRACTION]
+    config: VideoSubtitleExtractionConfig = Field(
+        default_factory=VideoSubtitleExtractionConfig
+    )
+
+
 class MultiTrackEditNode(AigcNodeBase):
     type: Literal[AigcNodeType.MULTI_TRACK_EDIT]
     config: MultiTrackEditConfig = Field(default_factory=MultiTrackEditConfig)
@@ -1558,6 +1845,7 @@ AigcNode: TypeAlias = Annotated[
     | VideoGenerationNode
     | VideoEnhancementNode
     | VideoFaceBlurNode
+    | VideoSubtitleExtractionNode
     | LayerCanvasNode
     | LayerCompositeNode
     | TextOutputNode
@@ -1577,6 +1865,7 @@ AigcV2Node: TypeAlias = Annotated[
     | VideoGenerationNode
     | VideoEnhancementNode
     | VideoFaceBlurNode
+    | VideoSubtitleExtractionNode
     | MultiTrackEditNode
     | JsonParserNode
     | LayerCanvasNode
@@ -1799,7 +2088,15 @@ AIGC_NODE_REGISTRY: tuple[AigcNodeRegistryItem, ...] = (
         label="LLM",
         category=AigcNodeCategory.MODEL,
         executable=True,
-        inputs=[_port("prompt", "提示词", AigcPortType.TEXT)],
+        inputs=[
+            _port("prompt", "提示词", AigcPortType.TEXT),
+            _port(
+                "image",
+                "图片",
+                AigcPortType.IMAGE_ASSET,
+                required=False,
+            ),
+        ],
         outputs=[_port("text", "文本", AigcPortType.TEXT)],
         models=[AIGC_DEFAULT_TEXT_MODEL],
     ),
@@ -1924,6 +2221,14 @@ AIGC_NODE_REGISTRY: tuple[AigcNodeRegistryItem, ...] = (
         outputs=[_port("video", "视频", AigcPortType.VIDEO_ASSET)],
     ),
     AigcNodeRegistryItem(
+        type=AigcNodeType.VIDEO_SUBTITLE_EXTRACTION,
+        label="视频字幕提取",
+        category=AigcNodeCategory.MODEL,
+        executable=True,
+        inputs=[_port("video", "视频", AigcPortType.VIDEO_ASSET)],
+        outputs=[_port("subtitle", "字幕", AigcPortType.SUBTITLE_ASSET)],
+    ),
+    AigcNodeRegistryItem(
         type=AigcNodeType.LAYER_CANVAS,
         label="图层画布",
         category=AigcNodeCategory.CONTROL,
@@ -1946,7 +2251,12 @@ AIGC_NODE_REGISTRY: tuple[AigcNodeRegistryItem, ...] = (
         executable=True,
         inputs=[
             _port("layers", "图层集", AigcPortType.LAYER_SET),
-            _port("replacement", "替换图层", AigcPortType.EDITED_LAYER),
+            _port(
+                "replacement",
+                "替换图层",
+                AigcPortType.EDITED_LAYER,
+                required=False,
+            ),
         ],
         outputs=[
             _port("image", "图片", AigcPortType.IMAGE_ASSET),
@@ -2013,6 +2323,14 @@ MULTI_TRACK_EDIT_NODE_REGISTRY_ITEM = AigcNodeRegistryItem(
             required=False,
             multiple=True,
             max_connections=30,
+        ),
+        _port(
+            "subtitles",
+            "字幕",
+            AigcPortType.SUBTITLE_ASSET,
+            required=False,
+            multiple=True,
+            max_connections=10,
         ),
     ],
     outputs=[_port("video", "视频", AigcPortType.VIDEO_ASSET)],
@@ -2147,11 +2465,55 @@ class AigcPipelineUpdate(SchemaModel):
         return value.strip() if isinstance(value, str) else value
 
 
+class AigcThumbnailMediaKind(str, Enum):
+    IMAGE = "image"
+    VIDEO = "video"
+
+
+class AigcPipelineThumbnailSource(str, Enum):
+    PINNED = "pinned"
+    LATEST_OUTPUT = "latest_output"
+
+
+class AigcPipelineThumbnail(SchemaModel):
+    asset_id: str = Field(..., min_length=1)
+    mime_type: str = Field(..., min_length=1)
+    kind: AigcThumbnailMediaKind
+    source: AigcPipelineThumbnailSource
+    url: str = Field(..., min_length=1)
+
+
+class AigcPipelineThumbnailCandidate(SchemaModel):
+    asset_id: str = Field(..., min_length=1)
+    run_id: str = Field(..., min_length=1)
+    node_id: str = Field(..., min_length=1)
+    mime_type: str = Field(..., min_length=1)
+    kind: AigcThumbnailMediaKind
+    url: str = Field(..., min_length=1)
+    created_at: datetime
+
+
+class AigcPipelineThumbnailUpdate(SchemaModel):
+    asset_id: str | None = Field(default=None, min_length=1)
+
+    @field_validator("asset_id", mode="before")
+    @classmethod
+    def strip_asset_id(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("asset_id must not be blank")
+        return stripped
+
+
 class AigcPipeline(AigcPipelineCreate):
     definition: AigcPipelineDefinitionV2
     id: str = Field(default_factory=lambda: str(uuid4()))
     revision: int = Field(default=0, ge=0)
     latest_run_status: AigcPipelineRunStatus | None = None
+    thumbnail_asset_id: str | None = None
+    thumbnail: AigcPipelineThumbnail | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -2230,6 +2592,8 @@ class AigcJsonParserItem(SchemaModel):
 
 class AigcTaskResult(SchemaModel):
     kind: AigcResultKind = AigcResultKind.NONE
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+    naming: AigcGeneratedMediaNamingResult | None = None
     text: str | None = None
     text_digest: str | None = Field(default=None, min_length=64, max_length=64)
     items: list[AigcJsonParserItem] = Field(
@@ -2383,3 +2747,7 @@ class AigcPage(SchemaModel, Generic[T]):
 
 def aigc_node_run_key(run_id: str, node_id: str) -> str:
     return f"{run_id}:{node_id}"
+
+
+AigcPromptPipelineContext.model_rebuild()
+AigcPromptOptimizeRequest.model_rebuild()

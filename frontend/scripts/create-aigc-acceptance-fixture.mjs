@@ -117,6 +117,36 @@ function llmNode(id, x, y) {
   };
 }
 
+function imageModelNode(id, x, y) {
+  return {
+    id,
+    type: "text_to_image",
+    position: { x, y },
+    size: { width: 260, height: 200 },
+    config: {
+      model: "doubao-seedream-5-0-pro-260628",
+      aspect_ratio: "1:1",
+      size: "2K",
+      format: "png"
+    }
+  };
+}
+
+function imageNode(id, x, y, title) {
+  return {
+    id,
+    type: "image",
+    position: { x, y },
+    size: { width: 260, height: 220 },
+    config: {
+      asset_id: null,
+      bbox: null,
+      bbox_asset_id: null,
+      title
+    }
+  };
+}
+
 function textEdge(sourceNodeId, targetNodeId, id, targetHandle = "text") {
   return {
     id,
@@ -130,20 +160,73 @@ function textEdge(sourceNodeId, targetNodeId, id, targetHandle = "text") {
 const flowIsolationDefinition = {
   schemaVersion: 2,
   nodes: [
-    textNode("flow-a-input", 40, 80, "流程 A 输入"),
-    llmNode("flow-a-model", 340, 80),
-    textNode("flow-a-output", 640, 80, "流程 A 输出"),
-    textNode("flow-b-input", 40, 400, "流程 B 输入"),
-    llmNode("flow-b-model", 340, 400),
-    textNode("flow-b-output", 640, 400, "流程 B 输出")
+    textNode("shared-input", 40, 300, "共享输入"),
+    llmNode("shared-model", 340, 300),
+    textNode("shared-json", 640, 300, "{\"items\":[]}"),
+    {
+      id: "shared-parser",
+      type: "json_parser",
+      position: { x: 940, y: 300 },
+      size: { width: 260, height: 180 },
+      config: { json_path: "$.items" }
+    },
+    ...["a", "b", "c"].flatMap((branch, index) => {
+      const y = 40 + index * 300;
+      return [
+        {
+          ...textNode(
+            `branch-${branch}-prompt`,
+            1240,
+            y,
+            `分支 ${branch.toUpperCase()} 提示词`
+          ),
+          config: {
+            bbox_references: [],
+            text: `分支 ${branch.toUpperCase()} 提示词`,
+            title: `分支 ${branch.toUpperCase()} 提示词`,
+            generated_by_parser_node_id: "shared-parser",
+            generated_item_index: index,
+            generated_from_run_id: null
+          }
+        },
+        imageModelNode(`branch-${branch}-model`, 1540, y),
+        imageNode(
+          `branch-${branch}-output`,
+          1840,
+          y,
+          `分支 ${branch.toUpperCase()} 图片`
+        )
+      ];
+    })
   ],
   edges: [
-    textEdge("flow-a-input", "flow-a-model", "flow-a-in", "prompt"),
-    textEdge("flow-a-model", "flow-a-output", "flow-a-out"),
-    textEdge("flow-b-input", "flow-b-model", "flow-b-in", "prompt"),
-    textEdge("flow-b-model", "flow-b-output", "flow-b-out")
+    textEdge("shared-input", "shared-model", "shared-input-model", "prompt"),
+    textEdge("shared-model", "shared-json", "shared-model-json"),
+    textEdge("shared-json", "shared-parser", "shared-json-parser"),
+    ...["a", "b", "c"].flatMap((branch) => [
+      {
+        id: `shared-parser-${branch}`,
+        sourceNodeId: "shared-parser",
+        sourceHandle: "items",
+        targetNodeId: `branch-${branch}-prompt`,
+        targetHandle: "text"
+      },
+      textEdge(
+        `branch-${branch}-prompt`,
+        `branch-${branch}-model`,
+        `branch-${branch}-prompt-model`,
+        "prompt"
+      ),
+      {
+        id: `branch-${branch}-model-output`,
+        sourceNodeId: `branch-${branch}-model`,
+        sourceHandle: "image",
+        targetNodeId: `branch-${branch}-output`,
+        targetHandle: "image"
+      }
+    ])
   ],
-  viewport: { x: 0, y: 0, zoom: 0.85 }
+  viewport: { x: 0, y: 0, zoom: 0.65 }
 };
 
 const nodeLabelFixtureNodeIds = {
@@ -644,7 +727,7 @@ const pipelineResponse = await fetch(`${backendBaseUrl}/api/aigc/pipelines`, {
       : createNodeLabelsFixture
         ? "节点编号与内嵌 BBox 浏览器验收专用；复用已有资产，不执行生成。"
         : createFlowIsolationFixture
-          ? "两个断开的 text -> llm -> text 流程；仅用于确定性 Run API 验收，不执行生成。"
+          ? "共享 JSON Parser 上游的三个生图分支；仅用于确定性 Run API 验收，不执行生成。"
           : "开发环境验收数据；执行入口已禁用。",
     definition
   })

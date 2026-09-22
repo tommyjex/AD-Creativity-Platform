@@ -63,6 +63,8 @@ import type {
   AigcPipelineRunCreate,
   AigcPipelineRunDetail,
   AigcPipelineRun,
+  AigcPipelineThumbnailCandidate,
+  AigcPipelineThumbnailUpdate,
   AigcPipelineTemplate,
   AigcPipelineTemplateUpdate,
   AigcPipelineUpdate,
@@ -1523,6 +1525,43 @@ export function createApiClient(options: ApiClientOptions = {}) {
         {
           ...requestOptions,
           headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    listAigcPipelineThumbnailCandidates(
+      pipelineId: string,
+      filters: AigcListFilters = {},
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPage<AigcPipelineThumbnailCandidate>>(
+        fetcher,
+        baseUrl,
+        withAigcListQuery(
+          `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/thumbnail-candidates`,
+          filters
+        ),
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    updateAigcPipelineThumbnail(
+      pipelineId: string,
+      payload: AigcPipelineThumbnailUpdate,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AigcPipeline>(
+        fetcher,
+        baseUrl,
+        `/api/aigc/pipelines/${encodeURIComponent(pipelineId)}/thumbnail`,
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "PUT"
         }
       );
     },

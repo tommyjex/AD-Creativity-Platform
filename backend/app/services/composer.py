@@ -303,10 +303,6 @@ class FfmpegVideoComposer:
         phase: str,
         asset_id: str | None = None,
     ) -> None:
-        # #region debug-point F1-F2-F5:ffmpeg-command
-        if phase == "subtitles":
-            exec("try:\n urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:7777/event',data=json.dumps({'sessionId':'mediakit-asr-failure','runId':'ffmpeg-post-fix','hypothesisId':'F1-F2-F5','location':'composer.py:_run_ffmpeg','msg':'[DEBUG] FFmpeg subtitle command','data':{'executable':command[0],'has_vf':'-vf' in command,'filter_name':'subtitles','argument_count':len(command)},'ts':int(time.time()*1000)}).encode(),headers={'Content-Type':'application/json'}),timeout=0.5).read()\nexcept Exception:\n pass")
-        # #endregion
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,
@@ -317,10 +313,6 @@ class FfmpegVideoComposer:
                 process.communicate(),
                 timeout=self.timeout_seconds,
             )
-            # #region debug-point F1-F2-F3-F4-F5:ffmpeg-result
-            if phase == "subtitles":
-                exec("try:\n urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:7777/event',data=json.dumps({'sessionId':'mediakit-asr-failure','runId':'ffmpeg-post-fix','hypothesisId':'F1-F2-F3-F4-F5','location':'composer.py:_run_ffmpeg','msg':'[DEBUG] FFmpeg subtitle result','data':{'returncode':process.returncode,'stderr_tail':stderr.decode(errors='replace')[-2000:]},'ts':int(time.time()*1000)}).encode(),headers={'Content-Type':'application/json'}),timeout=0.5).read()\nexcept Exception:\n pass")
-            # #endregion
         except TimeoutError as exc:
             raise VideoCompositionError(
                 "FFmpeg composition timed out",

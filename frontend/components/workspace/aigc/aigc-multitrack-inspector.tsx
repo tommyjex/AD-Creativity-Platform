@@ -1,10 +1,19 @@
 "use client";
 
 import { Bold, Italic, Underline } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AigcMultitrackColorField } from "./aigc-multitrack-color-field";
+import {
+  fontTypeIssue,
+  isMediaKitFontPreset,
+  MEDIAKIT_FONT_PRESETS
+} from "@/lib/aigc/multitrack-fonts";
+import { useMultitrackPreviewFont } from "@/lib/aigc/multitrack-font-preview";
+import { resolveMultitrackTextPreview } from "@/lib/aigc/multitrack-text-preview";
 import type {
   AigcMultitrackEditorAction,
   AigcTimelineSource
@@ -35,6 +44,7 @@ export function AigcMultitrackInspector({
   selectedTrack: MultiTrackTrack | null;
   sources: AigcTimelineSource[];
 }) {
+  const transientConfig = useRef<MultiTrackEditConfig | null>(null);
   const replace = (next: MultiTrackEditConfig) =>
     dispatch({ type: "config/replace", config: next });
   const updateElement = (
@@ -51,6 +61,62 @@ export function AigcMultitrackInspector({
       }))
     });
   };
+  const updateTextStyleConfig = (
+    base: MultiTrackEditConfig,
+    patch: Partial<MultiTrackTextElement["style"]>
+  ) => {
+    if (!selectedElement) return base;
+    return {
+      ...base,
+      tracks: base.tracks.map((track) => ({
+        ...track,
+        elements: track.elements.map((element) =>
+          element.id === selectedElement.id &&
+          (element.type === "text" || element.type === "subtitle")
+            ? { ...element, style: { ...element.style, ...patch } }
+            : element
+        )
+      }))
+    };
+  };
+  const beginColorGesture = () => {
+    transientConfig.current ??= structuredClone(config);
+  };
+  const previewColor = (
+    patch: Partial<MultiTrackTextElement["style"]>
+  ) => {
+    dispatch({
+      type: "config/replace-transient",
+      config: updateTextStyleConfig(config, patch)
+    });
+  };
+  const commitColorGesture = (
+    patch: Partial<MultiTrackTextElement["style"]>
+  ) => {
+    const initialConfig = transientConfig.current;
+    const next = updateTextStyleConfig(config, patch);
+    transientConfig.current = null;
+    if (!initialConfig) {
+      replace(next);
+      return;
+    }
+    dispatch({
+      type: "config/commit-transient",
+      config: next,
+      initialConfig
+    });
+  };
+  const cancelColorGesture = () => {
+    const initialConfig = transientConfig.current;
+    transientConfig.current = null;
+    if (initialConfig) {
+      dispatch({ type: "config/cancel-transient", initialConfig });
+    }
+  };
+  const selectedTextPreview =
+    selectedElement?.type === "text"
+      ? resolveMultitrackTextPreview(selectedElement, sources)
+      : null;
 
   return (
     <aside
@@ -89,17 +155,6 @@ export function AigcMultitrackInspector({
               value={selectedTrack.name}
             />
           </Field>
-          <Button
-            className="w-full text-zinc-400 hover:text-red-300"
-            onClick={() =>
-              dispatch({ type: "track/remove", trackId: selectedTrack.id })
-            }
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            删除轨道
-          </Button>
         </InspectorSection>
       ) : null}
 
@@ -146,23 +201,64 @@ export function AigcMultitrackInspector({
           {selectedElement.type !== "subtitle" ? (
             <InspectorSection title="素材来源">
               {selectedElement.type === "text" ? (
-                <Field label="内联文字">
-                  <textarea
-                    className="min-h-20 w-full resize-y border border-[#343a43] bg-[#101318] px-2.5 py-2 text-xs outline-none focus:border-blue-500"
-                    onChange={(event) =>
-                      updateElement((element) =>
-                        element.type === "text"
-                          ? {
-                              ...element,
-                              inline_text: event.target.value,
-                              source: null
-                            }
-                          : element
-                      )
-                    }
-                    value={selectedElement.inline_text ?? ""}
-                  />
-                </Field>
+                selectedElement.source && selectedTextPreview ? (
+                  <Field label="上游文字">
+                    <textarea
+                      aria-label="上游文字预览"
+                      className="min-h-20 w-full resize-y border border-[#343a43] bg-[#101318] px-2.5 py-2 text-xs text-zinc-300 outline-none"
+                      readOnly
+                      value={selectedTextPreview.text}
+                    />
+                    <p className="text-[10px] leading-4 text-zinc-500">
+                      {selectedTextPreview.status === "resolved"
+                        ? "来自最新成功运行"
+                        : selectedTextPreview.status === "configured"
+                          ? "来自静态文字配置"
+                          : "上游节点成功运行后显示实际文字"}
+                    </p>
+                    <Button
+                      className="w-full"
+                      disabled={
+                        selectedTextPreview.status === "unavailable"
+                      }
+                      onClick={() =>
+                        updateElement((element) =>
+                          element.type === "text"
+                            ? {
+                                ...element,
+                                inline_text: selectedTextPreview.text,
+                                source: null
+                              }
+                            : element
+                        )
+                      }
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      转为内联文字
+                    </Button>
+                  </Field>
+                ) : (
+                  <Field label="内联文字">
+                    <textarea
+                      aria-label="内联文字"
+                      className="min-h-20 w-full resize-y border border-[#343a43] bg-[#101318] px-2.5 py-2 text-xs outline-none focus:border-blue-500"
+                      onChange={(event) =>
+                        updateElement((element) =>
+                          element.type === "text"
+                            ? {
+                                ...element,
+                                inline_text: event.target.value,
+                                source: null
+                              }
+                            : element
+                        )
+                      }
+                      value={selectedElement.inline_text ?? ""}
+                    />
+                  </Field>
+                )
               ) : (
                 <Field label="直接上游">
                   <select
@@ -380,7 +476,12 @@ export function AigcMultitrackInspector({
           {selectedElement.type === "text" ||
           selectedElement.type === "subtitle" ? (
             <TextStyleSection
+              beginColorGesture={beginColorGesture}
+              cancelColorGesture={cancelColorGesture}
+              commitColorGesture={commitColorGesture}
               element={selectedElement}
+              key={`${selectedElement.id}:${selectedElement.style.font_type ?? ""}`}
+              previewColor={previewColor}
               updateElement={updateElement}
             />
           ) : null}
@@ -420,10 +521,20 @@ export function AigcMultitrackInspector({
 }
 
 function TextStyleSection({
+  beginColorGesture,
+  cancelColorGesture,
+  commitColorGesture,
   element,
+  previewColor,
   updateElement
 }: {
+  beginColorGesture: () => void;
+  cancelColorGesture: () => void;
+  commitColorGesture: (
+    patch: Partial<MultiTrackTextElement["style"]>
+  ) => void;
   element: MultiTrackTextElement | Extract<MultiTrackElement, { type: "subtitle" }>;
+  previewColor: (patch: Partial<MultiTrackTextElement["style"]>) => void;
   updateElement: (
     update: (element: MultiTrackElement) => MultiTrackElement
   ) => void;
@@ -436,8 +547,132 @@ function TextStyleSection({
         ? { ...candidate, style: { ...candidate.style, ...patch } }
         : candidate
     );
+  const fontType = element.style.font_type ?? null;
+  const [fontMode, setFontMode] = useState<"custom" | "preset">(() =>
+    fontType !== null && !isMediaKitFontPreset(fontType) ? "custom" : "preset"
+  );
+  const [customFontDraft, setCustomFontDraft] = useState(() =>
+    fontType !== null && !isMediaKitFontPreset(fontType) ? fontType : ""
+  );
+  const invalidCustomFont =
+    customFontDraft !== "" && fontTypeIssue(customFontDraft) !== null;
+  const previewFont = useMultitrackPreviewFont(fontType);
+
+  function selectFontMode(mode: "custom" | "preset") {
+    if (fontMode === mode) return;
+    setFontMode(mode);
+    if (mode === "preset") {
+      updateStyle({ font_type: null });
+    }
+  }
+
+  function commitCustomFont() {
+    const nextFontType = customFontDraft || null;
+    if (nextFontType !== fontType) {
+      updateStyle({ font_type: nextFontType });
+    }
+  }
+
   return (
     <InspectorSection title="文字样式">
+      <div className="space-y-2">
+        <div
+          aria-label="字体模式"
+          className="grid grid-cols-2 border border-[#343a43] bg-[#101318] p-0.5"
+          role="group"
+        >
+          {[
+            { label: "预置字体", mode: "preset" as const },
+            { label: "自定义 URL", mode: "custom" as const }
+          ].map(({ label, mode }) => (
+            <button
+              aria-pressed={fontMode === mode}
+              className={cn(
+                "h-7 px-2 text-[10px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500",
+                fontMode === mode
+                  ? "bg-blue-500/15 text-blue-300"
+                  : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
+              )}
+              key={mode}
+              onClick={() => selectFontMode(mode)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {fontMode === "preset" ? (
+          <>
+            <Field label="预置字体">
+              <select
+                aria-label="预置字体"
+                className={selectClass}
+                onChange={(event) =>
+                  updateStyle({ font_type: event.target.value || null })
+                }
+                value={isMediaKitFontPreset(fontType ?? "") ? fontType ?? "" : ""}
+              >
+                <option value="">默认字体</option>
+                {MEDIAKIT_FONT_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {isMediaKitFontPreset(fontType ?? "") ? (
+              <p className="text-[10px] leading-4 text-zinc-500">
+                预置字体仅用于 MediaKit 合成，最终字形以 MediaKit 合成为准。
+              </p>
+            ) : null}
+            {fontType === "1187225" ? (
+              <p className="text-[10px] leading-4 text-amber-300">
+                该字体不支持中文，请仅用于拉丁字符。
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <div className="space-y-1.5">
+            <Field label="字体文件 URL">
+              <Input
+                aria-invalid={invalidCustomFont}
+                aria-label="字体文件 URL"
+                className={cn(
+                  inputClass,
+                  "font-mono text-[10px]",
+                  invalidCustomFont && "border-red-400 focus-visible:border-red-400"
+                )}
+                onBlur={commitCustomFont}
+                onChange={(event) => setCustomFontDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitCustomFont();
+                    event.currentTarget.blur();
+                  }
+                }}
+                placeholder="https://example.com/font.ttf"
+                type="url"
+                value={customFontDraft}
+              />
+            </Field>
+            <p className="text-[10px] leading-4 text-zinc-500">
+              仅支持公网 HTTPS 地址，路径以 .ttf 或 .otf 结尾。
+            </p>
+            {invalidCustomFont ? (
+              <p className="text-[10px] leading-4 text-red-300" role="alert">
+                请输入公网 HTTPS TTF/OTF 字体文件 URL。
+              </p>
+            ) : null}
+            {previewFont.status === "failed" ? (
+              <p className="text-[10px] leading-4 text-amber-300" role="status">
+                浏览器无法加载字体，MediaKit 合成仍会尝试使用该 URL
+              </p>
+            ) : null}
+          </div>
+        )}
+      </div>
       <NumberField
         label="字号"
         min={1}
@@ -445,14 +680,28 @@ function TextStyleSection({
         value={element.style.font_size}
       />
       <div className="grid grid-cols-2 gap-2">
-        <ColorField
+        <AigcMultitrackColorField
           label="文字颜色"
-          onChange={(value) => updateStyle({ color: value })}
+          onCommit={(value) => updateStyle({ color: value })}
+          onGestureCancel={cancelColorGesture}
+          onGestureCommit={(value) =>
+            commitColorGesture({ color: value })
+          }
+          onGestureStart={beginColorGesture}
+          onPreview={(value) => previewColor({ color: value })}
           value={element.style.color}
         />
-        <ColorField
+        <AigcMultitrackColorField
           label="背景颜色"
-          onChange={(value) => updateStyle({ background_color: value })}
+          onCommit={(value) => updateStyle({ background_color: value })}
+          onGestureCancel={cancelColorGesture}
+          onGestureCommit={(value) =>
+            commitColorGesture({ background_color: value })
+          }
+          onGestureStart={beginColorGesture}
+          onPreview={(value) =>
+            previewColor({ background_color: value })
+          }
           value={element.style.background_color}
         />
       </div>

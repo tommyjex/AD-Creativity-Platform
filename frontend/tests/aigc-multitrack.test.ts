@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  MEDIAKIT_FONT_PRESETS,
+  fontTypeIssue
+} from "@/lib/aigc/multitrack-fonts";
+import {
   AIGC_DEFAULT_MULTI_TRACK_EDIT_CONFIG,
   normalizeMultiTrackEditConfig,
   validateMultiTrackEditConfig
 } from "@/lib/aigc/multitrack";
+import { migrateAigcDefinitionV2 } from "@/lib/aigc/definition-migration";
 import { AIGC_NODE_REGISTRY } from "@/lib/aigc/node-registry";
 import type {
   MultiTrackEditConfig,
@@ -76,7 +81,165 @@ function codes(candidate: MultiTrackEditConfig): string[] {
 }
 
 describe("AIGC multi-track edit contract", () => {
-  it("registers the execution node and four multi-value inputs", () => {
+  it("validates MediaKit preset and custom font values", () => {
+    expect(MEDIAKIT_FONT_PRESETS).toHaveLength(10);
+    for (const preset of MEDIAKIT_FONT_PRESETS) {
+      expect(fontTypeIssue(preset.id)).toBeNull();
+    }
+    expect(fontTypeIssue(null)).toBeNull();
+    expect(
+      fontTypeIssue(
+        "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf"
+      )
+    ).toBeNull();
+    expect(
+      fontTypeIssue("https://fonts.example.com/title.OTF?v=2#regular")
+    ).toBeNull();
+    expect(
+      fontTypeIssue("https://123.example.com/font.ttf")
+    ).toBeNull();
+
+    for (const value of [
+      "http://fonts.example.com/font.ttf",
+      "/fonts/font.ttf",
+      "https:fonts.example.com/font.ttf",
+      "https:////fonts.example.com/font.ttf",
+      " https://fonts.example.com/font.ttf",
+      "https://fonts.example.com/font.ttf ",
+      "https://user:secret@fonts.example.com/font.ttf",
+      "https://fonts.example.com/font.woff2",
+      "https://localhost/font.ttf",
+      "https://fonts.localhost/font.ttf",
+      "https://127.0.0.1/font.ttf",
+      "https://10.0.0.1/font.ttf",
+      "https://8.8.8.8/font.ttf",
+      "https://2130706433/font.ttf",
+      "https://0x7f000001/font.ttf",
+      "https://127.1/font.ttf",
+      "https://0177.0x0.0.01/font.ttf",
+      "https://[::1]/font.ttf",
+      "https://[2001:db8::1]/font.ttf",
+      "https://fonts.local/font.ttf",
+      "https://fonts.internal/font.ttf",
+      "https://fonts.lan/font.ttf",
+      "https://fonts.home/font.ttf",
+      "https://fonts.example.com\\font.ttf",
+      "https://fonts.example.com/font\u0001.ttf",
+      "unknown-font",
+      `https://fonts.example.com/${"a".repeat(2030)}.ttf`
+    ]) {
+      expect(fontTypeIssue(value)).toBe("invalid_font_type");
+    }
+  });
+
+  it("normalizes missing text and subtitle font types to null", () => {
+    const text: MultiTrackElement = {
+      id: "text-1",
+      type: "text",
+      source: null,
+      inline_text: "标题",
+      target_time: { start_ms: 0, end_ms: 2000 },
+      loop: false,
+      transform: transform({ width: 800, height: 200 }),
+      style: {
+        font_size: 48,
+        color: "#FFFFFFFF",
+        bold: false,
+        italic: false,
+        underline: false,
+        background_color: "#00000000"
+      }
+    };
+    const subtitle: MultiTrackElement = {
+      id: "subtitle-1",
+      type: "subtitle",
+      asset_id: "subtitle-asset",
+      target_time: { start_ms: 0, end_ms: 2000 },
+      loop: false,
+      transform: transform({ y: 800, width: 1200, height: 200 }),
+      style: text.style
+    };
+
+    const normalized = normalizeMultiTrackEditConfig(config([text, subtitle]));
+
+    const [normalizedText, normalizedSubtitle] =
+      normalized.tracks[0].elements;
+    if (
+      normalizedText.type !== "text" ||
+      normalizedSubtitle.type !== "subtitle"
+    ) {
+      throw new Error("unexpected element types");
+    }
+    expect(normalizedText.style.font_type).toBeNull();
+    expect(normalizedSubtitle.style.font_type).toBeNull();
+  });
+
+  it("migrates missing font types and reports invalid values at the style field", () => {
+    const candidate = config([]);
+    candidate.tracks = [
+      {
+        id: "text-track",
+        name: "文字",
+        type: "text",
+        order: 0,
+        hidden: false,
+        muted: false,
+        elements: [
+          {
+            id: "text-1",
+            type: "text",
+            source: null,
+            inline_text: "标题",
+            target_time: { start_ms: 0, end_ms: 2000 },
+            loop: false,
+            transform: transform({ width: 800, height: 200 }),
+            style: {
+              font_size: 48,
+              color: "#FFFFFFFF",
+              bold: false,
+              italic: false,
+              underline: false,
+              background_color: "#00000000"
+            }
+          }
+        ]
+      }
+    ];
+    const migrated = migrateAigcDefinitionV2({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: "multitrack",
+          type: "multi_track_edit",
+          position: { x: 0, y: 0 },
+          size: { width: 320, height: 240 },
+          config: candidate
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    });
+    const node = migrated.nodes[0];
+    expect(node.type).toBe("multi_track_edit");
+    if (node.type !== "multi_track_edit") throw new Error("unexpected node");
+    const migratedElement = node.config.tracks[0].elements[0];
+    expect(migratedElement.type).toBe("text");
+    if (migratedElement.type !== "text") throw new Error("unexpected element");
+    expect(migratedElement.style.font_type).toBeNull();
+
+    const invalid = structuredClone(candidate);
+    const invalidElement = invalid.tracks[0].elements[0];
+    if (invalidElement.type !== "text") throw new Error("unexpected element");
+    invalidElement.style.font_type = "https://fonts.example.com/font.woff2";
+    expect(validateMultiTrackEditConfig(invalid)).toContainEqual(
+      expect.objectContaining({
+        code: "invalid_font_type",
+        path: "tracks.0.elements.0.style.font_type"
+      })
+    );
+  });
+
+  it("registers the execution node and five multi-value inputs", () => {
     const registration = AIGC_NODE_REGISTRY.find(
       (item) => item.type === "multi_track_edit"
     );
@@ -108,6 +271,12 @@ describe("AIGC multi-track edit contract", () => {
           type: "text",
           multiple: true,
           max_connections: 30
+        },
+        {
+          id: "subtitles",
+          type: "subtitle_asset",
+          multiple: true,
+          max_connections: 10
         }
       ],
       outputs: [{ id: "video", type: "video_asset" }]
@@ -254,6 +423,7 @@ describe("AIGC multi-track edit contract", () => {
       loop: false,
       transform: transform({ width: 800, height: 200 }),
       style: {
+        font_type: null,
         font_size: 48,
         color: "#FFFFFFFF",
         bold: false,

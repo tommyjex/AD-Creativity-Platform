@@ -250,6 +250,14 @@ export class AutosaveCoordinator<T> {
   async rebase(
     options: AutosaveRebaseOptions<T>
   ): Promise<AutosaveRebaseResult<T>> {
+    if (this.disposed || options.revision <= this.state.revision) {
+      return {
+        applied: false,
+        dirty: this.state.dirty,
+        revision: this.state.revision,
+        snapshot: this.latestSnapshot.value
+      };
+    }
     this.clearDebounce();
     if (this.drainPromise) {
       const activeDrain = this.drainPromise;

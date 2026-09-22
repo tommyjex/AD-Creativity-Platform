@@ -1,56 +1,45 @@
 # Debug Session: prompt-optimization-unavailable
 - **Status**: [OPEN]
-- **Issue**: Pipeline `7a58cf32-215e-4449-b87c-db5e62971e54` reports `AIGC prompt optimization failed`.
+- **Issue**: AIGC prompt optimization reports "AIGC prompt optimization failed" and must not surface validation-related failures to users.
+- **Debug Server**: Pending startup
+- **Log File**: `.dbg/trae-debug-log-prompt-optimization-unavailable.ndjson`
 
 ## Reproduction Steps
-1. Open the affected AIGC pipeline.
-2. Select a text prompt node.
-3. Trigger prompt optimization.
-4. Observe the generic service-unavailable error.
+1. Open an AIGC prompt optimization dialog.
+2. Submit a prompt for optimization.
+3. Observe the unavailable-service error or returned validation failure.
 
 ## Hypotheses & Verification
-| ID | Hypothesis | Likelihood | Effort | Expected Signal |
-|----|------------|------------|--------|-----------------|
-| A | Responses API/provider returns a concrete upstream error | Rejected | Low | Provider returned parseable optimized content. |
-| B | Prompt optimization request contains invalid or empty text | Rejected | Low | Request contained 672 characters and passed request validation. |
-| C | Backend configuration/credential is missing after restart | Rejected | Low | Real Responses API calls completed successfully. |
-| D | Frontend maps a specific backend response to a generic message | Confirmed | Medium | Backend exposed only a generic 502 after response validation failed. |
+| ID | Hypothesis | Likelihood | Effort | Evidence |
+|----|------------|------------|--------|----------|
+| A | Model output fails parse or protected-literal validation and becomes a 502. | High | Low | Pending |
+| B | Safety-preservation validation rejects a model result. | Medium | Low | Pending |
+| C | Pipeline/image context validation fails before generation. | Medium | Low | Pending |
+| D | Model provider has a transport, auth, timeout, or rate-limit failure. | Medium | Low | Pending |
+| E | The restarted backend has stale configuration or code. | Low | Low | Pending |
 
 ## Log Evidence
-Pre-fix reproduction:
-- Target: `image_to_image-e67a0355-e73a-40e8-b23c-f949210b1d2b`
-- Input text length: 672
-- BBox reference instruction count: 0
-- Ordinary reference image count: 4
-- Provider output reference instruction count: 4
-- Service rejected the response with
-  `AIGC prompt optimization changed reference count`.
-
-A second provider response used the observed misspelled field
-`optim_reference_instructions`, which failed strict structure parsing before
-service validation.
+- `trae-debug-log-prompt-optimization-unavailable.ndjson:1`: `video_generation` optimization request entered with 468 characters.
+- `trae-debug-log-prompt-optimization-unavailable.ndjson:2`: request entered the `ModelArkTextParseError` branch.
+- `trae-debug-log-prompt-optimization-unavailable.ndjson:3`: a subsequent request entered and completed without a parse, safety, or provider-error event.
 
 ## Verification Conclusion
-Root cause: the model inferred four reference instructions from the target's
-ordinary reference image count even though the input had no BBox reference
-instructions. It can also emit the observed shortened field name. Both cases
-were converted to a generic 502.
+- A is confirmed: the observed unavailable-service response was a parse/validation rejection, not an observed provider failure.
+- B, C, D, and E are not observed in this reproduction.
 
-Fix:
-- Accept the observed `optim_reference_instructions` alias during parsing.
-- When the input BBox instruction list is empty, discard model-invented
-  reference instructions.
-- Keep strict cardinality validation for every non-empty input list.
+## Video Reference Marker Change
+- Standard `(参考@图N)`、`(参考@视频N)`、`(参考@音频N)` markers are not matched
+  by the existing protected-literal extractor, so they are already non-blocking
+  in `validate_prompt_optimization_result`.
+- The video optimizer system instruction now treats those markers as a soft
+  preservation preference: preserve existing markers when possible, never
+  generate new markers, and do not use marker changes to judge output validity.
+- The AIGC editor now shows this behavior only when the selected target is
+  `video_generation`.
 
-Post-fix evidence:
-- Real Responses API call returned optimized content.
-- Pre-normalization output reference count: 4.
-- Final output reference count: 0.
-- HTTP endpoint returned 200 with optimized text length 746.
-
-Verification:
-- Prompt optimization service/route tests: 12 passed.
-- Responses adapter tests: 2 passed.
-- `git diff --check`: passed.
-
-Waiting for user confirmation before removing instrumentation and debug files.
+## Post-Fix Verification
+- Backend unit tests passed for marker changes, soft-preservation instructions,
+  and the full prompt-optimization suite.
+- Frontend prompt-editor tests and target-file ESLint passed.
+- Keep instrumentation and the debug server active until a real canvas retry
+  confirms that the parse-error path is not entered for this scenario.

@@ -8,6 +8,7 @@ import type {
   MultiTrackTransform,
   MultiTrackVideoElement
 } from "@/lib/aigc/types";
+import { fontTypeIssue } from "@/lib/aigc/multitrack-fonts";
 
 export const MULTI_TRACK_MAX_TRACKS = 20;
 export const MULTI_TRACK_MAX_ELEMENTS = 200;
@@ -100,7 +101,7 @@ function normalizeElement(element: MultiTrackElement): MultiTrackElement {
         target_time: normalizeTimeRange(element.target_time),
         source: element.source ? { ...element.source } : null,
         transform: { ...element.transform },
-        style: { ...element.style }
+        style: { ...element.style, font_type: element.style.font_type ?? null }
       };
     case "subtitle":
       return {
@@ -108,7 +109,7 @@ function normalizeElement(element: MultiTrackElement): MultiTrackElement {
         id: element.id.trim(),
         target_time: normalizeTimeRange(element.target_time),
         transform: { ...element.transform },
-        style: { ...element.style }
+        style: { ...element.style, font_type: element.style.font_type ?? null }
       };
   }
 }
@@ -429,6 +430,15 @@ function validateTextStyle(
   path: string,
   add: AddIssue
 ) {
+  if (fontTypeIssue(element.style.font_type ?? null)) {
+    add(
+      "invalid_font_type",
+      `${path}.style.font_type`,
+      "字体必须是官方预置 ID 或 HTTPS TTF/OTF URL",
+      track,
+      element
+    );
+  }
   if (
     element.style.font_size <= 0 ||
     !RGBA_PATTERN.test(element.style.color) ||

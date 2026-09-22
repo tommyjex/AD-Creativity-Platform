@@ -25,6 +25,7 @@ import {
   createAigcMultitrackEditorStore,
   type AigcTimelineSource
 } from "@/lib/aigc/multitrack-editor-store";
+import { validateMultiTrackEditConfig } from "@/lib/aigc/multitrack";
 import type {
   MultiTrackEditConfig,
   MultiTrackElement,
@@ -90,14 +91,72 @@ export function AigcMultitrackEditor({
     state.config.tracks
       .flatMap((track) => track.elements)
       .find((element) => element.id === selectedElementId) ?? null;
+  const hasInvalidFontType = state.executionIssues.some(
+    (issue) => issue.code === "invalid_font_type"
+  );
+
+  function selectElement(elementId: string | null) {
+    setSelectedElementId(elementId);
+    if (!elementId) return;
+    const track = state.config.tracks.find((candidate) =>
+      candidate.elements.some((element) => element.id === elementId)
+    );
+    setSelectedTrackId(track?.id ?? null);
+  }
+
+  function deleteTrack(track: MultiTrackTrack) {
+    state.dispatch({ type: "track/remove", trackId: track.id });
+    if (selectedTrackId === track.id) {
+      setSelectedTrackId(null);
+    }
+    if (
+      selectedElementId &&
+      track.elements.some((element) => element.id === selectedElementId)
+    ) {
+      setSelectedElementId(null);
+    }
+  }
+
+  function commitElementTransform(
+    elementId: string,
+    transform: Extract<
+      MultiTrackElement,
+      { type: "image" | "text" }
+    >["transform"]
+  ) {
+    state.dispatch({
+      type: "config/replace",
+      config: {
+        ...state.config,
+        tracks: state.config.tracks.map((track) => ({
+          ...track,
+          elements: track.elements.map((element) =>
+            element.id === elementId && "transform" in element
+              ? { ...element, transform: { ...transform } }
+              : element
+          )
+        }))
+      }
+    });
+  }
 
   async function save() {
-    if (!state.dirty || pending) return;
+    if (pending) return;
+    const currentState = store.getState();
+    if (!currentState.dirty) return;
+    const current = currentState.config;
+    if (
+      validateMultiTrackEditConfig(current).some(
+        (issue) => issue.code === "invalid_font_type"
+      )
+    ) {
+      setFeedback("字体配置无效，请修正后再保存。");
+      return;
+    }
     setPending("save");
     setFeedback(null);
     store.getState().beginSave();
     try {
-      const current = store.getState().config;
       const result = await onSave(current);
       store
         .getState()
@@ -169,6 +228,7 @@ export function AigcMultitrackEditor({
           background_color: "#00000099",
           bold: false,
           color: "#FFFFFFFF",
+          font_type: null,
           font_size: 42,
           italic: false,
           underline: false
@@ -315,7 +375,7 @@ export function AigcMultitrackEditor({
         </Button>
         <Button
           aria-label="保存到节点"
-          disabled={!state.dirty || Boolean(pending)}
+          disabled={!state.dirty || hasInvalidFontType || Boolean(pending)}
           onClick={() => void save()}
           size="sm"
           type="button"
@@ -445,7 +505,11 @@ export function AigcMultitrackEditor({
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(14rem,1fr)_minmax(12rem,38%)] lg:grid-cols-[minmax(0,1fr)_19rem] lg:grid-rows-[minmax(14rem,1fr)_minmax(12rem,38%)]">
         <AigcMultitrackPreview
           config={state.config}
+          onCommitTransform={commitElementTransform}
+          onSelectElement={selectElement}
           playheadMs={state.playheadMs}
+          selectedElementId={selectedElementId}
+          sources={state.sources}
         />
         <div className="hidden min-h-0 border-l border-[#2a3038] lg:row-span-2 lg:block">
           <AigcMultitrackInspector
@@ -460,12 +524,9 @@ export function AigcMultitrackEditor({
         <AigcMultitrackTimeline
           config={state.config}
           dispatch={state.dispatch}
+          onDeleteTrack={deleteTrack}
           onSelectElement={(elementId) => {
-            setSelectedElementId(elementId);
-            const track = state.config.tracks.find((candidate) =>
-              candidate.elements.some((element) => element.id === elementId)
-            );
-            setSelectedTrackId(track?.id ?? null);
+            selectElement(elementId);
           }}
           onSelectTrack={(trackId) => {
             setSelectedTrackId(trackId);
@@ -474,6 +535,7 @@ export function AigcMultitrackEditor({
           playheadMs={state.playheadMs}
           selectedElementId={selectedElementId}
           selectedTrackId={selectedTrackId}
+          sources={state.sources}
           zoom={state.zoom}
         />
       </div>
@@ -759,6 +821,7 @@ function defaultTextStyle() {
     background_color: "#00000000",
     bold: false,
     color: "#FFFFFFFF",
+    font_type: null,
     font_size: 48,
     italic: false,
     underline: false

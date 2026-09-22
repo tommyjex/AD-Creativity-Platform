@@ -5,24 +5,30 @@ from copy import deepcopy
 import hashlib
 import io
 import json
+import logging
 import math
 import re
 import time
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Literal
+from typing import Literal, TypeVar
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from PIL import Image, ImageChops, UnidentifiedImageError
 from pydantic import Field, field_validator, model_validator
 
+from backend.app.core.logging import log_event
 from backend.app.repositories import NotFoundError, Repository
 from backend.app.schemas import (
     AIGC_DEFAULT_IMAGE_MODEL,
     AIGC_DEFAULT_TEXT_MODEL,
+    AigcGeneratedMediaNamingRequest,
+    AigcGeneratedMediaNamingResult,
+    AigcGeneratedMediaNamingStatus,
+    AigcGeneratedMediaVisualInput,
     AigcAssetDirection,
     AigcEditedLayer,
     AigcImageLayer,
@@ -51,6 +57,7 @@ from backend.app.schemas import (
     ReferenceAssetKind,
     VideoEnhancementConfig,
     VideoFaceBlurConfig,
+    VideoSubtitleExtractionConfig,
     validate_multi_track_edit_config,
 )
 from backend.app.schemas.common import SchemaModel
@@ -75,6 +82,7 @@ from backend.app.services.assets import (
     AigcMultiTrackAssetInput,
     AigcVideoFaceBlurAssetInput,
     AigcVideoEnhancementAssetInput,
+    AigcVideoSubtitleAssetInput,
     AssetStorageService,
     DownloadedAsset,
     GeneratedImageValidationError,
@@ -112,23 +120,31 @@ from backend.app.services.modelark import (
     DecomposedImageLayer,
     LayerDecompositionResult,
     ModelArkProviderError,
+    ModelArkTextParseError,
     SeedanceVideoGenerationRequest,
 )
 from backend.app.services.mediakit_multitrack import (
     MediaKitMultiTrackClient,
     MediaKitMultiTrackError,
 )
+from backend.app.services.mediakit_video_ocr import (
+    MediaKitVideoOcrClient,
+    MediaKitVideoOcrError,
+)
+from backend.app.services.subtitles import segments_to_srt
 
 AIGC_LLM_EXECUTOR_VERSION = "aigc-llm-v1"
 AIGC_IMAGE_EXECUTOR_VERSION = "aigc-image-v3"
 AIGC_VIDEO_EXECUTOR_VERSION = "aigc-video-v2"
 AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION = "aigc-video-enhancement-v1"
 AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION = "aigc-video-face-blur-v1"
+AIGC_VIDEO_SUBTITLE_EXTRACTION_EXECUTOR_VERSION = "aigc-video-subtitle-v1"
 AIGC_MULTITRACK_EXECUTOR_VERSION = "aigc-multitrack-v1"
 AIGC_LAYER_EXECUTOR_VERSION = "aigc-layer-v1"
 AIGC_LLM_TIMEOUT_SECONDS = 120
 AIGC_IMAGE_TIMEOUT_SECONDS = 300
 AIGC_VIDEO_TIMEOUT_SECONDS = 1800
+AIGC_GENERATED_MEDIA_NAMING_TIMEOUT_SECONDS = 30
 VIDEO_ENHANCEMENT_MIN_SHORT_EDGE = 360
 VIDEO_ENHANCEMENT_MAX_SHORT_EDGE = 1440
 VIDEO_ENHANCEMENT_MIN_LONG_EDGE = 360
@@ -138,53 +154,15 @@ VIDEO_FACE_BLUR_MIN_FPS = 25
 VIDEO_FACE_BLUR_MAX_FPS = 60
 VIDEO_FACE_BLUR_MAX_LONG_EDGE = 4096
 VIDEO_FACE_BLUR_MAX_SHORT_EDGE = 2160
+VIDEO_OCR_MAX_DURATION_SECONDS = 600
+VIDEO_OCR_MIN_SHORT_EDGE = 240
+VIDEO_OCR_MAX_LONG_EDGE = 4096
+VIDEO_OCR_MAX_SHORT_EDGE = 2160
+
+logger = logging.getLogger(__name__)
+GeneratedResultT = TypeVar("GeneratedResultT")
 
 
-# #region debug-point A-E:reporter
-def _debug_layer_asset_transfer(
-    hypothesis_id: str,
-    location: str,
-    message: str,
-    data: dict[str, object],
-) -> None:
-    try:
-        debug_url = "http://127.0.0.1:7777/event"
-        session_id = "aigc-layer-asset-transfer"
-        try:
-            with open(
-                ".dbg/aigc-layer-asset-transfer.env",
-                encoding="utf-8",
-            ) as env_file:
-                env_values = dict(
-                    line.split("=", 1)
-                    for line in env_file.read().splitlines()
-                    if "=" in line
-                )
-            debug_url = env_values.get("DEBUG_SERVER_URL", debug_url)
-            session_id = env_values.get("DEBUG_SESSION_ID", session_id)
-        except Exception:
-            pass
-        urllib.request.urlopen(
-            urllib.request.Request(
-                debug_url,
-                data=json.dumps(
-                    {
-                        "sessionId": session_id,
-                        "runId": "post-fix",
-                        "hypothesisId": hypothesis_id,
-                        "location": location,
-                        "msg": f"[DEBUG] {message}",
-                        "data": data,
-                        "ts": int(time.time() * 1000),
-                    }
-                ).encode(),
-                headers={"Content-Type": "application/json"},
-            ),
-            timeout=0.2,
-        ).read()
-    except Exception:
-        pass
-# #endregion
 
 
 class AigcLlmExecutionParams(SchemaModel):
@@ -192,6 +170,12 @@ class AigcLlmExecutionParams(SchemaModel):
     prompt: str = Field(..., min_length=1, max_length=20000)
     system_prompt: str = Field(default="", max_length=12000)
     temperature: float = Field(default=0.7, ge=0, le=2)
+    input_image_asset_id: str | None = Field(default=None, min_length=1)
+
+    @field_validator("input_image_asset_id")
+    @classmethod
+    def strip_input_image_asset_id(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
 
 
 class AigcImageExecutionParams(SchemaModel):
@@ -283,7 +267,7 @@ class AigcLayerDecompositionExecutionParams(SchemaModel):
 
 class AigcLayerCompositeExecutionParams(SchemaModel):
     input_layer_set: AigcLayerSet
-    replacement: AigcEditedLayer
+    replacement: AigcEditedLayer | None = None
 
 
 class AigcVideoExecutionParams(SchemaModel):
@@ -356,6 +340,18 @@ class AigcVideoFaceBlurExecutionParams(VideoFaceBlurConfig):
         return stripped
 
 
+class AigcVideoSubtitleExecutionParams(VideoSubtitleExtractionConfig):
+    input_asset_id: str = Field(..., min_length=1)
+
+    @field_validator("input_asset_id")
+    @classmethod
+    def strip_input_asset_id(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("input_asset_id must not be blank")
+        return stripped
+
+
 @dataclass(frozen=True)
 class AigcGatewayExecution:
     result: AigcTaskResult
@@ -382,6 +378,9 @@ class AigcModelGateway:
         *,
         media_inspector: MediaInspector | None = None,
         video_timeout_seconds: float = AIGC_VIDEO_TIMEOUT_SECONDS,
+        naming_timeout_seconds: float = (
+            AIGC_GENERATED_MEDIA_NAMING_TIMEOUT_SECONDS
+        ),
         video_enhancement_client_factory: (
             Callable[[], MediaKitVideoEnhancementClient] | None
         ) = None,
@@ -392,6 +391,11 @@ class AigcModelGateway:
         ) = None,
         face_blur_poll_interval_seconds: float = 3,
         face_blur_timeout_seconds: float = AIGC_VIDEO_TIMEOUT_SECONDS,
+        video_ocr_client_factory: (
+            Callable[[], MediaKitVideoOcrClient] | None
+        ) = None,
+        video_ocr_poll_interval_seconds: float = 3,
+        video_ocr_timeout_seconds: float = AIGC_VIDEO_TIMEOUT_SECONDS,
         multitrack_client_factory: (
             Callable[[], MediaKitMultiTrackClient] | None
         ) = None,
@@ -405,6 +409,9 @@ class AigcModelGateway:
         if video_timeout_seconds <= 0:
             raise ValueError("video_timeout_seconds must be positive")
         self.video_timeout_seconds = video_timeout_seconds
+        if naming_timeout_seconds <= 0:
+            raise ValueError("naming_timeout_seconds must be positive")
+        self.naming_timeout_seconds = naming_timeout_seconds
         if video_enhancement_poll_interval_seconds <= 0:
             raise ValueError(
                 "video_enhancement_poll_interval_seconds must be positive"
@@ -427,6 +434,15 @@ class AigcModelGateway:
         )
         self.face_blur_poll_interval_seconds = face_blur_poll_interval_seconds
         self.face_blur_timeout_seconds = face_blur_timeout_seconds
+        if video_ocr_poll_interval_seconds <= 0:
+            raise ValueError("video_ocr_poll_interval_seconds must be positive")
+        if video_ocr_timeout_seconds <= 0:
+            raise ValueError("video_ocr_timeout_seconds must be positive")
+        self.video_ocr_client_factory = (
+            video_ocr_client_factory or MediaKitVideoOcrClient
+        )
+        self.video_ocr_poll_interval_seconds = video_ocr_poll_interval_seconds
+        self.video_ocr_timeout_seconds = video_ocr_timeout_seconds
         if multitrack_poll_interval_seconds <= 0:
             raise ValueError("multitrack_poll_interval_seconds must be positive")
         if multitrack_timeout_seconds <= 0:
@@ -436,6 +452,51 @@ class AigcModelGateway:
         )
         self.multitrack_poll_interval_seconds = multitrack_poll_interval_seconds
         self.multitrack_timeout_seconds = multitrack_timeout_seconds
+
+    async def _generate_with_naming(
+        self,
+        generation: Awaitable[GeneratedResultT],
+        naming_request: AigcGeneratedMediaNamingRequest,
+    ) -> tuple[GeneratedResultT, AigcGeneratedMediaNamingResult]:
+        generation_task = asyncio.ensure_future(generation)
+        naming_task = asyncio.create_task(
+            self._resolve_generated_media_name(naming_request)
+        )
+        try:
+            generated = await generation_task
+        except BaseException:
+            naming_task.cancel()
+            await asyncio.gather(naming_task, return_exceptions=True)
+            raise
+        naming = await naming_task
+        return generated, naming
+
+    async def _resolve_generated_media_name(
+        self,
+        request: AigcGeneratedMediaNamingRequest,
+    ) -> AigcGeneratedMediaNamingResult:
+        try:
+            async with asyncio.timeout(self.naming_timeout_seconds):
+                generated = await self.generation.generate_aigc_media_name(request)
+            return AigcGeneratedMediaNamingResult(
+                status=AigcGeneratedMediaNamingStatus.SUCCEEDED,
+                name=generated.name,
+            )
+        except TimeoutError:
+            status = AigcGeneratedMediaNamingStatus.TIMEOUT
+        except ModelArkTextParseError:
+            status = AigcGeneratedMediaNamingStatus.INVALID_RESPONSE
+        except ModelArkProviderError:
+            status = AigcGeneratedMediaNamingStatus.PROVIDER_ERROR
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            status = AigcGeneratedMediaNamingStatus.PROVIDER_ERROR
+        logger.warning(
+            "AIGC generated media naming did not succeed",
+            extra={"naming_status": status.value},
+        )
+        return AigcGeneratedMediaNamingResult(status=status)
 
     def _asset_naming_context(
         self,
@@ -462,6 +523,31 @@ class AigcModelGateway:
         task: AigcPipelineTaskAttempt,
     ) -> AigcGatewayExecution:
         started = perf_counter()
+        context = {
+            "pipeline_id": task.pipeline_id,
+            "run_id": task.run_id,
+            "node_id": task.node_id,
+            "task_id": task.task_id,
+            "task_type": task.type.value,
+            "provider": (
+                "mediakit"
+                if task.type
+                in {
+                    AigcTaskType.VIDEO_ENHANCEMENT,
+                    AigcTaskType.VIDEO_FACE_BLUR,
+                    AigcTaskType.VIDEO_SUBTITLE_EXTRACTION,
+                    AigcTaskType.MULTI_TRACK_EDIT,
+                }
+                else "modelark"
+            ),
+        }
+        log_event(
+            logger,
+            "aigc.provider_call",
+            outcome="started",
+            phase="dispatch",
+            **context,
+        )
         provider_output_url = None
         provider_task_id = None
         provider_request_id = None
@@ -499,6 +585,9 @@ class AigcModelGateway:
             elif task.type == AigcTaskType.VIDEO_FACE_BLUR:
                 result = await self._execute_video_face_blur(task)
                 executor_version = AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION
+            elif task.type == AigcTaskType.VIDEO_SUBTITLE_EXTRACTION:
+                result = await self._execute_video_subtitle_extraction(task)
+                executor_version = AIGC_VIDEO_SUBTITLE_EXTRACTION_EXECUTOR_VERSION
             elif task.type == AigcTaskType.MULTI_TRACK_EDIT:
                 result = await self._execute_multi_track(task)
                 executor_version = AIGC_MULTITRACK_EXECUTOR_VERSION
@@ -586,7 +675,32 @@ class AigcModelGateway:
                 ),
                 retryable=_is_retryable_face_blur_error(fields),
             ) from exc
-        except AigcGatewayError:
+        except MediaKitVideoOcrError as exc:
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code=(
+                        "timeout"
+                        if exc.code in {"poll_timeout", "request_timeout"}
+                        else exc.code
+                    ),
+                    message=str(exc)[:500],
+                    request_id=exc.request_id or exc.task_id,
+                    stage=exc.phase,
+                ),
+                retryable=_is_retryable_video_ocr_error(exc),
+            ) from exc
+        except AigcGatewayError as exc:
+            log_event(
+                logger,
+                "aigc.provider_call",
+                outcome="failed",
+                level=logging.WARNING,
+                duration_ms=(perf_counter() - started) * 1000,
+                phase=exc.error.stage,
+                error_code=exc.error.code,
+                provider_request_id=exc.error.request_id,
+                **context,
+            )
             raise
         except MediaInspectionError as exc:
             raise AigcGatewayError(
@@ -605,7 +719,7 @@ class AigcModelGateway:
                 )
             ) from exc
 
-        return AigcGatewayExecution(
+        execution = AigcGatewayExecution(
             result=result,
             metrics=AigcTaskMetrics(
                 duration_ms=max(0, round((perf_counter() - started) * 1000))
@@ -615,6 +729,17 @@ class AigcModelGateway:
             provider_task_id=provider_task_id,
             provider_request_id=provider_request_id,
         )
+        log_event(
+            logger,
+            "aigc.provider_call",
+            outcome="succeeded",
+            duration_ms=execution.metrics.duration_ms,
+            phase="completed",
+            provider_task_id=provider_task_id,
+            provider_request_id=provider_request_id,
+            **context,
+        )
+        return execution
 
     async def _execute_llm(
         self,
@@ -623,11 +748,39 @@ class AigcModelGateway:
         params = AigcLlmExecutionParams.model_validate(task.params)
         if params.model != AIGC_DEFAULT_TEXT_MODEL:
             raise ValueError("LLM model is not enabled")
+        image_url: str | None = None
+        if params.input_image_asset_id is not None:
+            asset = self.repository.get_asset(params.input_image_asset_id)
+            if (
+                asset.asset_role != AssetRole.PUBLIC
+                or asset.status != Status.SUCCEEDED
+                or asset.type
+                not in {AssetType.UPLOADED_IMAGE, AssetType.GENERATED_IMAGE}
+                or not asset.mime_type
+                or not asset.mime_type.lower().startswith("image/")
+            ):
+                raise ValueError("LLM image input is not an available public image")
+            image_url = self.asset_storage.signed_access_url(asset)
+            parsed_url = urlsplit(image_url or "")
+            if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+                raise ValueError("LLM image input has no accessible object")
+            self.repository.add_aigc_task_assets(
+                [
+                    AigcPipelineTaskAssetReference(
+                        task_id=task.task_id,
+                        direction=AigcAssetDirection.INPUT,
+                        slot="image",
+                        ordinal=0,
+                        asset_id=asset.id,
+                    )
+                ]
+            )
         text = await self.generation.generate_aigc_text(
             model=params.model,
             prompt=params.prompt,
             system_prompt=params.system_prompt,
             temperature=params.temperature,
+            image_url=image_url,
         )
         return AigcTaskResult(
             kind=AigcResultKind.TEXT,
@@ -695,15 +848,26 @@ class AigcModelGateway:
             final_prompt = (
                 f"{params.prompt}\n画幅比例：{params.aspect_ratio}"
             )
-        generated = await self.generation.generate_aigc_image(
-            pipeline_id=task.pipeline_id,
-            model=params.model,
-            operation=operation,
-            prompt=final_prompt,
-            size=params.size,
-            output_format=params.format,
-            source_image_url=source_url,
-            reference_image_urls=reference_urls,
+        generated, naming = await self._generate_with_naming(
+            self.generation.generate_aigc_image(
+                pipeline_id=task.pipeline_id,
+                model=params.model,
+                operation=operation,
+                prompt=final_prompt,
+                size=params.size,
+                output_format=params.format,
+                source_image_url=source_url,
+                reference_image_urls=reference_urls,
+            ),
+            AigcGeneratedMediaNamingRequest(
+                prompt=final_prompt,
+                visual_inputs=[
+                    AigcGeneratedMediaVisualInput(type="image", url=url)
+                    for url in (
+                        [source_url, *reference_urls] if source_url else []
+                    )
+                ],
+            ),
         )
         try:
             assets = await self.asset_storage.upload_assets_from_sources(
@@ -712,7 +876,7 @@ class AigcModelGateway:
                     StoredAssetInput(
                         type=generated.type,
                         tool_asset_role=ToolAssetRole.OUTPUT,
-                        status=Status.SUCCEEDED,
+                        status=Status.DRAFT,
                         source_url=generated.url,
                         mime_type=generated.mime_type,
                         metadata={
@@ -801,6 +965,7 @@ class AigcModelGateway:
         visible = self.asset_storage.with_access_url(asset)
         return AigcTaskResult(
             kind=AigcResultKind.ASSETS,
+            naming=naming,
             assets=[
                 AigcResultAsset(
                     asset_id=asset.id,
@@ -852,14 +1017,25 @@ class AigcModelGateway:
                 )
             ]
         )
-        generated = await self.generation.generate_aigc_image(
-            pipeline_id=task.pipeline_id,
-            model=params.model,
-            operation=ImageGenerationOperation.IMAGE_TO_IMAGE,
-            prompt=params.prompt,
-            size=params.size,
-            output_format=params.format,
-            source_image_url=source_url,
+        generated, naming = await self._generate_with_naming(
+            self.generation.generate_aigc_image(
+                pipeline_id=task.pipeline_id,
+                model=params.model,
+                operation=ImageGenerationOperation.IMAGE_TO_IMAGE,
+                prompt=params.prompt,
+                size=params.size,
+                output_format=params.format,
+                source_image_url=source_url,
+            ),
+            AigcGeneratedMediaNamingRequest(
+                prompt=params.prompt,
+                visual_inputs=[
+                    AigcGeneratedMediaVisualInput(
+                        type="image",
+                        url=source_url,
+                    )
+                ],
+            ),
         )
         assets = await self.asset_storage.upload_assets_from_sources(
             self.repository,
@@ -867,7 +1043,7 @@ class AigcModelGateway:
                 StoredAssetInput(
                     type=generated.type,
                     tool_asset_role=ToolAssetRole.OUTPUT,
-                    status=Status.SUCCEEDED,
+                    status=Status.DRAFT,
                     source_url=generated.url,
                     mime_type=generated.mime_type,
                     metadata={
@@ -907,6 +1083,7 @@ class AigcModelGateway:
         visible = self.asset_storage.with_access_url(asset)
         return AigcTaskResult(
             kind=AigcResultKind.ASSETS,
+            naming=naming,
             assets=[
                 AigcResultAsset(
                     asset_id=asset.id,
@@ -966,14 +1143,25 @@ class AigcModelGateway:
             ]
         )
         try:
-            generated = await self.generation.generate_aigc_image(
-                pipeline_id=task.pipeline_id,
-                model=params.model,
-                operation=ImageGenerationOperation.IMAGE_TO_IMAGE,
-                prompt=params.prompt,
-                size=params.size,
-                output_format=ImageOutputFormat.PNG,
-                source_image_url=source_url,
+            generated, naming = await self._generate_with_naming(
+                self.generation.generate_aigc_image(
+                    pipeline_id=task.pipeline_id,
+                    model=params.model,
+                    operation=ImageGenerationOperation.IMAGE_TO_IMAGE,
+                    prompt=params.prompt,
+                    size=params.size,
+                    output_format=ImageOutputFormat.PNG,
+                    source_image_url=source_url,
+                ),
+                AigcGeneratedMediaNamingRequest(
+                    prompt=params.prompt,
+                    visual_inputs=[
+                        AigcGeneratedMediaVisualInput(
+                            type="image",
+                            url=source_url,
+                        )
+                    ],
+                ),
             )
             downloaded = await self.asset_storage.downloader.fetch(
                 generated.url,
@@ -1009,6 +1197,7 @@ class AigcModelGateway:
             ) from exc
         return AigcTaskResult(
             kind=AigcResultKind.EDITED_LAYER,
+            naming=naming,
             edited_layer=AigcEditedLayer(
                 **{
                     **layer.model_dump(mode="python"),
@@ -1145,24 +1334,6 @@ class AigcModelGateway:
                 size=params.size,
                 output_format=params.format,
             )
-            # #region debug-point A:provider-result
-            _debug_layer_asset_transfer(
-                "A",
-                "aigc_gateway.py:_execute_layer_decomposition",
-                "Provider layer result metadata",
-                {
-                    "result_count": len(provider_result.layers),
-                    "base_host": urlsplit(provider_result.base_url).hostname,
-                    "layers": [
-                        {
-                            "index": layer.z_index,
-                            "host": urlsplit(layer.url).hostname,
-                        }
-                        for layer in provider_result.layers
-                    ],
-                },
-            )
-            # #endregion
             return await self._persist_layer_decomposition(
                 task=task,
                 source_asset_id=source.id,
@@ -1175,43 +1346,9 @@ class AigcModelGateway:
                 ),
             )
         except (AigcGatewayError, ModelArkProviderError, ValueError) as exc:
-            # #region debug-point E:transfer-exception
-            _debug_layer_asset_transfer(
-                "E",
-                "aigc_gateway.py:_execute_layer_decomposition",
-                "Layer asset transfer failed",
-                {
-                    "stage": "provider_or_persistence",
-                    "index": None,
-                    "exception_type": type(exc).__name__,
-                    "message": re.sub(
-                        r"https?://[^\s]+",
-                        "[redacted-url]",
-                        str(exc),
-                    )[:200],
-                },
-            )
-            # #endregion
             self.repository.remove_aigc_task_assets(task.task_id)
             raise
         except Exception as exc:
-            # #region debug-point E:unexpected-transfer-exception
-            _debug_layer_asset_transfer(
-                "E",
-                "aigc_gateway.py:_execute_layer_decomposition",
-                "Unexpected layer asset transfer failure",
-                {
-                    "stage": "provider_or_persistence",
-                    "index": None,
-                    "exception_type": type(exc).__name__,
-                    "message": re.sub(
-                        r"https?://[^\s]+",
-                        "[redacted-url]",
-                        str(exc),
-                    )[:200],
-                },
-            )
-            # #endregion
             self.repository.remove_aigc_task_assets(task.task_id)
             raise AigcGatewayError(
                 AigcTaskError(
@@ -1236,36 +1373,7 @@ class AigcModelGateway:
             result.base_url,
             expected_mime_type=base_mime_type,
         )
-        # #region debug-point A:download-result
-        _debug_layer_asset_transfer(
-            "A",
-            "aigc_gateway.py:_persist_layer_decomposition",
-            "Layer asset download result",
-            {
-                "index": 0,
-                "host": urlsplit(result.base_url).hostname,
-                "status": "ok",
-                "size": len(base_download.content),
-                "mime": base_download.mime_type,
-            },
-        )
-        # #endregion
         base_info = _inspect_decomposition_image(base_download, label="base")
-        # #region debug-point B:decode-alpha-validation
-        _debug_layer_asset_transfer(
-            "B",
-            "aigc_gateway.py:_persist_layer_decomposition",
-            "Layer asset decode and alpha validation",
-            {
-                "index": 0,
-                "status": "ok",
-                "mime": base_download.mime_type,
-                "width": base_info.width,
-                "height": base_info.height,
-                "has_alpha": base_info.has_alpha,
-            },
-        )
-        # #endregion
         source_aspect_ratio = source_info.width / source_info.height
         base_aspect_ratio = base_info.width / base_info.height
         if (
@@ -1291,40 +1399,11 @@ class AigcModelGateway:
                 layer.url,
                 expected_mime_type="image/png",
             )
-            # #region debug-point A:download-result
-            _debug_layer_asset_transfer(
-                "A",
-                "aigc_gateway.py:_persist_layer_decomposition",
-                "Layer asset download result",
-                {
-                    "index": layer.z_index,
-                    "host": urlsplit(layer.url).hostname,
-                    "status": "ok",
-                    "size": len(downloaded.content),
-                    "mime": downloaded.mime_type,
-                },
-            )
-            # #endregion
             info = _inspect_decomposition_image(
                 downloaded,
                 label=f"layer {layer.z_index}",
                 require_alpha=True,
             )
-            # #region debug-point B:decode-alpha-validation
-            _debug_layer_asset_transfer(
-                "B",
-                "aigc_gateway.py:_persist_layer_decomposition",
-                "Layer asset decode and alpha validation",
-                {
-                    "index": layer.z_index,
-                    "status": "ok",
-                    "mime": downloaded.mime_type,
-                    "width": info.width,
-                    "height": info.height,
-                    "has_alpha": info.has_alpha,
-                },
-            )
-            # #endregion
             expected_size = (x2 - x1, y2 - y1)
             if (info.width, info.height) != expected_size:
                 downloaded = normalize_layer_image_content(
@@ -1425,19 +1504,6 @@ class AigcModelGateway:
                     content_type=asset.mime_type,
                 )
                 uploaded_keys.append(asset.object_key)
-                # #region debug-point C:storage-upload
-                _debug_layer_asset_transfer(
-                    "C",
-                    "aigc_gateway.py:_store_layer_assets",
-                    "Layer asset storage upload",
-                    {
-                        "index": debug_index,
-                        "status": "ok",
-                        "size": len(content),
-                        "mime": asset.mime_type,
-                    },
-                )
-                # #endregion
             debug_stage = "asset_records"
             debug_index = None
             created = self.repository.create_assets(
@@ -1457,36 +1523,7 @@ class AigcModelGateway:
                     for ordinal, asset in enumerate(created)
                 ]
             )
-            # #region debug-point D:task-relationships
-            _debug_layer_asset_transfer(
-                "D",
-                "aigc_gateway.py:_store_layer_assets",
-                "Layer task relationships persisted",
-                {
-                    "status": "ok",
-                    "asset_count": len(created),
-                    "relationship_count": len(created),
-                },
-            )
-            # #endregion
         except Exception as exc:
-            # #region debug-point E:storage-exception
-            _debug_layer_asset_transfer(
-                "E",
-                "aigc_gateway.py:_store_layer_assets",
-                "Layer asset storage failed",
-                {
-                    "stage": debug_stage,
-                    "index": debug_index,
-                    "exception_type": type(exc).__name__,
-                    "message": re.sub(
-                        r"https?://[^\s]+",
-                        "[redacted-url]",
-                        str(exc),
-                    )[:200],
-                },
-            )
-            # #endregion
             self.repository.remove_aigc_task_assets(
                 task.task_id,
                 direction=AigcAssetDirection.OUTPUT,
@@ -1513,18 +1550,27 @@ class AigcModelGateway:
         params = AigcLayerCompositeExecutionParams.model_validate(task.params)
         layer_set = params.input_layer_set
         replacement = params.replacement
-        source_layer = _validate_layer_composite_source(layer_set, replacement)
+        source_layer = (
+            _validate_layer_composite_source(layer_set, replacement)
+            if replacement is not None
+            else None
+        )
 
         base_asset = self.repository.get_asset(layer_set.base_asset_id)
         layer_assets = {
             layer.asset_id: self.repository.get_asset(layer.asset_id)
             for layer in layer_set.layers
         }
-        replacement_asset = self.repository.get_asset(replacement.asset_id)
+        replacement_asset = (
+            self.repository.get_asset(replacement.asset_id)
+            if replacement is not None
+            else None
+        )
         _validate_composite_asset(base_asset, base=True)
         for asset in layer_assets.values():
             _validate_composite_asset(asset)
-        _validate_composite_asset(replacement_asset)
+        if replacement_asset is not None:
+            _validate_composite_asset(replacement_asset)
 
         try:
             base_content = await self.asset_storage.read_asset_content(base_asset)
@@ -1532,8 +1578,10 @@ class AigcModelGateway:
                 asset_id: await self.asset_storage.read_asset_content(asset)
                 for asset_id, asset in layer_assets.items()
             }
-            replacement_content = await self.asset_storage.read_asset_content(
-                replacement_asset
+            replacement_content = (
+                await self.asset_storage.read_asset_content(replacement_asset)
+                if replacement_asset is not None
+                else None
             )
         except Exception as exc:
             raise AigcGatewayError(
@@ -1565,14 +1613,17 @@ class AigcModelGateway:
                     sorted(layer_set.layers, key=lambda item: item.z_index)
                 )
             ],
-            AigcPipelineTaskAssetReference(
-                task_id=task.task_id,
-                direction=AigcAssetDirection.INPUT,
-                slot="replacement",
-                ordinal=0,
-                asset_id=replacement_asset.id,
-            ),
         ]
+        if replacement_asset is not None:
+            input_references.append(
+                AigcPipelineTaskAssetReference(
+                    task_id=task.task_id,
+                    direction=AigcAssetDirection.INPUT,
+                    slot="replacement",
+                    ordinal=0,
+                    asset_id=replacement_asset.id,
+                )
+            )
         try:
             self.repository.add_aigc_task_assets(input_references)
         except Exception as exc:
@@ -1586,48 +1637,52 @@ class AigcModelGateway:
                 retryable=True,
             ) from exc
 
-        derived_layers = [
-            layer.model_copy(
-                update={"asset_id": replacement.asset_id},
-                deep=True,
-            )
-            if layer.id == source_layer.id
-            else layer
-            for layer in layer_set.layers
-        ]
-        derived = AigcLayerSet(
-            id=str(uuid4()),
-            parent_layer_set_id=layer_set.id,
-            source_asset_id=layer_set.source_asset_id,
-            base_asset_id=layer_set.base_asset_id,
-            canvas_width=layer_set.canvas_width,
-            canvas_height=layer_set.canvas_height,
-            version=layer_set.version + 1,
-            digest=_layer_set_digest(
+        output_layer_set = layer_set
+        if replacement is not None:
+            assert source_layer is not None
+            assert replacement_content is not None
+            derived_layers = [
+                layer.model_copy(
+                    update={"asset_id": replacement.asset_id},
+                    deep=True,
+                )
+                if layer.id == source_layer.id
+                else layer
+                for layer in layer_set.layers
+            ]
+            output_layer_set = AigcLayerSet(
+                id=str(uuid4()),
+                parent_layer_set_id=layer_set.id,
                 source_asset_id=layer_set.source_asset_id,
                 base_asset_id=layer_set.base_asset_id,
                 canvas_width=layer_set.canvas_width,
                 canvas_height=layer_set.canvas_height,
-                layers=derived_layers,
-            ),
-            layers=tuple(derived_layers),
-        )
-        layer_contents[replacement.asset_id] = replacement_content
+                version=layer_set.version + 1,
+                digest=_layer_set_digest(
+                    source_asset_id=layer_set.source_asset_id,
+                    base_asset_id=layer_set.base_asset_id,
+                    canvas_width=layer_set.canvas_width,
+                    canvas_height=layer_set.canvas_height,
+                    layers=derived_layers,
+                ),
+                layers=tuple(derived_layers),
+            )
+            layer_contents[replacement.asset_id] = replacement_content
 
         created_asset_id: str | None = None
         uploaded_key: str | None = None
         try:
             composition = ImageLayerCompositionService().compose_pixels(
-                canvas_width=derived.canvas_width,
-                canvas_height=derived.canvas_height,
-                layers=derived.layers,
+                canvas_width=output_layer_set.canvas_width,
+                canvas_height=output_layer_set.canvas_height,
+                layers=output_layer_set.layers,
                 base_content=base_content,
                 layer_contents=layer_contents,
             )
             output_asset = _aigc_layer_composite_asset(
                 asset_storage=self.asset_storage,
                 task=task,
-                layer_set=derived,
+                layer_set=output_layer_set,
                 content=composition.content,
                 naming_context=self._asset_naming_context(task),
             )
@@ -1649,7 +1704,7 @@ class AigcModelGateway:
                         direction=AigcAssetDirection.OUTPUT,
                         slot="base",
                         ordinal=0,
-                        asset_id=derived.base_asset_id,
+                        asset_id=output_layer_set.base_asset_id,
                     ),
                     *[
                         AigcPipelineTaskAssetReference(
@@ -1660,7 +1715,10 @@ class AigcModelGateway:
                             asset_id=layer.asset_id,
                         )
                         for ordinal, layer in enumerate(
-                            sorted(derived.layers, key=lambda item: item.z_index)
+                            sorted(
+                                output_layer_set.layers,
+                                key=lambda item: item.z_index,
+                            )
                         )
                     ],
                     AigcPipelineTaskAssetReference(
@@ -1695,7 +1753,7 @@ class AigcModelGateway:
         visible = self.asset_storage.with_access_url(created)
         return AigcTaskResult(
             kind=AigcResultKind.LAYER_COMPOSITE,
-            layer_set=derived,
+            layer_set=output_layer_set,
             assets=[
                 AigcResultAsset(
                     asset_id=created.id,
@@ -1824,7 +1882,32 @@ class AigcModelGateway:
                     retryable=True,
                 ) from exc
 
-        generated = await self.generation.generate_seedance_video(request)
+        naming_visual_inputs = [
+            *[
+                AigcGeneratedMediaVisualInput(type="image", url=url)
+                for slot in (
+                    "first_frame",
+                    "last_frame",
+                    "reference_images",
+                )
+                for url in urls_by_slot[slot]
+            ],
+            *[
+                AigcGeneratedMediaVisualInput(
+                    type="video",
+                    url=url,
+                    fps=0.3,
+                )
+                for url in urls_by_slot["reference_videos"]
+            ],
+        ]
+        generated, naming = await self._generate_with_naming(
+            self.generation.generate_seedance_video(request),
+            AigcGeneratedMediaNamingRequest(
+                prompt=params.prompt,
+                visual_inputs=naming_visual_inputs,
+            ),
+        )
         if (
             generated.type
             not in {
@@ -1842,7 +1925,7 @@ class AigcModelGateway:
                     StoredAssetInput(
                         type=AssetType.STORYBOARD_VIDEO,
                         tool_asset_role=ToolAssetRole.OUTPUT,
-                        status=Status.SUCCEEDED,
+                        status=Status.DRAFT,
                         stage=generated.stage,
                         source_url=generated.url,
                         mime_type=generated.mime_type,
@@ -1909,6 +1992,7 @@ class AigcModelGateway:
         visible = self.asset_storage.with_access_url(asset)
         return AigcTaskResult(
             kind=AigcResultKind.ASSETS,
+            naming=naming,
             assets=[
                 AigcResultAsset(
                     asset_id=asset.id,
@@ -2028,6 +2112,22 @@ class AigcModelGateway:
                         exclude={"id", "source", "inline_text", "asset_id"},
                     )
                 )
+                _map_mediakit_visual_fields(
+                    rendered,
+                    kind=element.type,
+                )
+                target_time = rendered.get("target_time")
+                if isinstance(target_time, dict):
+                    rendered["target_time"] = [
+                        target_time["start_ms"],
+                        target_time["end_ms"],
+                    ]
+                source_trim = rendered.get("source_trim")
+                if isinstance(source_trim, dict):
+                    rendered["source_trim"] = [
+                        source_trim["start_ms"],
+                        source_trim["end_ms"],
+                    ]
                 if element.type == "text":
                     rendered["text"] = source["text"]
                 else:
@@ -2041,7 +2141,10 @@ class AigcModelGateway:
                         raise ValueError(
                             f"multi-track element '{element.id}' has no accessible asset"
                         )
-                    rendered["url"] = access_url
+                    if element.type == "subtitle":
+                        rendered["text"] = access_url
+                    else:
+                        rendered["source"] = access_url
                 if track.muted and "volume" in rendered:
                     rendered["volume"] = 0
                 provider_elements.append(rendered)
@@ -2051,10 +2154,16 @@ class AigcModelGateway:
         if not provider_tracks:
             raise ValueError("multi-track project has no visible elements")
 
+        provider_tracks.reverse()
+
         client = self.multitrack_client_factory()
         submitted = await client.submit(
             project={
-                "canvas": project.canvas.model_dump(mode="json"),
+                "canvas": project.canvas.model_dump(
+                    mode="json",
+                    exclude={"mode"},
+                    exclude_none=True,
+                ),
                 "track": provider_tracks,
                 "output": project.output.model_dump(mode="json"),
             },
@@ -2450,6 +2559,162 @@ class AigcModelGateway:
             ],
         )
 
+    async def _execute_video_subtitle_extraction(
+        self,
+        task: AigcPipelineTaskAttempt,
+    ) -> AigcTaskResult:
+        params = AigcVideoSubtitleExecutionParams.model_validate(task.params)
+        asset = self.repository.get_asset(params.input_asset_id)
+        if (
+            asset.asset_role != AssetRole.PUBLIC
+            or asset.status != Status.SUCCEEDED
+            or asset.type
+            not in {
+                AssetType.UPLOADED_VIDEO,
+                AssetType.STORYBOARD_VIDEO,
+                AssetType.FINAL_VIDEO,
+            }
+            or not asset.mime_type
+            or not asset.mime_type.lower().startswith("video/")
+        ):
+            raise ValueError(
+                "video subtitle extraction input is not an available public video"
+            )
+        access_url = self.asset_storage.signed_access_url(asset)
+        parsed_url = urlsplit(access_url or "")
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise ValueError(
+                "video subtitle extraction input has no accessible object"
+            )
+        inspection = await self._ensure_media_inspection(
+            asset,
+            ReferenceAssetKind.VIDEO,
+        )
+        if inspection is None:
+            raise MediaInspectionError(
+                "video subtitle extraction input could not be inspected"
+            )
+        _validate_video_ocr_inspection(inspection)
+        try:
+            self.repository.add_aigc_task_assets(
+                [
+                    AigcPipelineTaskAssetReference(
+                        task_id=task.task_id,
+                        direction=AigcAssetDirection.INPUT,
+                        slot="video",
+                        ordinal=0,
+                        asset_id=asset.id,
+                    )
+                ]
+            )
+        except Exception as exc:
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="input_recording_failed",
+                    message="AIGC input references could not be recorded",
+                    stage="input_recording",
+                ),
+                retryable=True,
+            ) from exc
+
+        client = self.video_ocr_client_factory()
+        submitted = await client.submit(
+            video_url=access_url,
+            mode=params.mode,
+            client_token=_video_ocr_client_token(task),
+        )
+        self.repository.update_aigc_task_attempt(task.task_id, progress=10)
+        completed = await client.poll(
+            task_id=submitted.task_id,
+            timeout_seconds=self.video_ocr_timeout_seconds,
+            poll_interval_seconds=self.video_ocr_poll_interval_seconds,
+        )
+        srt_text = segments_to_srt(completed.segments)
+        common_metadata = {
+            "provider": "mediakit",
+            "operation": "video_ocr",
+            "mode": params.mode,
+            "segment_count": len(completed.segments),
+            "duration_seconds": completed.duration_seconds,
+            "provider_task_id": completed.task_id,
+            "provider_request_id": (
+                completed.request_id or submitted.request_id
+            ),
+            "discarded_segment_count": completed.discarded_segment_count,
+        }
+        if not srt_text:
+            return AigcTaskResult(
+                kind=AigcResultKind.NONE,
+                metadata={
+                    **common_metadata,
+                    "empty": True,
+                },
+            )
+        try:
+            output = self.asset_storage.store_aigc_video_subtitles(
+                self.repository,
+                AigcVideoSubtitleAssetInput(
+                    srt_text=srt_text,
+                    pipeline_id=task.pipeline_id,
+                    run_id=task.run_id,
+                    node_id=task.node_id,
+                    task_id=task.task_id,
+                    input_asset_id=asset.id,
+                    provider_task_id=completed.task_id,
+                    provider_request_id=(
+                        completed.request_id or submitted.request_id
+                    ),
+                    segment_count=len(completed.segments),
+                    duration_seconds=completed.duration_seconds,
+                    executor_version=(
+                        AIGC_VIDEO_SUBTITLE_EXTRACTION_EXECUTOR_VERSION
+                    ),
+                    naming_context=self._asset_naming_context(task),
+                ),
+            )
+        except Exception as exc:
+            try:
+                self.repository.remove_aigc_task_assets(task.task_id)
+            except Exception:
+                pass
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="asset_storage_failed",
+                    message="Extracted subtitles could not be stored",
+                    request_id=completed.request_id or completed.task_id,
+                    stage="asset_storage",
+                ),
+                retryable=True,
+            ) from exc
+        visible = self.asset_storage.with_access_url(output)
+        return AigcTaskResult(
+            kind=AigcResultKind.ASSETS,
+            metadata=common_metadata,
+            assets=[
+                AigcResultAsset(
+                    asset_id=output.id,
+                    ordinal=0,
+                    mime_type=output.mime_type,
+                    download_url=visible.url,
+                    available=True,
+                    metadata={
+                        key: output.metadata[key]
+                        for key in (
+                            "provider",
+                            "operation",
+                            "mode",
+                            "segment_count",
+                            "duration_seconds",
+                            "provider_task_id",
+                            "provider_request_id",
+                            "discarded_segment_count",
+                        )
+                        if key in output.metadata
+                    },
+                )
+            ],
+        )
+
     async def _poll_face_blur(
         self,
         client: FaceBlurVideoClient,
@@ -2513,6 +2778,47 @@ class AigcModelGateway:
             metadata={**asset.metadata, **inspection.metadata()},
         )
         return inspection
+
+
+def _map_mediakit_visual_fields(
+    rendered: dict[str, object],
+    *,
+    kind: str,
+) -> None:
+    transform = rendered.pop("transform", None)
+    if isinstance(transform, dict):
+        extra = rendered.setdefault("extra", [])
+        if not isinstance(extra, list):
+            raise ValueError("multi-track element extra filters are invalid")
+        extra.append(
+            {
+                "type": "transform",
+                "pos_x": round(float(transform["x"])),
+                "pos_y": round(float(transform["y"])),
+                "width": max(1, round(float(transform["width"]))),
+                "height": max(1, round(float(transform["height"]))),
+                "rotation": round(float(transform.get("rotation", 0))),
+            }
+        )
+
+    if kind not in {"text", "subtitle"}:
+        return
+    style = rendered.pop("style", None)
+    if not isinstance(style, dict):
+        return
+    font_type = style.get("font_type")
+    if font_type:
+        rendered["font_type"] = font_type
+    rendered.update(
+        {
+            "font_size": max(1, round(float(style["font_size"]))),
+            "font_color": style["color"],
+            "bold": style["bold"],
+            "italic": style["italic"],
+            "underline": style["underline"],
+            "background_color": style["background_color"],
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -2707,7 +3013,7 @@ def _aigc_edited_layer_asset(
         tool_asset_role=ToolAssetRole.OUTPUT,
         type=AssetType.GENERATED_IMAGE,
         asset_role=AssetRole.INTERNAL_LAYER,
-        status=Status.SUCCEEDED,
+        status=Status.DRAFT,
         stage=Stage.IMAGE,
         mime_type="image/png",
         size_bytes=len(content),
@@ -2904,7 +3210,11 @@ def _is_retryable_provider_code(code: str) -> bool:
 
 
 def _is_retryable_mediakit_error(
-    error: MediaKitVideoEnhancementError | MediaKitMultiTrackError,
+    error: (
+        MediaKitVideoEnhancementError
+        | MediaKitMultiTrackError
+        | MediaKitVideoOcrError
+    ),
 ) -> bool:
     return (
         error.code
@@ -3004,6 +3314,46 @@ def _validate_video_face_blur_inspection(
         raise MediaInspectionError(
             "video face blur input short edge must not exceed 2160 px"
         )
+
+
+def _validate_video_ocr_inspection(inspection: MediaInspection) -> None:
+    if inspection.width is None or inspection.height is None:
+        raise MediaInspectionError(
+            "video subtitle extraction input dimensions are unavailable"
+        )
+    if inspection.duration_seconds is None or inspection.duration_seconds <= 0:
+        raise MediaInspectionError(
+            "video subtitle extraction input duration is unavailable"
+        )
+    if inspection.duration_seconds > VIDEO_OCR_MAX_DURATION_SECONDS:
+        raise MediaInspectionError(
+            "video subtitle extraction input duration must not exceed 600 seconds"
+        )
+    short_edge = min(inspection.width, inspection.height)
+    long_edge = max(inspection.width, inspection.height)
+    if short_edge < VIDEO_OCR_MIN_SHORT_EDGE:
+        raise MediaInspectionError(
+            "video subtitle extraction input short edge must be at least 240 px"
+        )
+    if long_edge > VIDEO_OCR_MAX_LONG_EDGE:
+        raise MediaInspectionError(
+            "video subtitle extraction input long edge must not exceed 4096 px"
+        )
+    if short_edge > VIDEO_OCR_MAX_SHORT_EDGE:
+        raise MediaInspectionError(
+            "video subtitle extraction input short edge must not exceed 2160 px"
+        )
+
+
+def _video_ocr_client_token(task: AigcPipelineTaskAttempt) -> str:
+    identity = (
+        f"{task.pipeline_id}:{task.run_id}:{task.node_id}:attempt:{task.attempt}"
+    )
+    return f"aigc-video-ocr-{hashlib.sha256(identity.encode()).hexdigest()[:40]}"
+
+
+def _is_retryable_video_ocr_error(error: MediaKitVideoOcrError) -> bool:
+    return _is_retryable_mediakit_error(error)
 
 
 def _face_blur_client_token(task: AigcPipelineTaskAttempt) -> str:

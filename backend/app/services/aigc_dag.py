@@ -5,11 +5,15 @@ import json
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable, Mapping, TypeAlias
+from typing import AbstractSet, Iterable, Mapping, TypeAlias
 
 from backend.app.aigc_run_scope import (
     AigcDagValidationError,
     aigc_connected_node_ids,
+    aigc_downstream_node_ids,
+    aigc_projection_node_ids,
+    aigc_run_conflict_node_ids,
+    aigc_run_projection_node_ids,
     aigc_run_scope_node_ids,
 )
 from backend.app.schemas import (
@@ -92,6 +96,7 @@ MODEL_NODE_TYPES = {
     AigcNodeType.VIDEO_GENERATION,
     AigcNodeType.VIDEO_ENHANCEMENT,
     AigcNodeType.VIDEO_FACE_BLUR,
+    AigcNodeType.VIDEO_SUBTITLE_EXTRACTION,
     AigcNodeType.MULTI_TRACK_EDIT,
 }
 EXECUTABLE_NODE_TYPES = MODEL_NODE_TYPES | {
@@ -118,15 +123,26 @@ def validate_aigc_dag(
     *,
     available_asset_ids: set[str] | None = None,
     require_complete: bool = True,
+    validation_node_ids: AbstractSet[str] | None = None,
 ) -> tuple[str, ...]:
     definition = _canonical_graph(definition)
+    all_node_ids = {node.id for node in definition.nodes}
+    semantic_node_ids = (
+        all_node_ids
+        if validation_node_ids is None
+        else all_node_ids & set(validation_node_ids)
+    )
     if len(definition.nodes) > AIGC_MAX_NODES:
         raise AigcDagValidationError("too_many_nodes", "node limit exceeded")
     if len(definition.edges) > AIGC_MAX_EDGES:
         raise AigcDagValidationError("too_many_edges", "edge limit exceeded")
     if (
         require_complete
-        and not any(node.type in EXECUTABLE_NODE_TYPES for node in definition.nodes)
+        and not any(
+            node.type in EXECUTABLE_NODE_TYPES
+            for node in definition.nodes
+            if node.id in semantic_node_ids
+        )
     ):
         raise AigcDagValidationError(
             "model_node_required",
@@ -287,21 +303,49 @@ def validate_aigc_dag(
         incoming[target.id].append(source.id)
         outgoing[source.id].append(target.id)
 
-    _validate_bbox_prompt_references(definition, node_by_id)
+    semantic_definition = definition.model_copy(
+        update={
+            "nodes": [
+                node for node in definition.nodes if node.id in semantic_node_ids
+            ],
+            "edges": [
+                edge
+                for edge in definition.edges
+                if edge.source_node_id in semantic_node_ids
+                and edge.target_node_id in semantic_node_ids
+            ],
+        }
+    )
+    semantic_input_counts: dict[tuple[str, str], int] = defaultdict(int)
+    semantic_output_counts: dict[tuple[str, str], int] = defaultdict(int)
+    for edge in semantic_definition.edges:
+        semantic_input_counts[(edge.target_node_id, edge.target_handle)] += 1
+        semantic_output_counts[(edge.source_node_id, edge.source_handle)] += 1
+    semantic_node_by_id = {
+        node.id: node for node in semantic_definition.nodes
+    }
+
+    _validate_bbox_prompt_references(
+        semantic_definition,
+        semantic_node_by_id,
+    )
     _validate_image_node_connections(
-        definition,
-        input_connection_counts,
-        output_connection_counts,
+        semantic_definition,
+        semantic_input_counts,
+        semantic_output_counts,
         require_complete=require_complete,
     )
     _validate_layer_canvas_connections(
-        definition,
-        output_connection_counts,
+        semantic_definition,
+        semantic_output_counts,
     )
     if require_complete:
-        _validate_video_generation_inputs(definition, input_connection_counts)
+        _validate_video_generation_inputs(
+            semantic_definition,
+            semantic_input_counts,
+        )
 
-        for node in definition.nodes:
+        for node in semantic_definition.nodes:
             registry = NODE_REGISTRY_BY_TYPE[node.type]
             for port in registry.inputs:
                 if (
@@ -650,9 +694,28 @@ def build_aigc_execution_plan(
     available_asset_ids: set[str] | None = None,
 ) -> AigcExecutionPlan:
     definition = _canonical_graph(definition)
+    if mode not in {
+        AigcPipelineRunMode.FULL,
+        AigcPipelineRunMode.FROM_NODE,
+    }:
+        raise ValueError("retry_node plans are created from a source run")
+    if mode == AigcPipelineRunMode.FULL:
+        validation_node_ids = None
+    else:
+        if start_node_id is None:
+            raise AigcDagValidationError(
+                "start_node_missing",
+                "incremental execution requires a valid start node",
+                node_id=start_node_id,
+            )
+        validation_node_ids = aigc_projection_node_ids(
+            definition,
+            start_node_id,
+        )
     order = validate_aigc_dag(
         definition,
         available_asset_ids=available_asset_ids,
+        validation_node_ids=validation_node_ids,
     )
     node_by_id = {node.id: node for node in definition.nodes}
     parents, children = _adjacency(definition)
@@ -670,8 +733,6 @@ def build_aigc_execution_plan(
             for node_id in order
         }
         return AigcExecutionPlan(order, actions, {})
-    if mode != AigcPipelineRunMode.FROM_NODE:
-        raise ValueError("retry_node plans are created from a source run")
     if start_node_id is None or start_node_id not in node_by_id:
         raise AigcDagValidationError(
             "start_node_missing",

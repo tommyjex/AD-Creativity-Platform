@@ -116,6 +116,42 @@ describe("AIGC node display names", () => {
     });
   });
 
+  it("prioritizes custom names without renumbering sibling nodes", () => {
+    const nodes = [
+      { ...inputNode("image-a", "image"), custom_name: "商品主视觉" },
+      inputNode("image-b", "image"),
+      inputNode("image-c", "image")
+    ] satisfies AigcV2Node[];
+    const names = deriveAigcNodeDisplayNames(nodes);
+
+    expect(nodes.map((node) => names.get(node.id)?.displayName)).toEqual([
+      "商品主视觉",
+      "图片节点2",
+      "图片节点3"
+    ]);
+  });
+
+  it("uses custom names before managed labels and allows duplicates", () => {
+    const nodes = [
+      { ...inputNode("text-a", "text"), custom_name: "备选方案" },
+      { ...inputNode("text-b", "text"), custom_name: "备选方案" },
+      inputNode("text-c", "text")
+    ] satisfies AigcV2Node[];
+    const names = deriveAigcNodeDisplayNames(
+      nodes,
+      new Map([
+        ["text-a", "解析项 A"],
+        ["text-c", "解析项 C"]
+      ])
+    );
+
+    expect(nodes.map((node) => names.get(node.id)?.displayName)).toEqual([
+      "备选方案",
+      "备选方案",
+      "解析项 C"
+    ]);
+  });
+
   it("renumbers remaining nodes after deletion without changing stable data", () => {
     const nodes = [
       inputNode("image-a", "image"),

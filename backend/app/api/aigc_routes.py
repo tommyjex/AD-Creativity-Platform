@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from time import perf_counter
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
 
 from backend.app.api.dependencies import (
     get_aigc_pipeline_service,
+    get_aigc_pipeline_thumbnail_service,
     get_aigc_pipeline_runtime,
     get_asset_storage_service,
     get_media_inspector_service,
@@ -17,6 +19,7 @@ from backend.app.api.dependencies import (
     get_video_normalizer_service,
 )
 from backend.app.core.config import ConfigurationError
+from backend.app.core.logging import log_event
 from backend.app.repositories import (
     ActiveRunConflictError,
     NotFoundError,
@@ -32,6 +35,8 @@ from backend.app.schemas import (
     AigcPipelineRun,
     AigcPipelineRunCreate,
     AigcPipelineRunDetail,
+    AigcPipelineThumbnailCandidate,
+    AigcPipelineThumbnailUpdate,
     AigcPipelineTemplate,
     AigcPipelineTemplateCreate,
     AigcPipelineTemplateUpdate,
@@ -49,11 +54,23 @@ from backend.app.schemas import (
     ToolAssetRole,
 )
 from backend.app.services.aigc_pipeline import AigcPipelineService
+from backend.app.services.aigc_pipeline_thumbnail import (
+    AigcPipelineThumbnailService,
+    AigcPipelineThumbnailValidationError,
+)
 from backend.app.services.aigc_dag import AigcDagValidationError
 from backend.app.services.aigc_executor import AigcPipelineRuntime
-from backend.app.services.assets import AssetStorageService, StoredAssetInput
+from backend.app.services.assets import (
+    AssetStorageService,
+    PromptOptimizationContextError,
+    PromptOptimizationRevisionConflictError,
+    StoredAssetInput,
+)
 from backend.app.services.generation import ModelArkGenerationService
-from backend.app.services.modelark import ModelArkProviderError, ModelArkTextParseError
+from backend.app.services.modelark import (
+    ModelArkProviderError,
+    ModelArkTextParseError,
+)
 from backend.app.services.media_inspector import MediaInspector
 from backend.app.services.video_normalizer import (
     VideoNormalizationError,
@@ -80,13 +97,72 @@ async def optimize_aigc_prompt(
     generation: ModelArkGenerationService = Depends(
         get_modelark_generation_service
     ),
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
 ) -> AigcPromptOptimizeResponse:
+    started_at = perf_counter()
+    context = {
+        "trace_id": payload.target_node_id,
+        "operation": "prompt_optimization",
+        "task_type": payload.target_type,
+        "phase": "request",
+    }
+    log_event(logger, "aigc.prompt_optimization", outcome="started", **context)
     try:
-        return await generation.optimize_aigc_prompt(payload)
-    except (ModelArkProviderError, ModelArkTextParseError) as exc:
-        logger.warning(
+        image_context = await asset_storage.resolve_prompt_optimization_image(
+            repository,
+            payload,
+        )
+        response = await generation.optimize_aigc_prompt(
+            payload,
+            source_image_url=image_context.source_image_url,
+        )
+        log_event(
+            logger,
+            "aigc.prompt_optimization",
+            outcome="succeeded",
+            duration_ms=(perf_counter() - started_at) * 1000,
+            **context,
+        )
+        return response
+    except PromptOptimizationRevisionConflictError as exc:
+        log_event(
+            logger, "aigc.prompt_optimization", outcome="failed",
+            level=logging.WARNING, duration_ms=(perf_counter() - started_at) * 1000,
+            exception=exc, **context,
+        )
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.INVALID_STATE,
+            "AIGC pipeline revision conflict",
+        ) from exc
+    except PromptOptimizationContextError as exc:
+        log_event(
+            logger, "aigc.prompt_optimization", outcome="failed",
+            level=logging.WARNING, duration_ms=(perf_counter() - started_at) * 1000,
+            exception=exc, **context,
+        )
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.VALIDATION_ERROR,
+            "AIGC prompt optimization context is invalid",
+        ) from exc
+    except ModelArkTextParseError as exc:
+        log_event(
+            logger, "aigc.prompt_optimization", outcome="failed",
+            level=logging.WARNING, duration_ms=(perf_counter() - started_at) * 1000,
+            exception=exc, error_code="invalid_response", **context,
+        )
+        raise _error(
+            status.HTTP_502_BAD_GATEWAY,
+            ErrorCode.EXTERNAL_SERVICE_ERROR,
             "AIGC prompt optimization failed",
-            extra=exc.safe_log_fields(),
+        ) from exc
+    except ModelArkProviderError as exc:
+        log_event(
+            logger, "aigc.prompt_optimization", outcome="failed",
+            level=logging.WARNING, duration_ms=(perf_counter() - started_at) * 1000,
+            exception=exc, provider="modelark", **context,
         )
         raise _error(
             status.HTTP_502_BAD_GATEWAY,
@@ -217,8 +293,18 @@ def list_aigc_pipelines(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     repository: Repository = Depends(get_repository),
+    thumbnail_service: AigcPipelineThumbnailService = Depends(
+        get_aigc_pipeline_thumbnail_service
+    ),
 ) -> AigcPage[AigcPipeline]:
-    return _page(repository.list_aigc_pipelines(q), page=page, page_size=page_size)
+    result = _page(
+        repository.list_aigc_pipelines(q),
+        page=page,
+        page_size=page_size,
+    )
+    return result.model_copy(
+        update={"items": thumbnail_service.enrich_pipelines(result.items)}
+    )
 
 
 @router.post(
@@ -242,13 +328,68 @@ def create_aigc_pipeline(
         raise _aigc_validation_error(exc) from exc
 
 
+@router.get(
+    "/pipelines/{pipeline_id}/thumbnail-candidates",
+    response_model=AigcPage[AigcPipelineThumbnailCandidate],
+)
+def list_aigc_pipeline_thumbnail_candidates(
+    pipeline_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    thumbnail_service: AigcPipelineThumbnailService = Depends(
+        get_aigc_pipeline_thumbnail_service
+    ),
+) -> AigcPage[AigcPipelineThumbnailCandidate]:
+    try:
+        return thumbnail_service.list_candidates(
+            pipeline_id,
+            page=page,
+            page_size=page_size,
+        )
+    except NotFoundError as exc:
+        raise _error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "AIGC pipeline not found",
+        ) from exc
+
+
+@router.put("/pipelines/{pipeline_id}/thumbnail", response_model=AigcPipeline)
+def update_aigc_pipeline_thumbnail(
+    pipeline_id: str,
+    payload: AigcPipelineThumbnailUpdate,
+    thumbnail_service: AigcPipelineThumbnailService = Depends(
+        get_aigc_pipeline_thumbnail_service
+    ),
+) -> AigcPipeline:
+    try:
+        return thumbnail_service.set_thumbnail(pipeline_id, payload)
+    except NotFoundError as exc:
+        raise _error(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "AIGC pipeline not found",
+        ) from exc
+    except AigcPipelineThumbnailValidationError as exc:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.VALIDATION_ERROR,
+            "AIGC pipeline thumbnail is invalid",
+        ) from exc
+
+
 @router.get("/pipelines/{pipeline_id}", response_model=AigcPipeline)
 def get_aigc_pipeline(
     pipeline_id: str,
     repository: Repository = Depends(get_repository),
+    thumbnail_service: AigcPipelineThumbnailService = Depends(
+        get_aigc_pipeline_thumbnail_service
+    ),
 ) -> AigcPipeline:
     try:
-        return repository.get_aigc_pipeline(pipeline_id)
+        return thumbnail_service.enrich_pipeline(
+            repository.get_aigc_pipeline(pipeline_id)
+        )
     except NotFoundError as exc:
         raise _error(
             status.HTTP_404_NOT_FOUND,

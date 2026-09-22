@@ -7,6 +7,7 @@ import {
 import {
   createAigcEditorStore,
   deriveAigcModalityNodeMode,
+  mergeAigcServerRevision,
   readAigcRunDefinitionSnapshot,
   serializeAigcEditorDefinition
 } from "@/lib/aigc/editor-store";
@@ -102,7 +103,10 @@ function definition(
 ): AigcPipelineDefinitionV2 {
   return {
     schemaVersion: 2,
-    nodes,
+    nodes: nodes.map((node) => ({
+      ...node,
+      custom_name: node.custom_name ?? null
+    })) as AigcV2Node[],
     edges,
     viewport: { x: 0, y: 0, zoom: 1 }
   };
@@ -213,6 +217,100 @@ describe("AIGC v2 editor store", () => {
       { type: "video", config: { asset_id: null, title: null } },
       { type: "audio", config: { asset_id: null, title: null } }
     ]);
+  });
+
+  it("creates a node centered on an explicit snapped canvas position", () => {
+    const store = createAigcEditorStore();
+
+    store.getState().addNode("text", { x: 503, y: 407 });
+
+    expect(store.getState().definition.nodes[0]).toMatchObject({
+      custom_name: null,
+      position: { x: 384, y: 320 },
+      size: { width: 240, height: 160 }
+    });
+  });
+
+  it("renames a node in one undoable commit and clears blank names", () => {
+    const store = createAigcEditorStore();
+    store.getState().addNode("text");
+    const nodeId = store.getState().definition.nodes[0]!.id;
+    const historyAfterAdd = store.getState().past.length;
+
+    store.getState().setNodeCustomName(nodeId, "  商品主视觉生成  ");
+
+    expect(store.getState().definition.nodes[0]?.custom_name).toBe(
+      "商品主视觉生成"
+    );
+    expect(store.getState().past).toHaveLength(historyAfterAdd + 1);
+
+    store.getState().undo();
+    expect(store.getState().definition.nodes[0]?.custom_name).toBeNull();
+    store.getState().redo();
+    expect(store.getState().definition.nodes[0]?.custom_name).toBe(
+      "商品主视觉生成"
+    );
+
+    store.getState().setNodeCustomName(nodeId, "   ");
+    expect(store.getState().definition.nodes[0]?.custom_name).toBeNull();
+  });
+
+  it("rebases an authoritative AI node name into the draft and undo history", () => {
+    const initialDefinition = definition([modalityNode("image", "image")]);
+    const initial = {
+      definition: initialDefinition,
+      description: "",
+      name: "生成画布"
+    };
+    const store = createAigcEditorStore({
+      ...initial,
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      revision: 1
+    });
+    store.getState().setNodeCustomName("image", "运行中人工名称");
+    const local = {
+      definition: store.getState().definition,
+      description: store.getState().description,
+      name: store.getState().name
+    };
+    const server = {
+      ...initial,
+      definition: definition([
+        {
+          ...modalityNode("image", "image"),
+          custom_name: null
+        }
+      ])
+    };
+    const authoritativeNodeNames = new Map([["image", "秋日咖啡"]]);
+    const draft = mergeAigcServerRevision(
+      initial,
+      local,
+      server,
+      authoritativeNodeNames
+    );
+
+    expect(
+      store.getState().applyServerRevision(
+        {
+          ...server,
+          revision: 2
+        },
+        {
+          draft,
+          dirty: true,
+          authoritativeNodeNames
+        }
+      )
+    ).toBe("applied");
+
+    expect(store.getState().revision).toBe(2);
+    expect(store.getState().definition.nodes[0]?.custom_name).toBe("秋日咖啡");
+    store.getState().undo();
+    expect(store.getState().definition.nodes[0]?.custom_name).toBe("秋日咖啡");
+    store.getState().redo();
+    expect(store.getState().definition.nodes[0]?.custom_name).toBe("秋日咖啡");
   });
 
   it("creates a multi-track edit node with an isolated default project", () => {
@@ -350,10 +448,77 @@ describe("AIGC v2 editor store", () => {
     expect(store.getState().definition.nodes[0]!.position.x).toBe(0);
   });
 
+  it("writes multiline optimization to the upstream override in one undo step", () => {
+    const source = {
+      id: "source",
+      type: "llm",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        model: "doubao-seed-evolving",
+        system_prompt: "",
+        temperature: 0.7
+      }
+    } satisfies AigcV2Node;
+    const prompt = modalityNode("prompt", "text");
+    if (prompt.type !== "text") throw new Error("expected text node");
+    prompt.config = {
+      ...prompt.config,
+      text: "本地备用文本",
+      upstream_text_override: "当前上游覆盖"
+    };
+    const edge: AigcEdge = {
+      id: "source-prompt",
+      sourceNodeId: source.id,
+      sourceHandle: "text",
+      targetNodeId: prompt.id,
+      targetHandle: "text"
+    };
+    const store = createAigcEditorStore({
+      definition: definition([source, prompt], [edge]),
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "上游提示词优化",
+      revision: 1
+    });
+    const optimizedText = [
+      "Subject: Premium cleaner bottle",
+      "Composition: Centered product with top copy space",
+      "Negative Prompt: No extra products or altered label text"
+    ].join("\n");
+
+    expect(
+      store
+        .getState()
+        .applyOptimizedTextPrompt(
+          prompt.id,
+          structuredClone(prompt.config),
+          optimizedText,
+          []
+        )
+    ).toBe("applied");
+
+    const optimized = store.getState().definition.nodes[1];
+    expect(optimized?.config).toMatchObject({
+      text: "本地备用文本",
+      upstream_text_override: optimizedText
+    });
+    expect(store.getState().past).toHaveLength(1);
+    expect(store.getState().dirty).toBe(true);
+
+    store.getState().undo();
+    expect(store.getState().definition.nodes[1]?.config).toMatchObject({
+      text: "本地备用文本",
+      upstream_text_override: "当前上游覆盖"
+    });
+  });
+
   it("detaches managed text atomically when its parser system edge is deleted", () => {
     const parser: AigcV2Node = {
       id: "parser",
       type: "json_parser",
+      custom_name: null,
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
       config: { json_path: "$.items" }
@@ -627,6 +792,7 @@ describe("AIGC v2 editor store", () => {
     const parser: AigcV2Node = {
       id: "parser",
       type: "json_parser",
+      custom_name: null,
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
       config: { json_path: "$.items" }
@@ -741,7 +907,18 @@ describe("AIGC v2 connection validation", () => {
   const relay = modalityNode("relay", "text");
   const fanout = modalityNode("fanout", "text");
   const image = modalityNode("image", "image");
-  const nodes = [source, relay, fanout, image];
+  const llm: AigcV2Node = {
+    id: "llm",
+    type: "llm",
+    position: { x: 640, y: 0 },
+    size: { width: 240, height: 160 },
+    config: {
+      model: "doubao-seed-evolving",
+      system_prompt: "",
+      temperature: 0.7
+    }
+  };
+  const nodes = [source, relay, fanout, image, llm];
   const firstEdge: AigcEdge = {
     id: "source-to-relay",
     sourceNodeId: source.id,
@@ -797,6 +974,53 @@ describe("AIGC v2 connection validation", () => {
         [firstEdge]
       )
     ).toBe(true);
+  });
+
+  it("allows one image input for an LLM and rejects a duplicate or type mismatch", () => {
+    const imageEdge: AigcEdge = {
+      id: "image-to-llm",
+      sourceNodeId: image.id,
+      sourceHandle: "image",
+      targetNodeId: llm.id,
+      targetHandle: "image"
+    };
+
+    expect(
+      isValidAigcConnection(
+        {
+          source: image.id,
+          sourceHandle: "image",
+          target: llm.id,
+          targetHandle: "image"
+        },
+        nodes,
+        []
+      )
+    ).toBe(true);
+    expect(
+      getAigcConnectionValidationError(
+        {
+          source: image.id,
+          sourceHandle: "image",
+          target: llm.id,
+          targetHandle: "image"
+        },
+        nodes,
+        [imageEdge]
+      )
+    ).toBe("duplicate_edge");
+    expect(
+      getAigcConnectionValidationError(
+        {
+          source: llm.id,
+          sourceHandle: "text",
+          target: image.id,
+          targetHandle: "image"
+        },
+        nodes,
+        [imageEdge]
+      )
+    ).toBe("port_type_mismatch");
   });
 
   it.each([

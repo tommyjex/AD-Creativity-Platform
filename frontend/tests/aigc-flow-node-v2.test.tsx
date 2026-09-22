@@ -433,11 +433,11 @@ describe("AIGC v2 modality node card", () => {
       screen.getByLabelText("播放视频：多轨剪辑成片")
     ).toHaveClass("object-contain");
     expect(
-      screen.getByRole("button", { name: "全屏播放：多轨剪辑成片" })
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "全屏播放：多轨剪辑成片" })
+    ).toBeNull();
     expect(
       screen.getByRole("link", { name: "下载视频：多轨剪辑成片" })
-    ).toHaveAttribute("download", "多轨剪辑成片-1.mp4");
+    ).toHaveAttribute("download", "多轨剪辑成片.mp4");
     expect(screen.getByText("4 轨道")).toBeInTheDocument();
     expect(screen.getByText("12 元素")).toBeInTheDocument();
     expect(screen.getByText("00:13")).toBeInTheDocument();
@@ -565,7 +565,7 @@ describe("AIGC v2 modality node card", () => {
             title: "海报成片"
           }
         } satisfies AigcV2Node,
-        expectedFilename: "海报成片-1.png"
+        expectedFilename: "海报成片.png"
       },
       {
         asset: {
@@ -584,7 +584,7 @@ describe("AIGC v2 modality node card", () => {
           size: { width: 240, height: 160 },
           config: { asset_id: "local-video", title: "视频成片" }
         } satisfies AigcV2Node,
-        expectedFilename: "视频成片-1.mp4"
+        expectedFilename: "视频成片.mp4"
       },
       {
         asset: {

@@ -47,6 +47,13 @@ describe("AIGC contracts", () => {
             type: "text",
             multiple: false,
             max_connections: 1
+          },
+          {
+            id: "image",
+            type: "image_asset",
+            required: false,
+            multiple: false,
+            max_connections: 1
           }
         ]
       }
@@ -101,8 +108,8 @@ describe("AIGC contracts", () => {
     ).toMatchObject({
       category: "control",
       inputs: [
-        { id: "layers", type: "layer_set" },
-        { id: "replacement", type: "edited_layer" }
+        { id: "layers", type: "layer_set", required: true },
+        { id: "replacement", type: "edited_layer", required: false }
       ],
       outputs: [
         { id: "image", type: "image_asset" },

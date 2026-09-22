@@ -1,0 +1,33 @@
+# Checklist
+
+- [x] AIGC 节点面板可添加“视频字幕提取”节点，旧 `schemaVersion=1` 画布无需迁移即可加载
+- [x] 节点固定使用 `mode=Subtitle`，只接受一个 `video_asset` 输入并输出 `subtitle_asset`
+- [x] 前后端节点类型、Task 类型、联合类型、注册表、执行白名单和 DAG 端口契约保持同构
+- [x] 非视频输入、缺失输入、多输入和 `subtitle_asset` 错连在调用供应商前被拒绝
+- [x] Gateway 校验视频资产成功状态、公开角色、视频 MIME、支持容器、大于 0 且不超过 600 秒的时长和 240p–4K 分辨率
+- [x] MediaKit 请求使用现有 API Key 和 Base URL，并调用 `POST /api/v1/tools/video-ocr`
+- [x] 供应商请求只发送受控 `video_url`、`mode=Subtitle` 和不超过 64 字符的稳定 `client_token`
+- [x] 请求不发送 Detailed、回调、队列或供应商直存参数
+- [x] 未配置 MediaKit 凭证时生产任务明确失败，自动化测试通过依赖注入使用 Mock
+- [x] 轮询正确处理排队、运行、完成、失败、取消、过期、未知状态、非法响应、网络错误和超时
+- [x] 日志、错误、Task Attempt 和资产 metadata 不泄露 API Key、完整签名 URL、查询参数或供应商原始响应
+- [x] OCR 结果读取 `duration` 与 `subtitles`，有效片段按时间和原始序号稳定排序
+- [x] 单条空文本、非法时间、负时间或倒置区间被丢弃并记录 warning，非法整体结构导致脱敏失败
+- [x] 非空 OCR 结果复用 `segments_to_srt` 生成 UTF-8 标准 SRT
+- [x] SRT 资产类型为 `subtitle`，MIME 为 `application/x-subrip`，状态成功且关联 pipeline/run/node/task/input asset
+- [x] SRT metadata 包含 provider、operation、mode、片段数、时长、供应商追踪 ID 和 executor version
+- [x] 空字幕结果节点成功、不创建空资产、结果区显示“未识别到字幕”，依赖字幕资产的下游不执行
+- [x] 非空字幕资产和空字幕成功结果都可按相同 input hash 复用，输入视频或 executor version 变化会失效
+- [x] OCR 使用独立并发、轮询和任务超时，不占用 Seedance、ASR、画质增强或人脸打码槽位
+- [x] 重试、取消、Worker 租约、晚到结果保护、从节点继续和独立分支收敛符合现有 AIGC 语义
+- [x] 多轨剪辑新增最多 10 个 `subtitle_asset` 输入，并按稳定连线顺序生成字幕轨
+- [x] 上游字幕轨与配置内字幕轨合并时按资产 ID 去重，总数不超过 10
+- [x] 多轨执行重新校验 SRT 资产状态、类型、MIME 和内容，字幕连接顺序与内容摘要进入缓存 Hash
+- [x] 节点卡片展示“硬字幕 OCR · SRT”及连接/运行/空结果状态，无无效配置控件
+- [x] 结果面板通过受控资产内容接口展示片段数、源视频时长、按时间排序的字幕预览和脱敏失败阶段
+- [x] SRT 下载使用图标按钮和“节点标题-序号.srt”文件名，不可用资产禁用下载
+- [x] 桌面与窄屏下节点、结果面板和多轨字幕轨无不合理重叠或溢出
+- [x] 后端新增与相关 pytest 通过，并覆盖现有 MediaKit ASR、人脸打码、画质增强、多轨和 Seedance 回归
+- [x] 前端相关 Vitest、typecheck、lint 和 production build 通过
+- [x] 浏览器 Mock 验收覆盖添加、连线、保存重载、执行、预览、下载、空结果、失败重试和多轨接入
+- [x] 自动化测试与浏览器验收未向真实计费的 MediaKit `video-ocr` 接口发起请求，结束后无残留测试浏览器进程

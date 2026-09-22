@@ -16,7 +16,7 @@ export default async function AigcPipelineEditorPage({
     });
   } catch (error) {
     return (
-      <main className="grid h-[calc(100dvh-4rem)] place-items-center px-6">
+      <main className="grid h-[100dvh] place-items-center px-6">
         <p className="text-sm text-destructive">
           {getUserFacingErrorMessage(error)}
         </p>
@@ -24,5 +24,9 @@ export default async function AigcPipelineEditorPage({
     );
   }
 
-  return <AigcEditor entity={pipeline} mode="pipeline" />;
+  return (
+    <div className="h-[100dvh] overflow-hidden [&>main]:!h-full">
+      <AigcEditor entity={pipeline} mode="pipeline" />
+    </div>
+  );
 }

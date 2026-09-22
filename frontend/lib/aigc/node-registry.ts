@@ -44,6 +44,7 @@ export const AIGC_EXECUTION_NODE_TYPES = [
   "video_generation",
   "video_enhancement",
   "video_face_blur",
+  "video_subtitle_extraction",
   "multi_track_edit",
   "json_parser"
 ] as const satisfies readonly (AigcNodeType | AigcV2NodeType)[];
@@ -84,7 +85,10 @@ const AIGC_MODEL_CONTROL_NODE_REGISTRY = [
     label: "LLM",
     category: "model",
     executable: true,
-    inputs: [port("prompt", "提示词", "text")],
+    inputs: [
+      port("prompt", "提示词", "text"),
+      port("image", "图片", "image_asset", { required: false })
+    ],
     outputs: [port("text", "文本", "text")],
     models: [AIGC_DEFAULT_TEXT_MODEL]
   },
@@ -186,6 +190,15 @@ const AIGC_MODEL_CONTROL_NODE_REGISTRY = [
     models: []
   },
   {
+    type: "video_subtitle_extraction",
+    label: "视频字幕提取",
+    category: "model",
+    executable: true,
+    inputs: [port("video", "视频", "video_asset")],
+    outputs: [port("subtitle", "字幕", "subtitle_asset")],
+    models: []
+  },
+  {
     type: "multi_track_edit",
     label: "多轨剪辑",
     category: "control",
@@ -210,6 +223,11 @@ const AIGC_MODEL_CONTROL_NODE_REGISTRY = [
         required: false,
         multiple: true,
         maxConnections: 30
+      }),
+      port("subtitles", "字幕", "subtitle_asset", {
+        required: false,
+        multiple: true,
+        maxConnections: 10
       })
     ],
     outputs: [port("video", "视频", "video_asset")],
@@ -252,7 +270,9 @@ const AIGC_MODEL_CONTROL_NODE_REGISTRY = [
     executable: true,
     inputs: [
       port("layers", "图层集", "layer_set"),
-      port("replacement", "替换图层", "edited_layer")
+      port("replacement", "替换图层", "edited_layer", {
+        required: false
+      })
     ],
     outputs: [
       port("image", "图片", "image_asset"),

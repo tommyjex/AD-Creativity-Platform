@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { AigcPreciseEditDialog } from "@/components/workspace/aigc/aigc-precise-edit-dialog";
 import { AigcAudioPlayer } from "@/components/workspace/aigc/aigc-audio-player";
 import {
@@ -35,6 +35,7 @@ import {
 import { apiClient } from "@/lib/api-client";
 import {
   getAigcAudioDownload,
+  getAigcImageDownload,
   getAigcVideoDownload
 } from "@/lib/aigc/download";
 import { isSelectableMediaAsset } from "@/lib/aigc/media-assets";
@@ -54,6 +55,7 @@ import {
   jsonParserItemCount,
   managedTextSource
 } from "@/lib/aigc/json-parser-ui";
+import { resolveAigcLlmImageInput } from "@/lib/aigc/llm-image-input";
 import { aigcNodeMinimumSize } from "@/lib/aigc/node-layout";
 import { AIGC_NODE_REGISTRY_BY_TYPE } from "@/lib/aigc/node-registry";
 import {
@@ -119,11 +121,26 @@ function AigcFlowNodeComponent({
   selected
 }: NodeProps<AigcFlowNode>) {
   const resizeNode = useAigcEditorStore((state) => state.resizeNode);
+  const renamingNodeId = useAigcEditorStore((state) => state.renamingNodeId);
+  const setRenamingNodeId = useAigcEditorStore(
+    (state) => state.setRenamingNodeId
+  );
+  const setNodeCustomName = useAigcEditorStore(
+    (state) => state.setNodeCustomName
+  );
   const definition = useAigcEditorStore((state) => state.definition);
   const edges = definition.edges;
   const runDetail = useAigcRunProjection(id);
   const layerPreviewRun = useAigcLayerPreviewRun(id);
   const runNode = runDetail?.nodes.find((item) => item.node_id === id);
+  const llmImageInput =
+    data.node.type === "llm"
+      ? resolveAigcLlmImageInput(
+          definition as AigcPipelineDefinitionV2,
+          data.node.id,
+          runDetail
+        )
+      : null;
   const layerCanvasRunDetail =
     data.node.type === "layer_canvas" &&
     runNode?.status !== "succeeded" &&
@@ -135,14 +152,6 @@ function AigcFlowNodeComponent({
       ?.displayName ?? aigcNodeBaseDisplayName(data.node);
   const registration = AIGC_NODE_REGISTRY_BY_TYPE.get(data.node.type);
   const minimumSize = aigcNodeMinimumSize(data.node.type);
-  const category = registration?.category ?? "model";
-  const inputModalityColors =
-    category === "modality"
-      ? getAigcModalityColors(registration?.outputs[0]?.type)
-      : data.node.type === "video_enhancement" ||
-          data.node.type === "video_face_blur"
-        ? getAigcModalityColors("video_asset")
-      : null;
   const imageInputPort = registration?.inputs.find(
     (port) => port.id === "image" && port.type === "image_asset"
   );
@@ -226,6 +235,9 @@ function AigcFlowNodeComponent({
   const modalityTitle =
     modalityProjection?.title ?? currentModalityTitle;
   const managedSource = managedTextSource(data.node, definition.nodes);
+  const resolvedDisplayName =
+    data.node.custom_name?.trim() || managedSource?.itemLabel || displayName;
+  const renaming = renamingNodeId === id;
   const videoProjection =
     modality === "video" && modalityProjection && runDetail
       ? projectAigcVideoResult(
@@ -265,16 +277,37 @@ function AigcFlowNodeComponent({
     modalityProjection?.asset && modality === "audio"
       ? getAigcAudioDownload(modalityProjection.asset, modalityTitle)
       : null;
+  const generatedAsset =
+    runNode?.result.kind === "assets" ? runNode.result.assets[0] : undefined;
+  const generatedMediaDownload =
+    generatedAsset?.available &&
+    ["text_to_image", "image_to_image", "image_edit"].includes(data.node.type)
+      ? getAigcImageDownload(
+          generatedAsset,
+          resolvedDisplayName,
+          definition as AigcPipelineDefinitionV2
+        )
+      : generatedAsset?.available && data.node.type === "video_generation"
+        ? getAigcVideoDownload(
+            generatedAsset,
+            resolvedDisplayName,
+            definition as AigcPipelineDefinitionV2
+          )
+        : null;
   const multiTrackDownload = multiTrackProjection
     ? getAigcVideoDownload(
         multiTrackProjection.asset,
-        multiTrackProjection.title
+        multiTrackProjection.title,
+        definition
       )
     : null;
-  const outputDownload = modalityDownload ?? multiTrackDownload;
-  const outputTitle = modality
-    ? modalityTitle
-    : multiTrackProjection?.title ?? "";
+  const outputDownload =
+    generatedMediaDownload ?? modalityDownload ?? multiTrackDownload;
+  const outputTitle = generatedMediaDownload
+    ? resolvedDisplayName
+    : modality
+      ? modalityTitle
+      : multiTrackProjection?.title ?? "";
   const displayAsset = modalityProjection?.asset;
   const preciseEditAssetId =
     data.node.type !== "image"
@@ -392,19 +425,9 @@ function AigcFlowNodeComponent({
   return (
     <div
       className={cn(
-        "flex h-full w-full flex-col overflow-hidden rounded-md border bg-card shadow-md",
-        selected && "ring-2 ring-primary/20",
-        inputModalityColors
-          ? null
-          : selected
-            ? "border-primary"
-            : "border-border"
+        "flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card shadow-md",
+        selected && "ring-2 ring-primary/20"
       )}
-      style={
-        inputModalityColors
-          ? { borderColor: inputModalityColors.cardBorderColor }
-          : undefined
-      }
     >
       <NodeResizer
         color="hsl(var(--primary))"
@@ -503,12 +526,23 @@ function AigcFlowNodeComponent({
         className="group/title flex h-7 shrink-0 items-center justify-between px-2.5"
         data-testid="aigc-node-title-row"
       >
-        <span
-          className="min-w-0 truncate text-[11px] font-medium text-foreground"
-          data-testid="aigc-node-title"
-        >
-          {managedSource?.itemLabel ?? displayName}
-        </span>
+        {renaming ? (
+          <InlineNodeNameInput
+            initialValue={resolvedDisplayName}
+            onCancel={() => setRenamingNodeId(null)}
+            onSave={(value) => {
+              setNodeCustomName(id, value);
+              setRenamingNodeId(null);
+            }}
+          />
+        ) : (
+          <span
+            className="min-w-0 truncate text-[11px] font-medium text-foreground"
+            data-testid="aigc-node-title"
+          >
+            {resolvedDisplayName}
+          </span>
+        )}
         <div className="nodrag flex shrink-0 items-center gap-0.5">
           {outputDownload ? (
             <div className="opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100">
@@ -641,11 +675,41 @@ function AigcFlowNodeComponent({
           {data.node.type === "video_enhancement" ? (
             <VideoEnhancementCostBadges node={data.node} />
           ) : null}
+          {llmImageInput ? (
+            <LlmImageInputSummary input={llmImageInput} />
+          ) : null}
           <p className="line-clamp-3 text-xs leading-5 text-muted-foreground">
-            {nodeSummary(data.node)}
+            {runNode?.result.metadata?.empty === true
+              ? "未识别到字幕"
+              : nodeSummary(data.node)}
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function LlmImageInputSummary({
+  input
+}: {
+  input: ReturnType<typeof resolveAigcLlmImageInput>;
+}) {
+  return (
+    <div
+      aria-label={`LLM 图片输入：${input.sourceLabel ?? "未连接"}，${input.statusLabel}`}
+      className={cn(
+        "mb-2 rounded border px-2 py-1 text-[10px]",
+        input.state === "ready"
+          ? "border-success/30 bg-success/10 text-success"
+          : input.state === "unavailable"
+            ? "border-destructive/30 bg-destructive/10 text-destructive"
+            : "border-border bg-muted text-muted-foreground"
+      )}
+      data-testid="aigc-llm-image-input"
+    >
+      <span className="font-medium">图片输入</span>
+      <span> · {input.sourceLabel ?? "未连接"}</span>
+      <span> · {input.statusLabel}</span>
     </div>
   );
 }
@@ -1565,7 +1629,13 @@ function resultMetadataNumber(
 
 function downloadKindLabel(node: AigcV2Node): "图片" | "视频" | "音频" {
   if (node.type === "audio") return "音频";
-  if (node.type === "video" || node.type === "multi_track_edit") return "视频";
+  if (
+    node.type === "video" ||
+    node.type === "video_generation" ||
+    node.type === "multi_track_edit"
+  ) {
+    return "视频";
+  }
   return "图片";
 }
 
@@ -1631,6 +1701,9 @@ function nodeSummary(node: AigcV2Node): string {
   if (node.type === "video_face_blur") {
     return `${videoFaceBlurModeLabel(node.config.mask_mode)} · ${videoFaceBlurStrengthLabel(node.config.mask_strength)}`;
   }
+  if (node.type === "video_subtitle_extraction") {
+    return "硬字幕 OCR · SRT";
+  }
   if (node.type === "multi_track_edit") return "多轨剪辑工程";
   if (node.type === "json_parser") return node.config.json_path;
   if (node.type === "layer_canvas") {
@@ -1674,6 +1747,55 @@ function VideoEnhancementCostBadges({
         </span>
       ))}
     </div>
+  );
+}
+
+function InlineNodeNameInput({
+  initialValue,
+  onCancel,
+  onSave
+}: {
+  initialValue: string;
+  onCancel: () => void;
+  onSave: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(initialValue);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const canceledRef = useRef(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  return (
+    <input
+      aria-label="节点名称"
+      className="nodrag nowheel min-w-0 flex-1 border border-blue-500 bg-[#101318] px-1.5 py-0.5 text-[11px] font-medium text-foreground outline-none"
+      data-testid="aigc-node-name-input"
+      maxLength={120}
+      onBlur={() => {
+        if (canceledRef.current) return;
+        onSave(draft);
+      }}
+      onChange={(event) => setDraft(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onSave(draft);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          canceledRef.current = true;
+          onCancel();
+        }
+      }}
+      ref={inputRef}
+      value={draft}
+    />
   );
 }
 

@@ -101,6 +101,8 @@ const pipeline: AigcPipeline = {
   source_template_revision: null,
   revision: 4,
   latest_run_status: "succeeded",
+  thumbnail_asset_id: null,
+  thumbnail: null,
   created_at: "2026-08-30T10:00:00Z",
   updated_at: "2026-08-30T10:00:00Z"
 };

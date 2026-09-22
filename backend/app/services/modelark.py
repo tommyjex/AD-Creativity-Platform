@@ -10,11 +10,26 @@ from time import monotonic
 from typing import Any, Literal, Optional, Protocol, TypeAlias, Union
 
 import httpx
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from ..core.config import Settings, get_settings
+from ..core.logging import emit_tls_only_event
 from ..schemas import (
+    AIGC_GENERATED_MEDIA_NAMING_MODEL,
+    AigcGeneratedMediaName,
+    AigcGeneratedMediaNamingRequest,
+    AigcImagePromptSection,
+    AigcImagePromptFullDesignResult as AigcImagePromptSectionsResult,
+    AigcImagePromptLocalEditResult,
+    AigcImagePromptOptimizationResult as AigcImagePromptModeResult,
     AigcPromptOptimizeRequest,
+    AigcSeedreamGenerationType,
+    AigcSeedreamPromptOptimizationResult,
     AssetType,
     Brief,
     CharacterAssetIterationOperation,
@@ -53,18 +68,120 @@ from ..schemas.tool_task import (
     validate_tool_video_resolution,
 )
 from ..video_prompt import MAX_VIDEO_PROMPT_LENGTH
+from ..prompts import load_seedream_image_prompt
+from .prompt_anchors import (
+    extract_source_constraints,
+    positive_anchor_section_index,
+)
 from .text_streaming import IncrementalJsonStringExtractor
 
 
 TEXT_GENERATION_STAGES = {Stage.STORY, Stage.SCRIPT, Stage.STORYBOARD}
 SEED_THINKING_DISABLED = {"type": "disabled"}
+_STORYBOARD_SHOT_DETAIL_FIELDS = (
+    ("camera_movement", "Camera movement"),
+    ("sound", "Sound"),
+    ("transition_recommendation", "Transition recommendation"),
+)
 AIGC_PROMPT_OPTIMIZATION_TIMEOUT_SECONDS = 120
+GENERATED_MEDIA_NAMING_SYSTEM_PROMPT = (
+    "根据用户提供的最终生成提示词和有序视觉参考，为生成产物命名。"
+    "只输出一个 JSON 对象，且唯一字段为 name。name 必须概括主体或场景，"
+    "trim 后为 1-10 个 Unicode code point；不得输出解释、编号、Markdown、"
+    "候选列表、换行、控制字符、路径分隔符、文件扩展名或外围引号。"
+)
+GENERATED_MEDIA_NAMING_JSON_SCHEMA = {
+    "type": "json_schema",
+    "name": "generated_media_name",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10,
+            }
+        },
+        "required": ["name"],
+        "additionalProperties": False,
+    },
+}
+SEEDREAM_PROMPT_PARSE_ERROR = (
+    "AIGC Seedream prompt optimization response could not be parsed"
+)
+SEEDREAM_PROMPT_TYPE_ERROR = (
+    "AIGC Seedream prompt optimization returned an incompatible generation type"
+)
+_SEEDREAM_SECTION_LABELS = (
+    "【生图类型】",
+    "【优化后提示词】",
+    "【优化说明】",
+)
+_SEEDREAM_ANY_SECTION_LABEL = re.compile(r"(?m)^[ \t]*【[^】\r\n]+】")
 SEEDREAM_5_PRO_MODEL = "doubao-seedream-5-0-pro-260628"
 _SAFE_PROVIDER_VALUE = re.compile(r"^[A-Za-z0-9._:/-]{1,200}$")
+_MOCK_BBOX_TOKEN = re.compile(
+    r"(?:图|Image\s*)?\d*\s*<bbox>\s*-?\d+(?:\.\d+)?"
+    r"(?:\s+-?\d+(?:\.\d+)?){3}\s*</bbox>",
+    re.IGNORECASE,
+)
+_MOCK_CATEGORY_TOKENS = {
+    "product": ("product", "package", "商品", "产品", "包装", "瓶", "盒"),
+    "people": (
+        "person",
+        "people",
+        "woman",
+        "man",
+        "人物",
+        "模特",
+        "人像",
+        "有人",
+    ),
+    "animals": ("animal", "animals", "cat", "dog", "动物", "猫", "狗"),
+}
+_MOCK_CATEGORY_NEGATION_TOKENS = {
+    "product": (*_MOCK_CATEGORY_TOKENS["product"], "products", "packages"),
+    "people": (*_MOCK_CATEGORY_TOKENS["people"], "人"),
+    "animals": (*_MOCK_CATEGORY_TOKENS["animals"], "cats", "dogs"),
+}
 _REQUEST_ID_PATTERN = re.compile(
     r"(?:request[\s_-]*id)[:=\s]+([A-Za-z0-9._:/-]{6,200})",
     flags=re.IGNORECASE,
 )
+
+
+def aigc_local_edit_mode_allowed(
+    request: AigcPromptOptimizeRequest,
+    *,
+    has_source_image: bool,
+) -> bool:
+    if not has_source_image or request.target_type != "image_to_image":
+        return False
+    operation = request.target_config.operation
+    return (
+        operation == "image_edit"
+        and request.target_config.reference_image_count == 0
+    ) or (
+        operation == "image_to_image"
+        and request.target_config.reference_image_count == 1
+    )
+
+
+def allowed_aigc_prompt_generation_types(
+    request: AigcPromptOptimizeRequest,
+    *,
+    has_source_image: bool,
+) -> set[AigcSeedreamGenerationType]:
+    if request.target_type == "text_to_image":
+        return {"文生图"}
+    if request.target_type != "image_to_image":
+        return set()
+    if has_source_image:
+        return {"图像编辑", "参考图生图"}
+    if request.target_config.reference_image_count > 0:
+        return {"参考图生图"}
+    return {"文生图"}
 
 
 def _safe_provider_value(value: object) -> str | None:
@@ -102,6 +219,7 @@ def _provider_error_from_exception(
     *,
     phase: str,
     provider_task_id: str | None = None,
+    message: str = "video generation failed",
 ) -> "ModelArkProviderError":
     body = getattr(exc, "body", None)
     error = body.get("error") if isinstance(body, dict) else None
@@ -118,7 +236,7 @@ def _provider_error_from_exception(
             if request_id:
                 break
     return ModelArkProviderError(
-        "video generation failed",
+        message,
         phase=phase,
         provider_code=(
             _provider_field(error, "code")
@@ -211,6 +329,7 @@ class AigcTextGenerationRequest(SchemaModel):
     prompt: str = Field(..., min_length=1, max_length=20000)
     system_prompt: str = Field(default="", max_length=12000)
     temperature: float = Field(default=0.7, ge=0, le=2)
+    image_url: str | None = Field(default=None, min_length=1)
 
 
 class ImageGenerationRequest(SchemaModel):
@@ -561,6 +680,13 @@ class AigcImagePromptOptimizationResult(SchemaModel):
     )
 
 
+AigcPromptOptimizationProviderResult: TypeAlias = (
+    AigcImagePromptOptimizationResult
+    | AigcImagePromptModeResult
+    | AigcSeedreamPromptOptimizationResult
+)
+
+
 class GeneratedTextResult(SchemaModel):
     stage: Stage
     title: str = Field(..., min_length=1)
@@ -652,6 +778,12 @@ def _seedance_request_from_tool(
 
 
 class ModelArkAdapter(Protocol):
+    async def generate_aigc_media_name(
+        self,
+        request: AigcGeneratedMediaNamingRequest,
+    ) -> AigcGeneratedMediaName:
+        """Generate one validated short name for an AIGC media attempt."""
+
     async def generate_aigc_text(
         self,
         request: AigcTextGenerationRequest,
@@ -757,7 +889,9 @@ class ModelArkAdapter(Protocol):
     async def optimize_aigc_prompt(
         self,
         request: AigcPromptOptimizeRequest,
-    ) -> AigcImagePromptOptimizationResult:
+        *,
+        source_image_url: str | None = None,
+    ) -> AigcPromptOptimizationProviderResult:
         """Optimize one target-aware AIGC prompt without persisting it."""
 
     def stream_video_prompt_optimization(
@@ -863,7 +997,10 @@ class BytePlusModelArkAdapter:
                     max_tokens=4096,
                 )
                 text = self._chat_output_text(response)
-            payload = self._parse_text_payload(text)
+            payload = self._parse_text_payload(
+                text,
+                project_id=request.project_id,
+            )
         except (ModelArkProviderError, ModelArkTextParseError):
             raise
         except ValidationError as exc:
@@ -890,15 +1027,118 @@ class BytePlusModelArkAdapter:
             },
         )
 
+    async def generate_aigc_media_name(
+        self,
+        request: AigcGeneratedMediaNamingRequest,
+    ) -> AigcGeneratedMediaName:
+        user_content: list[dict[str, object]] = [
+            {
+                "type": "input_text",
+                "text": request.prompt,
+            }
+        ]
+        for media in request.visual_inputs:
+            if media.type == "image":
+                user_content.append(
+                    {
+                        "type": "input_image",
+                        "image_url": media.url,
+                        "detail": "auto",
+                    }
+                )
+            else:
+                user_content.append(
+                    {
+                        "type": "input_video",
+                        "video_url": media.url,
+                        "fps": 0.3,
+                    }
+                )
+        try:
+            response = await asyncio.to_thread(
+                self.client.responses.with_raw_response.create,
+                model=AIGC_GENERATED_MEDIA_NAMING_MODEL,
+                input=[
+                    {
+                        "role": "system",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": GENERATED_MEDIA_NAMING_SYSTEM_PROMPT,
+                            }
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": user_content,
+                    },
+                ],
+                text={"format": GENERATED_MEDIA_NAMING_JSON_SCHEMA},
+                thinking=SEED_THINKING_DISABLED,
+                temperature=0.1,
+                max_output_tokens=64,
+            )
+            return self._parse_generated_media_name(
+                self._response_output_text(response.json())
+            )
+        except (ModelArkProviderError, ModelArkTextParseError):
+            raise
+        except ValidationError as exc:
+            raise ModelArkTextParseError(
+                "generated media naming response could not be parsed",
+                phase="media_naming",
+            ) from exc
+        except Exception as exc:
+            raise _provider_error_from_exception(
+                exc,
+                phase="media_naming",
+                message="generated media naming failed",
+            ) from exc
+
     async def generate_aigc_text(
         self,
         request: AigcTextGenerationRequest,
     ) -> str:
-        messages = []
-        if request.system_prompt:
-            messages.append({"role": "system", "content": request.system_prompt})
-        messages.append({"role": "user", "content": request.prompt})
         try:
+            if request.image_url:
+                input_messages: list[dict[str, object]] = []
+                if request.system_prompt:
+                    input_messages.append(
+                        {
+                            "role": "system",
+                            "content": [
+                                {
+                                    "type": "input_text",
+                                    "text": request.system_prompt,
+                                }
+                            ],
+                        }
+                    )
+                input_messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": request.prompt},
+                            {
+                                "type": "input_image",
+                                "image_url": request.image_url,
+                                "detail": "auto",
+                            },
+                        ],
+                    }
+                )
+                response = await asyncio.to_thread(
+                    self.client.responses.with_raw_response.create,
+                    model=request.model,
+                    input=input_messages,
+                    thinking=SEED_THINKING_DISABLED,
+                    temperature=request.temperature,
+                )
+                return self._response_output_text(response.json())
+            messages = []
+            if request.system_prompt:
+                messages.append({"role": "system", "content": request.system_prompt})
+            messages.append({"role": "user", "content": request.prompt})
             response = await asyncio.to_thread(
                 self.client.chat.completions.create,
                 model=request.model,
@@ -910,6 +1150,63 @@ class BytePlusModelArkAdapter:
         except ModelArkProviderError:
             raise
         except Exception as exc:
+            # #region debug-point A-D:aigc-text-provider-error
+            emit_tls_only_event(
+                "aigc.text_generate.provider_exception",
+                outcome="failed",
+                output_text=json.dumps(
+                    {
+                        "exception_type": type(exc).__name__,
+                        "exception_message": str(exc)[:500],
+                        "has_image_input": bool(request.image_url),
+                        "has_system_prompt": bool(request.system_prompt),
+                        "model": request.model,
+                    },
+                    ensure_ascii=False,
+                ),
+                phase="aigc_text_generate",
+            )
+            try:
+                import urllib.request
+
+                with open(
+                    ".dbg/aigc-text-attribute.env", encoding="utf-8"
+                ) as debug_env:
+                    debug_url = next(
+                        (
+                            line.split("=", 1)[1].strip()
+                            for line in debug_env
+                            if line.startswith("DEBUG_SERVER_URL=")
+                        ),
+                        "http://127.0.0.1:7778/event",
+                    )
+                await asyncio.to_thread(
+                    urllib.request.urlopen,
+                    urllib.request.Request(
+                        debug_url,
+                        data=json.dumps(
+                            {
+                                "sessionId": "aigc-text-attribute",
+                                "runId": "pre-fix",
+                                "hypothesisId": "A-D",
+                                "location": "modelark.py:generate_aigc_text",
+                                "msg": "[DEBUG] AIGC text provider invocation failed",
+                                "data": {
+                                    "exception_type": type(exc).__name__,
+                                    "exception_message": str(exc)[:500],
+                                    "has_image_input": bool(request.image_url),
+                                    "has_system_prompt": bool(request.system_prompt),
+                                    "model": request.model,
+                                },
+                            }
+                        ).encode(),
+                        headers={"Content-Type": "application/json"},
+                    ),
+                    timeout=1,
+                )
+            except Exception:
+                pass
+            # #endregion
             raise _provider_error_from_exception(
                 exc,
                 phase="aigc_text_generate",
@@ -1021,8 +1318,13 @@ class BytePlusModelArkAdapter:
                             kind="delta",
                             delta=extracted.delta,
                         )
-            payload = self._parse_text_payload(extractor.raw_json)
-        except (ModelArkProviderError, ModelArkTextParseError):
+            payload = self._parse_text_payload(
+                extractor.raw_json,
+                project_id=request.project_id,
+            )
+        except ModelArkTextParseError as exc:
+            raise
+        except ModelArkProviderError as exc:
             raise
         except ValidationError as exc:
             raise ModelArkTextParseError(
@@ -1152,53 +1454,19 @@ class BytePlusModelArkAdapter:
     async def optimize_aigc_prompt(
         self,
         request: AigcPromptOptimizeRequest,
-    ) -> AigcImagePromptOptimizationResult:
+        *,
+        source_image_url: str | None = None,
+    ) -> AigcPromptOptimizationProviderResult:
         system_prompt, user_prompt = (
-            MockModelArkAdapter.build_aigc_prompt_optimization_messages(request)
+            MockModelArkAdapter.build_aigc_prompt_optimization_messages(
+                request,
+                has_source_image=source_image_url is not None,
+            )
         )
-        # #region debug-point A-D:prompt-optimization-request
         try:
-            import time
-            import urllib.request
-
-            urllib.request.urlopen(
-                urllib.request.Request(
-                    "http://127.0.0.1:7781/event",
-                    data=json.dumps(
-                        {
-                            "sessionId": "prompt-optimization-unavailable",
-                            "runId": "post-fix",
-                            "hypothesisId": "A-D",
-                            "location": (
-                                "modelark.py:"
-                                "BytePlusModelArkAdapter.optimize_aigc_prompt"
-                            ),
-                            "msg": "[DEBUG] Calling prompt optimization",
-                            "data": {
-                                "model": self.settings.ark_text_model,
-                                "textLength": len(request.text),
-                                "referenceCount": len(
-                                    request.reference_instructions
-                                ),
-                                "systemPromptLength": len(system_prompt),
-                                "userPromptLength": len(user_prompt),
-                            },
-                            "traceId": request.target_node_id,
-                            "ts": int(time.time() * 1000),
-                        }
-                    ).encode(),
-                    headers={"Content-Type": "application/json"},
-                ),
-                timeout=0.2,
-            ).read()
-        except Exception:
-            pass
-        # #endregion
-        try:
-            response = await asyncio.to_thread(
-                self.client.responses.with_raw_response.create,
-                model=self.settings.ark_text_model,
-                input=[
+            create_kwargs: dict[str, object] = {
+                "model": self.settings.ark_text_model,
+                "input": [
                     {
                         "role": "system",
                         "content": [
@@ -1208,64 +1476,130 @@ class BytePlusModelArkAdapter:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": user_prompt}
+                            {"type": "input_text", "text": user_prompt},
+                            *(
+                                [
+                                    {
+                                        "type": "input_image",
+                                        "image_url": source_image_url,
+                                        "detail": "auto",
+                                    }
+                                ]
+                                if source_image_url
+                                else []
+                            ),
                         ],
                     },
                 ],
-                text={"format": {"type": "json_object"}},
-                thinking=SEED_THINKING_DISABLED,
-                temperature=0.1,
-                max_output_tokens=4096,
-                timeout=AIGC_PROMPT_OPTIMIZATION_TIMEOUT_SECONDS,
+                "thinking": SEED_THINKING_DISABLED,
+                "temperature": 0.1,
+                "max_output_tokens": 4096,
+                "timeout": AIGC_PROMPT_OPTIMIZATION_TIMEOUT_SECONDS,
+            }
+            create_kwargs["text"] = {"format": {"type": "json_object"}}
+            response = await asyncio.to_thread(
+                self.client.responses.with_raw_response.create,
+                **create_kwargs,
             )
             response_payload = response.json()
-            return self._parse_aigc_image_prompt_optimization_payload(
-                self._response_output_text(response_payload)
+            output_text = self._response_output_text(response_payload)
+            emit_tls_only_event(
+                "aigc.prompt_optimization.raw_output",
+                outcome="succeeded",
+                output_text=output_text,
+                trace_id=request.target_node_id,
+                task_type=request.target_type,
+                provider="modelark",
+                model=self.settings.ark_text_model,
+                operation="prompt_optimization",
             )
-        except (ModelArkProviderError, ModelArkTextParseError) as exc:
-            # #region debug-point A-D:prompt-optimization-wrapped-error
+            # #region debug-point A-C:prompt-optimization-parser
             try:
-                import time
+                debug_payload = json.loads(output_text)
+                debug_data = {
+                    "json_object": isinstance(debug_payload, dict),
+                    "keys": sorted(debug_payload) if isinstance(debug_payload, dict) else [],
+                    "output_length": len(output_text),
+                    "output_sha256": hashlib.sha256(
+                        output_text.encode("utf-8")
+                    ).hexdigest()[:16],
+                    "parser": (
+                        "seedream"
+                        if request.target_type in {"text_to_image", "image_to_image"}
+                        else "aigc_image"
+                    ),
+                    "target_type": request.target_type,
+                }
+            except Exception as debug_exc:
+                debug_data = {
+                    "json_error": type(debug_exc).__name__,
+                    "output_length": len(output_text),
+                    "target_type": request.target_type,
+                }
+            try:
                 import urllib.request
 
-                urllib.request.urlopen(
+                with open(".dbg/llm-prompt-parse.env", encoding="utf-8") as debug_env:
+                    debug_url = next(
+                        (
+                            line.split("=", 1)[1].strip()
+                            for line in debug_env
+                            if line.startswith("DEBUG_SERVER_URL=")
+                        ),
+                        "http://127.0.0.1:7777/event",
+                    )
+                await asyncio.to_thread(
+                    urllib.request.urlopen,
                     urllib.request.Request(
-                        "http://127.0.0.1:7781/event",
+                        debug_url,
                         data=json.dumps(
                             {
-                                "sessionId": "prompt-optimization-unavailable",
+                                "sessionId": "llm-prompt-parse",
                                 "runId": "post-fix",
-                                "hypothesisId": "A-D",
-                                "location": (
-                                    "modelark.py:"
-                                    "BytePlusModelArkAdapter.optimize_aigc_prompt"
-                                ),
-                                "msg": (
-                                    "[DEBUG] Wrapped prompt optimization error"
-                                ),
-                                "data": {
-                                    "exceptionType": type(exc).__name__,
-                                    "exceptionMessage": str(exc)[:1000],
-                                    "safeFields": exc.safe_log_fields(),
-                                    "causeType": (
-                                        type(exc.__cause__).__name__
-                                        if exc.__cause__
-                                        else None
-                                    ),
-                                    "causeMessage": (
-                                        str(exc.__cause__)[:1000]
-                                        if exc.__cause__
-                                        else None
-                                    ),
-                                },
-                                "traceId": request.target_node_id,
-                                "ts": int(time.time() * 1000),
+                                "hypothesisId": "A-C",
+                                "location": "modelark.py:1459",
+                                "msg": "[DEBUG] prompt optimization parser selection",
+                                "data": debug_data,
                             }
                         ).encode(),
                         headers={"Content-Type": "application/json"},
                     ),
-                    timeout=0.2,
-                ).read()
+                    timeout=1,
+                )
+            except Exception:
+                pass
+            # #endregion
+            if request.target_type in {"text_to_image", "image_to_image"}:
+                result = self._parse_seedream_prompt_payload(output_text)
+                return result
+            return self._parse_aigc_image_prompt_optimization_payload(output_text)
+        except (ModelArkProviderError, ModelArkTextParseError) as exc:
+            # #region debug-point D:prompt-optimization-parser-error
+            try:
+                import urllib.request
+
+                await asyncio.to_thread(
+                    urllib.request.urlopen,
+                    urllib.request.Request(
+                        "http://127.0.0.1:7777/event",
+                        data=json.dumps(
+                            {
+                                "sessionId": "llm-prompt-parse",
+                                "runId": "post-fix",
+                                "hypothesisId": "D",
+                                "location": "modelark.py:1513",
+                                "msg": "[DEBUG] prompt optimization parser failed",
+                                "data": {
+                                    "error_type": type(exc).__name__,
+                                    "message": str(exc),
+                                    "target_type": request.target_type,
+                                },
+                            }
+                        ).encode(),
+                        headers={"Content-Type": "application/json"},
+                    ),
+                    timeout=1,
+                )
             except Exception:
                 pass
             # #endregion
@@ -1275,53 +1609,11 @@ class BytePlusModelArkAdapter:
                 "AIGC prompt optimization response could not be parsed"
             ) from exc
         except Exception as exc:
-            # #region debug-point A-D:prompt-optimization-error
-            try:
-                import time
-                import urllib.request
-
-                urllib.request.urlopen(
-                    urllib.request.Request(
-                        "http://127.0.0.1:7781/event",
-                        data=json.dumps(
-                            {
-                                "sessionId": "prompt-optimization-unavailable",
-                                "runId": "post-fix",
-                                "hypothesisId": "A-D",
-                                "location": (
-                                    "modelark.py:"
-                                    "BytePlusModelArkAdapter.optimize_aigc_prompt"
-                                ),
-                                "msg": "[DEBUG] Prompt optimization failed",
-                                "data": {
-                                    "exceptionType": type(exc).__name__,
-                                    "exceptionMessage": str(exc)[:1000],
-                                    "statusCode": getattr(
-                                        exc, "status_code", None
-                                    ),
-                                    "causeType": (
-                                        type(exc.__cause__).__name__
-                                        if exc.__cause__
-                                        else None
-                                    ),
-                                    "causeMessage": (
-                                        str(exc.__cause__)[:1000]
-                                        if exc.__cause__
-                                        else None
-                                    ),
-                                },
-                                "traceId": request.target_node_id,
-                                "ts": int(time.time() * 1000),
-                            }
-                        ).encode(),
-                        headers={"Content-Type": "application/json"},
-                    ),
-                    timeout=0.2,
-                ).read()
-            except Exception:
-                pass
-            # #endregion
-            raise ModelArkProviderError("AIGC prompt optimization failed") from exc
+            raise _provider_error_from_exception(
+                exc,
+                phase="prompt_optimization",
+                message="AIGC prompt optimization failed",
+            ) from exc
 
     async def stream_video_prompt_optimization(
         self,
@@ -1448,118 +1740,8 @@ class BytePlusModelArkAdapter:
                 self.client.images.generate,
                 **kwargs,
             )
-            # #region debug-point A-B-C:layer-response-shape
-            debug_data = self._value(response, "data")
-            try:
-                await asyncio.to_thread(
-                    httpx.post,
-                    "http://127.0.0.1:7777/event",
-                    json={
-                        "sessionId": "layer-decomposition-parse",
-                        "runId": "post-fix",
-                        "hypothesisId": "A-B-C",
-                        "location": "backend/app/services/modelark.py:decompose_image_layers",
-                        "msg": "[DEBUG] Layer decomposition response shape",
-                        "data": {
-                            "response_type": type(response).__name__,
-                            "data_type": type(debug_data).__name__,
-                            "item_count": (
-                                len(debug_data)
-                                if isinstance(debug_data, (list, tuple))
-                                else None
-                            ),
-                            "items": [
-                                {
-                                    "item_type": type(item).__name__,
-                                    "keys": (
-                                        sorted(str(key) for key in item)
-                                        if isinstance(item, dict)
-                                        else None
-                                    ),
-                                    "z_index": self._value(item, "z_index"),
-                                    "z_index_type": type(
-                                        self._value(item, "z_index")
-                                    ).__name__,
-                                    "url_type": type(
-                                        self._value(item, "url")
-                                    ).__name__,
-                                    "url_is_http": (
-                                        isinstance(self._value(item, "url"), str)
-                                        and str(self._value(item, "url")).startswith(
-                                            ("http://", "https://")
-                                        )
-                                    ),
-                                    "bbox_type": type(
-                                        self._value(item, "bounding_box")
-                                    ).__name__,
-                                    "name_type": type(
-                                        self._value(item, "name")
-                                    ).__name__,
-                                    "name_length": (
-                                        len(self._value(item, "name"))
-                                        if isinstance(
-                                            self._value(item, "name"),
-                                            str,
-                                        )
-                                        else None
-                                    ),
-                                    "description_type": type(
-                                        self._value(item, "description")
-                                    ).__name__,
-                                    "description_length": (
-                                        len(self._value(item, "description"))
-                                        if isinstance(
-                                            self._value(item, "description"),
-                                            str,
-                                        )
-                                        else None
-                                    ),
-                                    "bbox_absolute": self._value(
-                                        self._value(item, "bounding_box"),
-                                        "absolute",
-                                    ),
-                                    "bbox_normalized": self._value(
-                                        self._value(item, "bounding_box"),
-                                        "normalized",
-                                    ),
-                                }
-                                for item in (
-                                    debug_data
-                                    if isinstance(debug_data, (list, tuple))
-                                    else []
-                                )
-                            ],
-                        },
-                    },
-                    timeout=1,
-                )
-            except Exception:
-                pass
-            # #endregion
             return self._parse_layer_decomposition_response(response)
         except ModelArkProviderError as exc:
-            # #region debug-point D-E:layer-parse-error
-            try:
-                await asyncio.to_thread(
-                    httpx.post,
-                    "http://127.0.0.1:7777/event",
-                    json={
-                        "sessionId": "layer-decomposition-parse",
-                        "runId": "post-fix",
-                        "hypothesisId": "D-E",
-                        "location": "backend/app/services/modelark.py:decompose_image_layers",
-                        "msg": "[DEBUG] Layer decomposition provider error",
-                        "data": {
-                            "error_type": type(exc).__name__,
-                            "message": str(exc),
-                            **exc.safe_fields(),
-                        },
-                    },
-                    timeout=1,
-                )
-            except Exception:
-                pass
-            # #endregion
             raise
         except Exception as exc:
             raise _provider_error_from_exception(
@@ -2142,7 +2324,11 @@ class BytePlusModelArkAdapter:
         return text
 
     @staticmethod
-    def _parse_text_payload(text: str) -> TextGenerationPayload:
+    def _parse_text_payload(
+        text: str,
+        *,
+        project_id: str | None = None,
+    ) -> TextGenerationPayload:
         stripped = text.strip()
         fence_match = re.search(r"```(?:json)?\s*(.*?)```", stripped, flags=re.DOTALL)
         if fence_match:
@@ -2157,7 +2343,61 @@ class BytePlusModelArkAdapter:
             raise ModelArkTextParseError(
                 "text generation response must be a JSON object"
             )
+        shots = raw.get("storyboard_shots")
+        if isinstance(shots, list):
+            normalized_shots: list[object] = []
+            for index, shot in enumerate(shots, start=1):
+                if not isinstance(shot, dict):
+                    normalized_shots.append(shot)
+                    continue
+                normalized_shot = dict(shot)
+                normalized_shot["index"] = index
+                if project_id is not None:
+                    normalized_shot["project_id"] = project_id
+                details: list[str] = []
+                for field, label in _STORYBOARD_SHOT_DETAIL_FIELDS:
+                    value = normalized_shot.get(field)
+                    if not isinstance(value, str):
+                        continue
+                    normalized_shot.pop(field)
+                    if value.strip():
+                        details.append(f"{label}: {value.strip()}")
+                description = normalized_shot.get("description")
+                visual_prompt = normalized_shot.get("visual_prompt")
+                if (
+                    (not isinstance(description, str) or not description.strip())
+                    and isinstance(visual_prompt, str)
+                    and visual_prompt.strip()
+                ):
+                    description = visual_prompt.strip()
+                    normalized_shot["description"] = description
+                if details and isinstance(description, str):
+                    normalized_shot["description"] = "\n".join(
+                        [description.strip(), *details]
+                    )
+                visual_prompt = normalized_shot.get("visual_prompt")
+                if (
+                    (not isinstance(visual_prompt, str) or not visual_prompt.strip())
+                    and isinstance(description, str)
+                    and description.strip()
+                ):
+                    normalized_shot["visual_prompt"] = description.strip()
+                normalized_shots.append(normalized_shot)
+            raw = {**raw, "storyboard_shots": normalized_shots}
         return TextGenerationPayload.model_validate(raw)
+
+    @staticmethod
+    def _parse_generated_media_name(text: str) -> AigcGeneratedMediaName:
+        try:
+            raw = json.loads(text.strip())
+            if not isinstance(raw, dict):
+                raise ValueError("response must be an object")
+            return AigcGeneratedMediaName.model_validate(raw)
+        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            raise ModelArkTextParseError(
+                "generated media naming response could not be parsed",
+                phase="media_naming",
+            ) from exc
 
     @staticmethod
     def _parse_character_payload(text: str) -> CharacterExtractionPayload:
@@ -2235,6 +2475,154 @@ class BytePlusModelArkAdapter:
             ) from exc
 
     @staticmethod
+    def _normalize_aigc_prompt_sections_payload(raw: dict[str, Any]) -> dict[str, Any]:
+        sections = raw.get("sections")
+        if not isinstance(sections, list):
+            return raw
+        normalized_sections = [
+            {
+                **section,
+                "label": re.sub(
+                    r"\s+",
+                    " ",
+                    re.sub(r"^#{1,6}\s*", "", section["label"].strip()),
+                )
+                .rstrip(":")
+                .strip(),
+            }
+            if isinstance(section, dict) and isinstance(section.get("label"), str)
+            else section
+            for section in sections
+        ]
+        labels = [
+            section.get("label").strip().casefold()
+            if isinstance(section, dict) and isinstance(section.get("label"), str)
+            else None
+            for section in normalized_sections
+        ]
+        composition_indices = [
+            index for index, label in enumerate(labels) if label == "composition"
+        ]
+        negative_indices = [
+            index for index, label in enumerate(labels) if label == "negative prompt"
+        ]
+        if len(negative_indices) != 1:
+            return {**raw, "sections": normalized_sections}
+        negative_index = negative_indices[0]
+        moving_indices = {negative_index}
+        if len(composition_indices) == 1:
+            moving_indices.add(composition_indices[0])
+        reordered = [
+            section
+            for index, section in enumerate(normalized_sections)
+            if index not in moving_indices
+        ]
+        if len(composition_indices) == 1:
+            reordered.append(normalized_sections[composition_indices[0]])
+        reordered.append(normalized_sections[negative_index])
+        return {
+            **raw,
+            "sections": reordered,
+        }
+
+    @staticmethod
+    def _parse_seedream_prompt_payload(
+        text: str,
+    ) -> AigcSeedreamPromptOptimizationResult:
+        stripped = text.strip()
+        fence_match = re.fullmatch(
+            r"```(?:json|text|markdown)?[ \t]*\r?\n?(.*?)```",
+            stripped,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        if fence_match:
+            stripped = fence_match.group(1).strip()
+        if not stripped:
+            raise ModelArkTextParseError(SEEDREAM_PROMPT_PARSE_ERROR)
+
+        try:
+            raw = json.loads(stripped)
+        except json.JSONDecodeError:
+            raw = None
+        if raw is not None:
+            if not isinstance(raw, dict):
+                raise ModelArkTextParseError(
+                    "AIGC Seedream prompt optimization response must be a JSON object"
+                )
+            try:
+                return AigcSeedreamPromptOptimizationResult.model_validate(raw)
+            except ValidationError as exc:
+                raise ModelArkTextParseError(
+                    "AIGC Seedream prompt optimization response has an invalid JSON structure"
+                ) from exc
+
+        # Support responses produced before the JSON output contract was introduced.
+        labels = _SEEDREAM_ANY_SECTION_LABEL.findall(stripped)
+        if labels != list(_SEEDREAM_SECTION_LABELS):
+            raise ModelArkTextParseError(SEEDREAM_PROMPT_PARSE_ERROR)
+        positions = [stripped.index(label) for label in _SEEDREAM_SECTION_LABELS]
+        if stripped[: positions[0]].strip():
+            raise ModelArkTextParseError(SEEDREAM_PROMPT_PARSE_ERROR)
+
+        def section_value(start: int, end: int | None) -> str:
+            value = stripped[start:end].lstrip()
+            if value.startswith((":", "：")):
+                value = value[1:].lstrip()
+            return value.strip()
+
+        generation_type = section_value(
+            positions[0] + len(_SEEDREAM_SECTION_LABELS[0]),
+            positions[1],
+        )
+        optimized_text = section_value(
+            positions[1] + len(_SEEDREAM_SECTION_LABELS[1]),
+            positions[2],
+        )
+        optimization_explanation = section_value(
+            positions[2] + len(_SEEDREAM_SECTION_LABELS[2]),
+            None,
+        )
+        try:
+            return AigcSeedreamPromptOptimizationResult(
+                generation_type=generation_type,
+                optimized_text=optimized_text,
+                optimization_explanation=optimization_explanation,
+            )
+        except ValidationError as exc:
+            raise ModelArkTextParseError(SEEDREAM_PROMPT_PARSE_ERROR) from exc
+
+    @staticmethod
+    def _parse_aigc_prompt_sections_payload(
+        text: str,
+    ) -> AigcImagePromptModeResult:
+        stripped = text.strip()
+        fence_match = re.search(r"```(?:json)?\s*(.*?)```", stripped, flags=re.DOTALL)
+        if fence_match:
+            stripped = fence_match.group(1).strip()
+        try:
+            raw = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise ModelArkTextParseError(
+                "AIGC image prompt optimization response is not valid JSON"
+            ) from exc
+        if not isinstance(raw, dict):
+            raise ModelArkTextParseError(
+                "AIGC image prompt optimization response must be a JSON object"
+            )
+        if raw.get("optimization_mode") == "full_design":
+            raw = BytePlusModelArkAdapter._normalize_aigc_prompt_sections_payload(raw)
+        try:
+            if raw.get("optimization_mode") == "local_edit":
+                return AigcImagePromptLocalEditResult.model_validate(raw)
+            if raw.get("optimization_mode") == "full_design":
+                return AigcImagePromptSectionsResult.model_validate(raw)
+            raise ValueError("optimization_mode is missing or invalid")
+        except (ValidationError, ValueError) as exc:
+            raise ModelArkTextParseError(
+                "AIGC image prompt optimization response has an invalid structure"
+            ) from exc
+
+    @staticmethod
     def _plain_text_output(text: str) -> str:
         stripped = text.strip()
         fence_match = re.fullmatch(
@@ -2283,6 +2671,13 @@ class MockModelArkAdapter:
             ).encode("utf-8")
         ).hexdigest()[:12]
         return f"{request.prompt.strip()}\n\n[mock:{digest}]"
+
+    async def generate_aigc_media_name(
+        self,
+        request: AigcGeneratedMediaNamingRequest,
+    ) -> AigcGeneratedMediaName:
+        name = "视觉参考生成" if request.visual_inputs else "创意生成"
+        return AigcGeneratedMediaName(name=name)
 
     async def generate_image_prompt(
         self,
@@ -2468,30 +2863,546 @@ class MockModelArkAdapter:
     async def optimize_aigc_prompt(
         self,
         request: AigcPromptOptimizeRequest,
-    ) -> AigcImagePromptOptimizationResult:
+        *,
+        source_image_url: str | None = None,
+    ) -> AigcPromptOptimizationProviderResult:
+        if request.target_type in {"text_to_image", "image_to_image"}:
+            if (
+                source_image_url is None
+                and request.target_config.reference_image_count == 0
+            ):
+                generation_type = "文生图"
+                optimized_text = (
+                    f"{request.text}。明确主体、环境、构图、色彩和光影，"
+                    "形成可直接执行的完整画面描述。"
+                )
+                explanation = "补充了画面环境、构图、色彩和光影信息。"
+            elif self._mock_uses_local_edit(request, source_image_url):
+                generation_type = "图像编辑"
+                optimized_text = (
+                    f"{request.text}。仅执行上述编辑，保持未指定的主体身份、"
+                    "构图、光影、文字和其他视觉细节不变。"
+                )
+                explanation = "明确了编辑范围和需要保持不变的内容。"
+            else:
+                generation_type = "参考图生图"
+                optimized_text = (
+                    f"参考输入图片中与请求相关的主体、风格或产品特征，"
+                    f"保留其识别特征并生成新画面：{request.text}"
+                )
+                explanation = "明确了参考图需要保留的特征和新画面要求。"
+            return BytePlusModelArkAdapter._parse_seedream_prompt_payload(
+                "\n".join(
+                    [
+                        f"【生图类型】{generation_type}",
+                        "【优化后提示词】",
+                        optimized_text[:20000],
+                        "【优化说明】",
+                        explanation,
+                    ]
+                )
+            )
+
         suffix = {
             "llm": "\n\n## 任务要求\n明确上下文、执行约束和输出格式。",
-            "text_to_image": "，主体、环境、构图与光影明确，保持原有硬约束",
-            "image_to_image": "，明确编辑对象与动作，未指定内容保持不变",
             "video_generation": "，按目标时长组织连续镜头、动作、运镜与声音",
         }[request.target_type]
         if request.optimization_direction:
             suffix += f"\n优化方向：{request.optimization_direction}"
         optimized_text = f"{request.text}{suffix}"[:20000]
-        references = (
-            [
-                f"{value}，明确该区域的对象、用途与需保持特征"[:4000]
-                if value
-                else ""
-                for value in request.reference_instructions
-            ]
-            if request.target_type in {"text_to_image", "image_to_image"}
-            else []
-        )
         return AigcImagePromptOptimizationResult(
             optimized_text=optimized_text,
+            optimized_reference_instructions=[],
+        )
+
+    @staticmethod
+    def _mock_image_prompt_sections(
+        request: AigcPromptOptimizeRequest,
+    ) -> AigcImagePromptSectionsResult:
+        source = " ".join(
+            [
+                request.text,
+                request.optimization_direction,
+                *request.reference_instructions,
+            ]
+        )
+        lowered = source.casefold()
+        has_product = MockModelArkAdapter._mock_has_positive_category(
+            lowered, "product"
+        )
+        has_people = MockModelArkAdapter._mock_has_positive_category(
+            lowered, "people"
+        )
+        has_animals = MockModelArkAdapter._mock_has_positive_category(
+            lowered, "animals"
+        )
+        has_indoor = any(
+            token in lowered
+            for token in ("interior", "indoor", "room", "室内", "房间", "客厅")
+        )
+        has_background = any(token in lowered for token in ("background", "背景"))
+        is_background_only = any(
+            token in lowered for token in ("background", "背景")
+        ) and not any((has_product, has_people, has_animals))
+
+        constraints = MockModelArkAdapter._mock_english_constraints(source)
+        sections: list[AigcImagePromptSection] = []
+        if request.target_type == "image_to_image":
+            config = request.target_config
+            operation = getattr(config, "operation", "image_to_image")
+            sections.append(
+                AigcImagePromptSection(
+                    label="Reference Usage",
+                    content=(
+                        f"Use {config.reference_image_count} reference image(s) "
+                        "in their supplied order and preserve their defining features."
+                    ),
+                )
+            )
+            if operation == "image_edit":
+                sections.extend(
+                    [
+                        AigcImagePromptSection(
+                            label="Edit Instructions",
+                            content=(
+                                (
+                                    "Replace only the requested background."
+                                    if has_background
+                                    else "Apply only the requested visual changes."
+                                )
+                                + constraints
+                            ),
+                        ),
+                        AigcImagePromptSection(
+                            label="Preserve",
+                            content="Keep all unspecified subjects, text, and layout unchanged.",
+                        ),
+                    ]
+                )
+            elif operation == "layer_decomposition":
+                sections.extend(
+                    [
+                        AigcImagePromptSection(
+                            label="Layer Structure",
+                            content=(
+                                "Separate the existing image into usable visual layers."
+                                f"{constraints}"
+                            ),
+                        ),
+                        AigcImagePromptSection(
+                            label="Preserve",
+                            content="Keep original appearance and spatial relationships unchanged.",
+                        ),
+                    ]
+                )
+            else:
+                sections.append(
+                    AigcImagePromptSection(
+                        label="Target Changes",
+                        content=(
+                            "Apply the requested changes while preserving unrelated "
+                            f"features.{constraints}"
+                        ),
+                    )
+                )
+            if has_product:
+                sections.append(
+                    AigcImagePromptSection(
+                        label="Product",
+                        content=f"Keep the requested product clearly identifiable.{constraints}",
+                    )
+                )
+            if has_people:
+                sections.append(
+                    AigcImagePromptSection(
+                        label="People",
+                        content="Preserve the requested people and their defining features.",
+                    )
+                )
+            if has_animals:
+                sections.append(
+                    AigcImagePromptSection(
+                        label="Animals",
+                        content="Preserve the requested animals and their defining features.",
+                    )
+                )
+        elif is_background_only:
+            sections.extend(
+                [
+                    AigcImagePromptSection(
+                        label="Background",
+                        content="Create only the requested clean background without inventing a subject.",
+                    ),
+                    AigcImagePromptSection(
+                        label="Surface",
+                        content="Use restrained, coherent surface detail suited to the background.",
+                    ),
+                ]
+            )
+        else:
+            if has_product:
+                sections.append(
+                    AigcImagePromptSection(
+                        label="Product",
+                        content=f"Present the requested product clearly.{constraints}",
+                    )
+                )
+            if has_people:
+                sections.append(
+                    AigcImagePromptSection(
+                        label="People",
+                        content="Show only the requested people with natural posture and identity.",
+                    )
+                )
+            if has_animals:
+                sections.append(
+                    AigcImagePromptSection(
+                        label="Animals",
+                        content="Show only the requested animals with natural anatomy and scale.",
+                    )
+                )
+            if has_indoor:
+                sections.append(
+                    AigcImagePromptSection(
+                        label="Space",
+                        content="Build the requested interior with coherent depth and spatial relationships.",
+                    )
+                )
+            if not sections:
+                sections.append(
+                    AigcImagePromptSection(
+                        label="Subject",
+                        content=f"Depict the requested subject and action clearly.{constraints}",
+                    )
+                )
+            sections.append(
+                AigcImagePromptSection(
+                    label="Environment",
+                    content="Use only environment details supported by the request.",
+                )
+            )
+
+        if len(sections) < 3:
+            sections.append(
+                AigcImagePromptSection(
+                    label="Lighting",
+                    content="Use clear, task-appropriate lighting with controlled contrast.",
+                )
+            )
+        config = request.target_config
+        sections.extend(
+            [
+                AigcImagePromptSection(
+                    label="Composition",
+                    content=(
+                        "Organize the requested elements with clear hierarchy, intentional "
+                        f"spacing, and framing adapted to {config.aspect_ratio}."
+                    ),
+                ),
+                AigcImagePromptSection(
+                    label="Negative Prompt",
+                    content=MockModelArkAdapter._mock_negative_prompt(source),
+                ),
+            ]
+        )
+        sections = sections[:9] + [sections[-1]] if len(sections) > 10 else sections
+        source_constraints = extract_source_constraints(request)
+        positive_index = positive_anchor_section_index(
+            [section.label for section in sections]
+        )
+        positive_anchors = " ".join(
+            constraint.anchor
+            for constraint in source_constraints
+            if constraint.kind in {"identity", "quantity"}
+        )
+        exclusion_anchors = " ".join(
+            constraint.anchor
+            for constraint in source_constraints
+            if constraint.kind == "exclusion"
+        )
+        if positive_anchors:
+            sections[positive_index] = sections[positive_index].model_copy(
+                update={
+                    "content": (
+                        f"{sections[positive_index].content} {positive_anchors}"
+                    )
+                }
+            )
+        if exclusion_anchors:
+            sections[-1] = sections[-1].model_copy(
+                update={"content": f"{sections[-1].content} {exclusion_anchors}"}
+            )
+        references = [
+            MockModelArkAdapter._mock_reference_instruction(value)
+            for value in request.reference_instructions
+        ]
+        return AigcImagePromptSectionsResult(
+            optimization_mode="full_design",
+            sections=sections,
             optimized_reference_instructions=references,
         )
+
+    @staticmethod
+    def _mock_uses_local_edit(
+        request: AigcPromptOptimizeRequest,
+        source_image_url: str | None,
+    ) -> bool:
+        if not aigc_local_edit_mode_allowed(
+            request,
+            has_source_image=source_image_url is not None,
+        ):
+            return False
+        source = f"{request.text} {request.optimization_direction}".casefold()
+        full_design_tokens = (
+            "重新构图",
+            "重构画面",
+            "整体换风格",
+            "整体风格",
+            "重建场景",
+            "改变主体",
+            "更换主体",
+            "recompose",
+            "restyle the whole",
+            "rebuild the scene",
+            "change the subject",
+        )
+        local_tokens = (
+            "加一行字",
+            "增加文字",
+            "添加文字",
+            "改成",
+            "改为",
+            "修改颜色",
+            "删除",
+            "移除",
+            "微调",
+            "替换背景",
+            "replace the background",
+            "change the color",
+            "add text",
+            "remove",
+        )
+        return not any(token in source for token in full_design_tokens) and any(
+            token in source for token in local_tokens
+        )
+
+    @staticmethod
+    def _mock_local_edit_prompt(
+        request: AigcPromptOptimizeRequest,
+    ) -> AigcImagePromptLocalEditResult:
+        source = f"{request.text} {request.optimization_direction}".strip()
+        lowered = source.casefold()
+        literals = re.findall(
+            r'"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`|https?://\S+',
+            source,
+        )
+        colors = [
+            english
+            for chinese, english in {
+                "红色": "red",
+                "蓝色": "blue",
+                "绿色": "green",
+                "黑色": "black",
+                "白色": "white",
+                "黄色": "yellow",
+                "紫色": "purple",
+                "橙色": "orange",
+            }.items()
+            if chinese in source
+        ]
+        if any(token in lowered for token in ("替换背景", "replace the background")):
+            action = "Replace only the requested background"
+        elif any(token in lowered for token in ("删除", "移除", "remove")):
+            action = "Remove only the requested object or region"
+        elif any(
+            token in lowered for token in ("文字", "文案", "text", "copy")
+        ):
+            action = "Add only the requested text at the specified position"
+        elif colors:
+            action = (
+                "Change only the requested object's color to "
+                + " and ".join(colors)
+            )
+        else:
+            action = "Apply only the requested localized property adjustment"
+        constraints = " ".join(
+            [
+                *literals,
+                MockModelArkAdapter._mock_english_constraints(source).strip(),
+                *(
+                    constraint.anchor
+                    for constraint in extract_source_constraints(request)
+                ),
+            ]
+        ).strip()
+        negative = (
+            " Do not add shadows."
+            if any(
+                token in lowered
+                for token in ("不要增加阴影", "不要阴影", "no shadow")
+            )
+            else ""
+        )
+        optimized = (
+            f"Use the input image as the editing base. {action}. "
+            "Preserve every unspecified person, animal, product, furniture, logo, "
+            "subject identity, pose, background, layout, viewpoint, lighting, texture, "
+            "visible text, color, and other visual content unchanged."
+            f"{negative} {constraints}"
+        ).strip()
+        return AigcImagePromptLocalEditResult(
+            optimization_mode="local_edit",
+            optimized_text=re.sub(r"\s+", " ", optimized),
+            optimized_reference_instructions=[
+                MockModelArkAdapter._mock_reference_instruction(value)
+                for value in request.reference_instructions
+            ],
+        )
+
+    @staticmethod
+    def _mock_category_negation_pattern(category: str) -> re.Pattern[str]:
+        aliases = _MOCK_CATEGORY_NEGATION_TOKENS[category]
+        english = sorted(
+            (token for token in aliases if token.isascii()),
+            key=len,
+            reverse=True,
+        )
+        chinese = sorted(
+            (token for token in aliases if not token.isascii()),
+            key=len,
+            reverse=True,
+        )
+        english_objects = "|".join(re.escape(token) for token in english)
+        chinese_objects = "|".join(re.escape(token) for token in chinese)
+        return re.compile(
+            rf"(?:"
+            rf"\b(?:no|without)\s+"
+            rf"(?:(?:any|extra|additional|unwanted|other|visible)\s+)*"
+            rf"(?:{english_objects})\b"
+            rf"|"
+            rf"\b(?:do\s+not|don't)\s+"
+            rf"(?:include|show|add|generate)\s+"
+            rf"(?:(?:any|extra|additional|unwanted|other|visible)\s+)*"
+            rf"(?:{english_objects})\b"
+            rf"|"
+            rf"(?:不要|禁止|避免|不含|不需要|无需|没有|无)"
+            rf"(?:再|出现|包含|添加|加入|展示|生成|放置|任何|额外|多余|"
+            rf"其他|其它|可见|的|\s)*"
+            rf"(?:{chinese_objects})"
+            rf")",
+            re.IGNORECASE,
+        )
+
+    @staticmethod
+    def _mock_has_positive_category(source: str, category: str) -> bool:
+        positive_source = MockModelArkAdapter._mock_category_negation_pattern(
+            category
+        ).sub(" ", source)
+        return any(
+            token in positive_source for token in _MOCK_CATEGORY_TOKENS[category]
+        )
+
+    @staticmethod
+    def _mock_excluded_categories(source: str) -> set[str]:
+        return {
+            category
+            for category in _MOCK_CATEGORY_TOKENS
+            if MockModelArkAdapter._mock_category_negation_pattern(category).search(
+                source
+            )
+        }
+
+    @staticmethod
+    def _mock_english_constraints(source: str) -> str:
+        clauses: list[str] = []
+        translations = {
+            "红色": "red",
+            "蓝色": "blue",
+            "绿色": "green",
+            "黑色": "black",
+            "白色": "white",
+            "黄色": "yellow",
+            "紫色": "purple",
+            "橙色": "orange",
+        }
+        colors = [english for chinese, english in translations.items() if chinese in source]
+        if colors:
+            clauses.append(f" Keep the specified {' and '.join(colors)} color.")
+        literals = re.findall(
+            r'"[^"\r\n]+"|“[^”\r\n]+”|`[^`\r\n]+`|'
+            r"https?://\S+|\b\d+(?:\.\d+)?:\d+(?:\.\d+)?\b|"
+            r"\b[A-Z][A-Za-z0-9]*(?:[ -][A-Z0-9][A-Za-z0-9]*)+\b",
+            source,
+        )
+        literals.extend(
+            match.group(1)
+            for match in re.finditer(
+                r"(?:品牌|型号|brand|model)\s*[:：]?\s*"
+                r"([A-Za-z0-9\u3400-\u9fff][A-Za-z0-9\u3400-\u9fff._+/-]*)",
+                source,
+                re.IGNORECASE,
+            )
+        )
+        if literals:
+            clauses.append(f" Preserve {'; '.join(literals)} exactly.")
+        return "".join(clauses)
+
+    @staticmethod
+    def _mock_negative_prompt(source: str) -> str:
+        negatives: list[str] = []
+        lowered = source.casefold()
+        excluded_categories = MockModelArkAdapter._mock_excluded_categories(lowered)
+        has_extra_people_exclusion = any(
+            token in lowered
+            for token in (
+                "不要多余人物",
+                "不要出现多余人物",
+                "无多余人物",
+                "no extra people",
+                "without extra people",
+            )
+        )
+        if has_extra_people_exclusion:
+            negatives.append("no extra people")
+        if "product" in excluded_categories:
+            negatives.append("no products")
+        if "people" in excluded_categories and not has_extra_people_exclusion:
+            negatives.append("no people")
+        if "animals" in excluded_categories:
+            negatives.append("no animals")
+        if any(token in source for token in ("不改变包装文字", "保持包装文字")):
+            negatives.append("no altered package text")
+        negatives.append("no task-relevant structural errors or unsupported extra elements")
+        return ", ".join(negatives) + "."
+
+    @staticmethod
+    def _mock_reference_instruction(value: str) -> str:
+        constraints = MockModelArkAdapter._mock_english_constraints(value)
+        bbox_tokens = _MOCK_BBOX_TOKEN.findall(value)
+        actions: list[str] = []
+        if "缩小" in value:
+            actions.append("Reduce the selected subject")
+        elif "放大" in value:
+            actions.append("Enlarge the selected subject")
+        elif any(token in value for token in ("替换", "更换")):
+            actions.append("Replace only the selected content")
+        else:
+            actions.append("Use the selected region as instructed")
+        if "保持" in value or "保留" in value:
+            actions.append("preserve its specified appearance and position")
+        if any(token in value for token in ("商标", "标志", "logo")):
+            actions.append("keep the logo unchanged")
+        if any(token in value for token in ("文字", "文案", "text")):
+            actions.append("keep the text unchanged")
+        if any(token in value for token in ("背景", "background")):
+            actions.append("use the background as specified")
+        if any(token in value for token in ("人物", "人像", "person", "people")):
+            actions.append("preserve the requested people")
+        if any(token in value for token in ("动物", "猫", "狗", "animal")):
+            actions.append("preserve the requested animal")
+        if bbox_tokens:
+            actions.append(f"keep {'; '.join(bbox_tokens)} unchanged")
+        return f"{'; '.join(actions)}.{constraints}".strip()[:4000]
 
     async def stream_video_prompt_optimization(
         self,
@@ -3485,16 +4396,33 @@ class MockModelArkAdapter:
     @staticmethod
     def build_aigc_prompt_optimization_messages(
         request: AigcPromptOptimizeRequest,
+        *,
+        has_source_image: bool = False,
     ) -> tuple[str, str]:
-        common = [
-            "只输出一个 JSON 对象，且只能包含 optimized_text 和 "
-            "optimized_reference_instructions 两个字段。",
-            "不得输出 Markdown 代码围栏、解释、评分、分析过程或多个候选。",
-            "保留原文语言、事实、变量、代码、URL、品牌、产品、待渲染文字、"
-            "数量、颜色、画幅、时长、否定条件和所有结构化引用 token。",
-            "优化方向只是软偏好，与原文硬约束冲突时必须忽略。",
-            "optimized_text 不得超过 20000 字符。",
-        ]
+        if request.target_type in {"text_to_image", "image_to_image"}:
+            context = {
+                "target_node_id": request.target_node_id,
+                "target_type": request.target_type,
+                "target_config": request.target_config.model_dump(mode="json"),
+                "optimization_direction": request.optimization_direction,
+                "current_text": request.text,
+                "reference_instructions": request.reference_instructions,
+                "has_source_image": has_source_image,
+            }
+            return (
+                load_seedream_image_prompt(),
+                "\n".join(
+                    [
+                        "请严格按照系统提示词判断生图类型并优化以下请求。",
+                        json.dumps(
+                            context,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                    ]
+                ),
+            )
         if request.target_type == "llm":
             strategy = [
                 "你是 LLM 提示词工程优化器。",
@@ -3502,17 +4430,6 @@ class MockModelArkAdapter:
                 "和完成标准；不要要求输出隐藏思维过程。",
                 "仅在原文已有示例或用户明确要求时组织示例，不得编造业务事实。",
                 "optimized_reference_instructions 必须为空数组。",
-            ]
-        elif request.target_type in {"text_to_image", "image_to_image"}:
-            strategy = [
-                "你是 Seedream 4.0-5.0 生图提示词优化器。",
-                "使用简洁自然语言明确主体、行为、环境、用途与必要美学元素，"
-                "避免形容词堆叠和模糊代词。",
-                "图片编辑或参考图任务必须明确编辑对象、动作、保持不变内容，"
-                "以及每张参考图的对象、用途和关系。",
-                "optimized_reference_instructions 必须与输入数组长度、顺序完全一致，"
-                "不得合并、拆分或重排；每项不超过 4000 字符。",
-                "不得新增 <bbox>、<point> 或固定图N标签。",
             ]
         else:
             strategy = [
@@ -3523,8 +4440,29 @@ class MockModelArkAdapter:
                 "不得引用不存在的素材。",
                 "根据 generate_audio 描述对白、环境音、音效、BGM 或无声要求，"
                 "避免动作堆叠和不连续时间区间。",
+                "若原文含 (参考@图N)、(参考@视频N) 或 (参考@音频N)，"
+                "优先原样保留这些参考媒体标记；不生成新标记，且不作为输出有效性判断。",
                 "optimized_reference_instructions 必须为空数组。",
             ]
+        preservation_requirement = (
+            "保留原文语言、事实、变量、代码、URL、品牌、产品、待渲染文字、"
+            "数量、颜色、画幅、时长、否定条件和所有结构化引用 token。"
+            if request.target_type == "llm"
+            else "保留原文语言、事实、变量、代码、URL、品牌、产品、待渲染文字、"
+            "数量、颜色、画幅、时长和否定条件。"
+        )
+        common = (
+            []
+            if request.target_type in {"text_to_image", "image_to_image"}
+            else [
+                "只输出一个 JSON 对象，且只能包含 optimized_text 和 "
+                "optimized_reference_instructions 两个字段。",
+                "不得输出 Markdown 代码围栏、解释、评分、分析过程或多个候选。",
+                preservation_requirement,
+                "优化方向只是软偏好，与原文硬约束冲突时必须忽略。",
+                "optimized_text 不得超过 20000 字符。",
+            ]
+        )
         context = {
             "target_node_id": request.target_node_id,
             "target_type": request.target_type,
@@ -3532,12 +4470,32 @@ class MockModelArkAdapter:
             "optimization_direction": request.optimization_direction,
             "current_text": request.text,
             "reference_instructions": request.reference_instructions,
+            "has_source_image": has_source_image,
         }
+        if request.target_type in {"text_to_image", "image_to_image"}:
+            context["canonical_anchors"] = [
+                {
+                    "kind": constraint.kind,
+                    "anchor": constraint.anchor,
+                    "target": (
+                        "Negative Prompt"
+                        if constraint.kind == "exclusion"
+                        else "designated positive section"
+                    ),
+                }
+                for constraint in extract_source_constraints(request)
+            ]
         return (
             "\n".join([*strategy, *common]),
             "\n".join(
                 [
-                    "请在不改变原意和硬约束的前提下优化以下提示词。",
+                    (
+                        "Optimize this image prompt without changing intent or hard "
+                        "constraints."
+                        if request.target_type
+                        in {"text_to_image", "image_to_image"}
+                        else "请在不改变原意和硬约束的前提下优化以下提示词。"
+                    ),
                     json.dumps(
                         context,
                         ensure_ascii=False,
@@ -3834,6 +4792,10 @@ class MockModelArkAdapter:
                     "- storyboard_shots must be an array. Every shot object must "
                     "contain project_id, index, title, description, visual_prompt, "
                     "narration, and duration_seconds.",
+                    "- Every shot object must contain only those seven fields. Put "
+                    "camera movement, sound, and transition recommendations inside "
+                    "description; never return camera_movement, sound, or "
+                    "transition_recommendation as separate fields.",
                     "- Write every shot title, description, visual_prompt, and "
                     "narration in English, with the same proper-name exception.",
                     "- Number shots consecutively from 1.",
@@ -3890,6 +4852,7 @@ class MockModelArkAdapter:
                 "- title 是简洁中文标题。",
                 "- content 是完整中文分镜脚本文本。",
                 "- storyboard_shots 是数组，每个镜头对象必须包含 project_id、index、title、description、visual_prompt、narration、duration_seconds。",
+                "- 每个镜头对象只能包含上述七个字段；运镜、音效和转场建议必须写入 description，不得单独输出 camera_movement、sound 或 transition_recommendation 字段。",
                 "- 使用中文。",
                 "- 逐镜头输出，编号必须从 1 连续递增。",
                 "- 每个镜头必须包含：镜头时长、画面描述、主体/场景、运镜、旁白、音效和转场建议。",
@@ -4081,6 +5044,12 @@ class HybridModelArkAdapter:
     ) -> str:
         return await self.character_adapter.generate_aigc_text(request)
 
+    async def generate_aigc_media_name(
+        self,
+        request: AigcGeneratedMediaNamingRequest,
+    ) -> AigcGeneratedMediaName:
+        return await self.character_adapter.generate_aigc_media_name(request)
+
     async def generate_image_prompt(
         self,
         request: ImagePromptGenerationRequest,
@@ -4115,8 +5084,13 @@ class HybridModelArkAdapter:
     async def optimize_aigc_prompt(
         self,
         request: AigcPromptOptimizeRequest,
-    ) -> AigcImagePromptOptimizationResult:
-        return await self.character_adapter.optimize_aigc_prompt(request)
+        *,
+        source_image_url: str | None = None,
+    ) -> AigcPromptOptimizationProviderResult:
+        return await self.character_adapter.optimize_aigc_prompt(
+            request,
+            source_image_url=source_image_url,
+        )
 
     async def stream_video_prompt_optimization(
         self,

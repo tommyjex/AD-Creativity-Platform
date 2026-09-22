@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   createAigcRunProjection,
+  getAigcProjectionNodeIds,
+  getAigcRunConflictNodeIds,
+  getAigcRunProjectionNodeIds,
   getAigcRunScopeNodeIds,
   getConnectedAigcNodeIds,
+  getDownstreamAigcNodeIds,
   selectAigcProjectionRunIds
 } from "@/lib/aigc/run-scope";
 import type {
@@ -51,6 +55,30 @@ const definitionV1: AigcPipelineDefinition = {
     }
   ],
   edges: [edge("legacy-edge", "legacy-input", "legacy-output")],
+  viewport: { x: 0, y: 0, zoom: 1 }
+};
+
+const sharedBranchDefinition: AigcPipelineDefinitionV2 = {
+  schemaVersion: 2,
+  nodes: [
+    textNode("root"),
+    textNode("shared"),
+    textNode("branch-a"),
+    textNode("output-a"),
+    textNode("branch-b"),
+    textNode("output-b"),
+    textNode("branch-c"),
+    textNode("output-c")
+  ],
+  edges: [
+    edge("root-shared", "root", "shared"),
+    edge("shared-a", "shared", "branch-a"),
+    edge("a-output", "branch-a", "output-a"),
+    edge("shared-b", "shared", "branch-b"),
+    edge("b-output", "branch-b", "output-b"),
+    edge("shared-c", "shared", "branch-c"),
+    edge("c-output", "branch-c", "output-c")
+  ],
   viewport: { x: 0, y: 0, zoom: 1 }
 };
 
@@ -159,13 +187,38 @@ describe("AIGC connected flow scopes", () => {
 
     expect(getAigcRunScopeNodeIds(full).size).toBe(definitionV2.nodes.length);
     expect([...getAigcRunScopeNodeIds(fromNode)].sort()).toEqual([
-      "flow-a-branch",
       "flow-a-input",
       "flow-a-output"
     ]);
     expect([...getAigcRunScopeNodeIds(retryNode)].sort()).toEqual([
       "flow-b-input",
       "flow-b-output"
+    ]);
+  });
+
+  it("separates downstream conflict scopes from dependency projections", () => {
+    expect(
+      [...getDownstreamAigcNodeIds(sharedBranchDefinition, "branch-a")].sort()
+    ).toEqual(["branch-a", "output-a"]);
+    expect(
+      [...getAigcProjectionNodeIds(sharedBranchDefinition, "branch-a")].sort()
+    ).toEqual(["branch-a", "output-a", "root", "shared"]);
+
+    const branchA = run("branch-a-run", {
+      definition: sharedBranchDefinition,
+      runNumber: 1,
+      startNodeId: "branch-a",
+      status: "running"
+    });
+    expect([...getAigcRunConflictNodeIds(branchA)].sort()).toEqual([
+      "branch-a",
+      "output-a"
+    ]);
+    expect([...getAigcRunProjectionNodeIds(branchA)].sort()).toEqual([
+      "branch-a",
+      "output-a",
+      "root",
+      "shared"
     ]);
   });
 });
@@ -228,6 +281,7 @@ describe("AIGC Run projection selection", () => {
         activeFlowA.id,
         activeFlowB.id,
         latestFlowA.id,
+        olderFlowA.id,
         latestFlowB.id,
         successfulFlowB.id,
         isolatedCanceled.id
@@ -303,7 +357,7 @@ describe("AIGC Run projection selection", () => {
     expect(projection.displayRunForNode("flow-a-output")).toBeNull();
   });
 
-  it("locks a merged current flow when it intersects any active snapshot scope", () => {
+  it("does not expand an active snapshot scope after the current graph changes", () => {
     const mergedDefinition = {
       ...definitionV2,
       edges: [
@@ -318,10 +372,8 @@ describe("AIGC Run projection selection", () => {
       null
     );
 
-    expect(projection.isNodeActive("flow-b-output")).toBe(true);
-    expect(projection.activeRunForNode("flow-b-output")?.run.id).toBe(
-      activeFlowA.id
-    );
+    expect(projection.isNodeActive("flow-b-output")).toBe(false);
+    expect(projection.activeRunForNode("flow-b-output")).toBeNull();
   });
 
   it("uses each flow's latest terminal and latest successful Run", () => {
@@ -382,6 +434,87 @@ describe("AIGC Run projection selection", () => {
     );
     expect(projection.displayRunForNode("isolated")?.run.id).toBe(
       isolatedCanceled.id
+    );
+  });
+
+  it("preserves sibling results while another shared-upstream branch runs", () => {
+    const branchASuccess = run("branch-a-success", {
+      definition: sharedBranchDefinition,
+      runNumber: 4,
+      startNodeId: "branch-a",
+      status: "succeeded"
+    });
+    const branchBActive = run("branch-b-active", {
+      definition: sharedBranchDefinition,
+      runNumber: 5,
+      startNodeId: "branch-b",
+      status: "running"
+    });
+    const branchCFailed = run("branch-c-failed", {
+      definition: sharedBranchDefinition,
+      runNumber: 6,
+      startNodeId: "branch-c",
+      status: "failed"
+    });
+    const branchDetails = new Map(
+      [branchASuccess, branchBActive, branchCFailed].map((value) => [
+        value.id,
+        detail(value)
+      ])
+    );
+    const projection = createAigcRunProjection(
+      sharedBranchDefinition,
+      [branchCFailed, branchBActive, branchASuccess],
+      branchDetails,
+      null
+    );
+
+    expect(projection.displayRunForNode("output-a")?.run.id).toBe(
+      branchASuccess.id
+    );
+    expect(projection.activeRunForNode("branch-b")?.run.id).toBe(
+      branchBActive.id
+    );
+    expect(projection.isNodeActive("output-a")).toBe(false);
+    expect(projection.displayRunForNode("output-c")?.run.id).toBe(
+      branchCFailed.id
+    );
+    expect(
+      new Set(
+        selectAigcProjectionRunIds(
+          sharedBranchDefinition,
+          [branchCFailed, branchBActive, branchASuccess],
+          null
+        )
+      )
+    ).toEqual(
+      new Set([
+        branchASuccess.id,
+        branchBActive.id,
+        branchCFailed.id
+      ])
+    );
+
+    const branchBSuccess = run("branch-b-success", {
+      definition: sharedBranchDefinition,
+      runNumber: 7,
+      startNodeId: "branch-b",
+      status: "succeeded"
+    });
+    const completedProjection = createAigcRunProjection(
+      sharedBranchDefinition,
+      [branchBSuccess, branchASuccess],
+      new Map([
+        [branchASuccess.id, detail(branchASuccess)],
+        [branchBSuccess.id, detail(branchBSuccess)]
+      ]),
+      null
+    );
+    expect(completedProjection.displayRunForNode("output-a")?.run.id).toBe(
+      branchASuccess.id
+    );
+    expect(completedProjection.displayRunForNode("output-b")?.run.id).toBe(
+      branchBSuccess.id
     );
   });
 });

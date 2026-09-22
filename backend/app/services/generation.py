@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from functools import lru_cache
+import json
+import logging
 from typing import Iterable, Literal, Optional, Sequence
+import urllib.request
 
 from pydantic import Field, ValidationError
 
 from ..core.config import get_settings
 from ..schemas import (
+    AigcGeneratedMediaName,
+    AigcGeneratedMediaNamingRequest,
     AigcPromptOptimizeRequest,
     AigcPromptOptimizeResponse,
+    AigcSeedreamPromptOptimizationResult,
     AssetCreate,
     Brief,
     CharacterAssetIterationOperation,
@@ -45,6 +52,8 @@ from ..video_prompt import (
 )
 from .modelark import (
     AigcImagePromptOptimizationRequest,
+    AigcImagePromptLocalEditResult,
+    AigcImagePromptSectionsResult,
     AigcTextGenerationRequest,
     BytePlusModelArkAdapter,
     CharacterGenerationRequest,
@@ -73,11 +82,17 @@ from .modelark import (
     VideoGenerationRequest,
     VideoPromptOptimizationRequest,
     VideoPromptOptimizationShotContext,
+    allowed_aigc_prompt_generation_types,
 )
-from .prompt_optimization import validate_prompt_optimization_result
+from .prompt_optimization import (
+    extract_protected_literals,
+    render_seedream_prompt_with_warnings,
+    validate_prompt_optimization_result,
+)
 
 
 STORYBOARD_DURATION_TOLERANCE_SECONDS = 0.5
+logger = logging.getLogger(__name__)
 
 
 class StoryboardGenerationResult(SchemaModel):
@@ -119,6 +134,7 @@ class ModelArkGenerationService:
         prompt: str,
         system_prompt: str = "",
         temperature: float = 0.7,
+        image_url: str | None = None,
     ) -> str:
         return await self.adapter.generate_aigc_text(
             AigcTextGenerationRequest(
@@ -126,8 +142,15 @@ class ModelArkGenerationService:
                 prompt=prompt,
                 system_prompt=system_prompt,
                 temperature=temperature,
+                image_url=image_url,
             )
         )
+
+    async def generate_aigc_media_name(
+        self,
+        request: AigcGeneratedMediaNamingRequest,
+    ) -> AigcGeneratedMediaName:
+        return await self.adapter.generate_aigc_media_name(request)
 
     async def generate_aigc_image(
         self,
@@ -603,7 +626,11 @@ class ModelArkGenerationService:
                 image_urls=list(image_urls or []),
             )
         )
-        self._validate_storyboard_shots(result.storyboard_shots, brief)
+        shots = self._normalize_storyboard_shot_durations(
+            result.storyboard_shots,
+            brief,
+        )
+        self._validate_storyboard_shots(shots, brief)
         artifact = TextArtifactCreate(
             project_id=project_id,
             stage=Stage.STORYBOARD,
@@ -613,7 +640,7 @@ class ModelArkGenerationService:
         )
         return StoryboardGenerationResult(
             artifact=artifact,
-            shots=result.storyboard_shots,
+            shots=shots,
         )
 
     async def stream_storyboard(
@@ -637,7 +664,11 @@ class ModelArkGenerationService:
                 yield GenerationStreamEvent(kind="delta", delta=event.delta)
                 continue
             result = _require_generated_text_result(event)
-            self._validate_storyboard_shots(result.storyboard_shots, brief)
+            shots = self._normalize_storyboard_shot_durations(
+                result.storyboard_shots,
+                brief,
+            )
+            self._validate_storyboard_shots(shots, brief)
             yield GenerationStreamEvent(
                 kind="completed",
                 result=StoryboardGenerationResult(
@@ -648,7 +679,7 @@ class ModelArkGenerationService:
                         content=result.content,
                         status=Status.SUCCEEDED,
                     ),
-                    shots=result.storyboard_shots,
+                    shots=shots,
                 ),
             )
 
@@ -884,108 +915,163 @@ class ModelArkGenerationService:
     async def optimize_aigc_prompt(
         self,
         request: AigcPromptOptimizeRequest,
+        *,
+        source_image_url: str | None = None,
     ) -> AigcPromptOptimizeResponse:
         try:
-            result = await self.adapter.optimize_aigc_prompt(request)
-            response = AigcPromptOptimizeResponse.model_validate(
-                result.model_dump(mode="json")
-            )
-            # #region debug-point A-D:prompt-optimization-result
-            try:
-                import json
-                import time
-                import urllib.request
-
-                urllib.request.urlopen(
-                    urllib.request.Request(
-                        "http://127.0.0.1:7781/event",
-                        data=json.dumps(
-                            {
-                                "sessionId": "prompt-optimization-unavailable",
-                                "runId": "post-fix",
-                                "hypothesisId": "A-D",
-                                "location": (
-                                    "generation.py:"
-                                    "ModelArkGenerationService."
-                                    "optimize_aigc_prompt"
-                                ),
-                                "msg": (
-                                    "[DEBUG] Validating prompt optimization result"
-                                ),
-                                "data": {
-                                    "targetType": request.target_type,
-                                    "inputReferenceCount": len(
-                                        request.reference_instructions
-                                    ),
-                                    "outputReferenceCount": len(
-                                        response.optimized_reference_instructions
-                                    ),
-                                    "optimizedTextLength": len(
-                                        response.optimized_text
-                                    ),
-                                },
-                                "traceId": request.target_node_id,
-                                "ts": int(time.time() * 1000),
-                            }
-                        ).encode(),
-                        headers={"Content-Type": "application/json"},
-                    ),
-                    timeout=0.2,
-                ).read()
-            except Exception:
-                pass
-            # #endregion
-            if (
-                request.target_type in {"text_to_image", "image_to_image"}
-                and not request.reference_instructions
-                and response.optimized_reference_instructions
-            ):
-                response = response.model_copy(
-                    update={"optimized_reference_instructions": []}
+            if source_image_url is None:
+                result = await self.adapter.optimize_aigc_prompt(request)
+            else:
+                result = await self.adapter.optimize_aigc_prompt(
+                    request,
+                    source_image_url=source_image_url,
                 )
-            validate_prompt_optimization_result(request, response)
-            # #region debug-point A-D:prompt-optimization-success
+            optimization_mode = "not_applicable"
+            if request.target_type in {"text_to_image", "image_to_image"}:
+                allowed_types = allowed_aigc_prompt_generation_types(
+                    request,
+                    has_source_image=source_image_url is not None,
+                )
+                if not isinstance(result, AigcSeedreamPromptOptimizationResult):
+                    logger.warning(
+                        "AIGC prompt optimization returned a legacy image result",
+                        extra={"target_type": request.target_type},
+                    )
+                    result = AigcSeedreamPromptOptimizationResult(
+                        generation_type=sorted(allowed_types)[0],
+                        optimized_text=getattr(result, "optimized_text", "")
+                        or request.text
+                        or "请根据当前创作意图生成画面。",
+                        optimization_explanation="已按当前目标兼容模型优化结果。",
+                    )
+                if result.generation_type not in allowed_types:
+                    logger.warning(
+                        "AIGC prompt optimization returned an incompatible generation type",
+                        extra={
+                            "allowed_generation_types": allowed_types,
+                            "generation_type": result.generation_type,
+                            "target_type": request.target_type,
+                        },
+                    )
+                    result = result.model_copy(
+                        update={"generation_type": sorted(allowed_types)[0]}
+                    )
+                rendered = render_seedream_prompt_with_warnings(
+                    request,
+                    result,
+                )
+                response = rendered.response
+                optimization_mode = result.generation_type
+                for warning in rendered.warnings:
+                    logger.warning(
+                        "AIGC prompt optimization accepted with warning",
+                        extra={
+                            "warning_code": warning,
+                            "target_type": request.target_type,
+                            "generation_type": result.generation_type,
+                        },
+                    )
+            else:
+                if isinstance(
+                    result,
+                    (
+                        AigcImagePromptLocalEditResult,
+                        AigcImagePromptSectionsResult,
+                        AigcSeedreamPromptOptimizationResult,
+                    ),
+                ):
+                    raise ModelArkTextParseError(
+                        "non-image prompt optimization returned an image result"
+                    )
+                response = AigcPromptOptimizeResponse.model_validate(
+                    result.model_dump(mode="json")
+                )
+            # #region debug-point D:prompt-optimization-service-validation
             try:
-                import json
-                import time
-                import urllib.request
-
-                urllib.request.urlopen(
+                await asyncio.to_thread(
+                    urllib.request.urlopen,
                     urllib.request.Request(
-                        "http://127.0.0.1:7781/event",
+                        "http://127.0.0.1:7777/event",
                         data=json.dumps(
                             {
-                                "sessionId": "prompt-optimization-unavailable",
+                                "sessionId": "llm-prompt-parse",
                                 "runId": "post-fix",
-                                "hypothesisId": "A-D",
-                                "location": (
-                                    "generation.py:"
-                                    "ModelArkGenerationService."
-                                    "optimize_aigc_prompt"
-                                ),
-                                "msg": "[DEBUG] Prompt optimization succeeded",
+                                "hypothesisId": "D",
+                                "location": "generation.py:978",
+                                "msg": "[DEBUG] service response before validation",
                                 "data": {
-                                    "targetType": request.target_type,
-                                    "outputReferenceCount": len(
-                                        response.optimized_reference_instructions
-                                    ),
-                                    "optimizedTextLength": len(
-                                        response.optimized_text
-                                    ),
+                                    "response_text_length": len(response.optimized_text),
+                                    "response_type": type(result).__name__,
+                                    "target_type": request.target_type,
                                 },
-                                "traceId": request.target_node_id,
-                                "ts": int(time.time() * 1000),
                             }
                         ).encode(),
                         headers={"Content-Type": "application/json"},
                     ),
-                    timeout=0.2,
-                ).read()
+                    timeout=1,
+                )
             except Exception:
                 pass
             # #endregion
+            try:
+                validate_prompt_optimization_result(request, response)
+            except ModelArkTextParseError as exc:
+                if not str(exc).startswith(
+                    "AIGC prompt optimization changed protected literal"
+                ):
+                    raise
+                logger.warning(
+                    "AIGC prompt optimization accepted with validation warning",
+                    extra={
+                        "target_type": request.target_type,
+                        "warning_code": "result_validation_failed",
+                        "validation_error": str(exc),
+                    },
+                )
+            target_config = request.target_config
+            logger.info(
+                "AIGC prompt optimization completed",
+                extra={
+                    "target_type": request.target_type,
+                    "operation": getattr(target_config, "operation", None),
+                    "reference_image_count": getattr(
+                        target_config,
+                        "reference_image_count",
+                        0,
+                    ),
+                    "optimization_mode": optimization_mode,
+                    "has_source_image": source_image_url is not None,
+                },
+            )
             return response
-        except (ModelArkProviderError, ModelArkTextParseError):
+        except (ModelArkProviderError, ModelArkTextParseError) as exc:
+            # #region debug-point D:prompt-optimization-service-error
+            try:
+                await asyncio.to_thread(
+                    urllib.request.urlopen,
+                    urllib.request.Request(
+                        "http://127.0.0.1:7777/event",
+                        data=json.dumps(
+                            {
+                                "sessionId": "llm-prompt-parse",
+                                "runId": "post-fix",
+                                "hypothesisId": "D",
+                                "location": "generation.py:1006",
+                                "msg": "[DEBUG] service validation failed",
+                                "data": {
+                                    "error_type": type(exc).__name__,
+                                    "message": str(exc),
+                                    "target_type": request.target_type,
+                                },
+                            }
+                        ).encode(),
+                        headers={"Content-Type": "application/json"},
+                    ),
+                    timeout=1,
+                )
+            except Exception:
+                pass
+            # #endregion
             raise
         except (ValidationError, ValueError) as exc:
             raise ModelArkTextParseError(
@@ -1231,6 +1317,37 @@ class ModelArkGenerationService:
             char.lower() if char.isalnum() or char in {"-", "_"} else "-"
             for char in value.strip()
         ).strip("-") or "project"
+
+    @staticmethod
+    def _normalize_storyboard_shot_durations(
+        shots: Sequence[StoryboardShotCreate],
+        brief: Brief,
+    ) -> list[StoryboardShotCreate]:
+        normalized = list(shots)
+        if not normalized or any(shot.duration_seconds <= 0 for shot in normalized):
+            return normalized
+
+        total_duration = sum(shot.duration_seconds for shot in normalized)
+        target_duration = float(brief.duration_seconds)
+        if (
+            abs(total_duration - target_duration)
+            <= STORYBOARD_DURATION_TOLERANCE_SECONDS
+        ):
+            return normalized
+
+        scale = target_duration / total_duration
+        durations = [
+            round(shot.duration_seconds * scale, 2)
+            for shot in normalized[:-1]
+        ]
+        final_duration = round(target_duration - sum(durations), 2)
+        if final_duration <= 0:
+            return normalized
+        durations.append(final_duration)
+        return [
+            shot.model_copy(update={"duration_seconds": duration})
+            for shot, duration in zip(normalized, durations, strict=True)
+        ]
 
     @staticmethod
     def _validate_storyboard_shots(

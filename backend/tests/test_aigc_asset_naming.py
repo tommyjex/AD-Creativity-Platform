@@ -4,6 +4,9 @@ import pytest
 
 from backend.app.services.aigc_asset_naming import (
     AIGC_ASSET_NAME_MAX_BYTES,
+    AIGC_GENERATED_ASSET_NAME_SCHEME,
+    aigc_generated_output_metadata,
+    build_aigc_generated_asset_name,
     build_aigc_output_asset_name,
 )
 
@@ -175,3 +178,45 @@ def test_build_name_rejects_unmapped_mime_type() -> None:
             mime_type="image/gif",
             output_ordinal=0,
         )
+
+
+def test_generated_name_uses_no_first_suffix_and_numbers_later_outputs() -> None:
+    assert build_aigc_generated_asset_name(
+        node_name="商品主视觉",
+        mime_type="image/png",
+        output_ordinal=0,
+    ) == "商品主视觉.png"
+    assert build_aigc_generated_asset_name(
+        node_name="商品主视觉",
+        mime_type="image/png",
+        output_ordinal=1,
+    ) == "商品主视觉-2.png"
+    assert build_aigc_generated_asset_name(
+        node_name="商品主视觉",
+        mime_type="video/quicktime",
+        output_ordinal=2,
+    ) == "商品主视觉-3.mov"
+
+
+def test_generated_metadata_records_v2_provenance_and_sanitizes_utf8_name() -> None:
+    metadata = aigc_generated_output_metadata(
+        node_name=(' 超长/节点:*?"<>|名称 ' * 20),
+        generated_name="商品主视觉",
+        naming_model="doubao-seed-2-0-mini-260428",
+        naming_status="succeeded",
+        mime_type="image/jpeg",
+        output_ordinal=0,
+    )
+
+    assert metadata == {
+        "name": metadata["name"],
+        "name_scheme": AIGC_GENERATED_ASSET_NAME_SCHEME,
+        "generated_name": "商品主视觉",
+        "name_source": "ai",
+        "naming_model": "doubao-seed-2-0-mini-260428",
+        "naming_status": "succeeded",
+        "output_ordinal": 0,
+    }
+    assert str(metadata["name"]).endswith(".jpg")
+    assert len(str(metadata["name"]).encode("utf-8")) <= AIGC_ASSET_NAME_MAX_BYTES
+    assert not any(character in str(metadata["name"]) for character in '/\\:*?"<>|')

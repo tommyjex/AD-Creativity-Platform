@@ -29,7 +29,8 @@ export function aigcNodeBaseDisplayName(node: AigcV2Node): string {
 }
 
 export function deriveAigcNodeDisplayNames(
-  nodes: readonly AigcV2Node[]
+  nodes: readonly AigcV2Node[],
+  managedLabels: ReadonlyMap<string, string> = new Map()
 ): ReadonlyMap<string, AigcNodeDisplayName> {
   const baseNames = nodes.map(aigcNodeBaseDisplayName);
   const counts = new Map<string, number>();
@@ -44,6 +45,8 @@ export function deriveAigcNodeDisplayNames(
       const duplicateCount = counts.get(baseName) ?? 1;
       const index = (seen.get(baseName) ?? 0) + 1;
       seen.set(baseName, index);
+      const automaticName =
+        duplicateCount === 1 ? baseName : `${baseName}${index}`;
       return [
         node.id,
         {
@@ -51,7 +54,9 @@ export function deriveAigcNodeDisplayNames(
           duplicateCount,
           index,
           displayName:
-            duplicateCount === 1 ? baseName : `${baseName}${index}`
+            node.custom_name?.trim() ||
+            managedLabels.get(node.id)?.trim() ||
+            automaticName
         }
       ];
     })

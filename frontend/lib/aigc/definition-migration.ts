@@ -15,6 +15,7 @@ const LEGACY_MODALITY_TYPES = new Set([
 ]);
 const V2_MODALITY_TYPES = new Set(["text", "image", "video", "audio"]);
 const COORDINATE_TAG_PATTERN = /<\/?\s*(?:point|bbox)\b/i;
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
 
 export class AigcDefinitionMigrationError extends Error {}
 
@@ -313,6 +314,7 @@ function normalizeNode(
   const type = node.type;
   const config = node.config ?? {};
   const migrated = structuredClone(node);
+  migrated.custom_name = normalizeCustomName(node.custom_name);
 
   if (version === 2) {
     if (type === "text") migrated.config = normalizeTextConfig(config, undefined);
@@ -322,6 +324,9 @@ function normalizeNode(
     }
     if (type === "json_parser") {
       migrated.config = normalizeJsonParserConfig(config);
+    }
+    if (type === "multi_track_edit") {
+      migrated.config = normalizeMultiTrackFontTypes(config);
     }
     return migrated;
   }
@@ -364,6 +369,55 @@ function normalizeNode(
     migrated.config = normalizeMediaConfig(config, null, false);
   }
   return migrated;
+}
+
+function normalizeMultiTrackFontTypes(value: unknown): Record<string, unknown> {
+  const config = structuredClone(record(value, "node config"));
+  if (!Array.isArray(config.tracks)) return config;
+  for (const track of config.tracks) {
+    if (typeof track !== "object" || track === null || Array.isArray(track)) {
+      continue;
+    }
+    const elements = (track as Record<string, unknown>).elements;
+    if (!Array.isArray(elements)) continue;
+    for (const element of elements) {
+      if (
+        typeof element !== "object" ||
+        element === null ||
+        Array.isArray(element)
+      ) {
+        continue;
+      }
+      const candidate = element as Record<string, unknown>;
+      if (candidate.type !== "text" && candidate.type !== "subtitle") continue;
+      if (
+        typeof candidate.style !== "object" ||
+        candidate.style === null ||
+        Array.isArray(candidate.style)
+      ) {
+        continue;
+      }
+      const style = candidate.style as Record<string, unknown>;
+      if (style.font_type === undefined) style.font_type = null;
+    }
+  }
+  return config;
+}
+
+function normalizeCustomName(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") {
+    throw new AigcDefinitionMigrationError("custom_name is invalid");
+  }
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (
+    normalized.length > 120 ||
+    CONTROL_CHARACTER_PATTERN.test(normalized)
+  ) {
+    throw new AigcDefinitionMigrationError("custom_name is invalid");
+  }
+  return normalized;
 }
 
 export function migrateAigcDefinitionV2(

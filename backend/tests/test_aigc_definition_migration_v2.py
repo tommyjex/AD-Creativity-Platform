@@ -39,6 +39,7 @@ def test_v2_registry_defines_four_non_executable_modality_nodes() -> None:
         "video_generation",
         "video_enhancement",
         "video_face_blur",
+        "video_subtitle_extraction",
         "layer_canvas",
         "layer_composite",
         "multi_track_edit",
@@ -85,6 +86,23 @@ def test_v1_to_v2_migration_matches_shared_golden_fixture(
         AigcPipelineDefinitionV2.model_validate(migrated)
         .model_dump(mode="json", by_alias=True)
         == migrated
+    )
+
+
+def test_migration_defaults_and_preserves_node_custom_name() -> None:
+    unnamed = deepcopy(GOLDEN_CASES[0]["input"])
+    named = deepcopy(GOLDEN_CASES[0]["input"])
+    named["nodes"][0]["custom_name"] = "  商品文案输入  "
+
+    unnamed_result = migrate_aigc_definition_v2(unnamed)
+    named_result = migrate_aigc_definition_v2(named)
+
+    assert unnamed_result["nodes"][0]["custom_name"] is None
+    assert named_result["nodes"][0]["custom_name"] == "  商品文案输入  "
+    assert (
+        AigcPipelineDefinitionV2.model_validate(named_result)
+        .model_dump(mode="json", by_alias=True)["nodes"][0]["custom_name"]
+        == "商品文案输入"
     )
 
 

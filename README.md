@@ -100,6 +100,8 @@ cp .env.example .env
 | `ARK_TEXT_MODEL`、`ARK_IMAGE_MODEL`、`ARK_VIDEO_MODEL` | 覆盖默认模型 ID |
 | `MEDIAKIT_API_KEY`、`MEDIAKIT_BASE_URL` | 使用视频转写/字幕能力时必填 |
 | `COMPOSER_FFMPEG_PATH` | FFmpeg 不在 `PATH` 中时填写可执行文件绝对路径 |
+| `TLS_ENABLED` | 启用火山引擎 TLS 操作日志投递，默认 `false` |
+| `TLS_ACCESS_KEY_ID`、`TLS_SECRET_ACCESS_KEY` | TLS 投递凭据；仅通过密钥管理系统或部署平台注入 |
 
 TOS 仅使用 `TOS_ACCESS_KEY` 和 `TOS_SECRET_KEY`。旧的 `TOS_AK`、`TOS_SK` 仅为代码兼容别名，不建议配置。
 
@@ -122,6 +124,14 @@ TOS_PUBLIC_ENDPOINT=<OPTIONAL_PUBLIC_ENDPOINT>
 ARK_API_KEY=<ARK_API_KEY>
 MEDIAKIT_API_KEY=<OPTIONAL_MEDIAKIT_API_KEY>
 ```
+
+#### TLS 操作日志
+
+服务始终向标准输出写入脱敏的单行 JSON 日志。要镜像投递至 TLS，设置
+`TLS_ENABLED=true`，并通过部署平台注入 `TLS_ACCESS_KEY_ID` 与
+`TLS_SECRET_ACCESS_KEY`。默认 endpoint、Project 和 Topic 分别是北京 TLS
+服务及 `.env.example` 中的项目、主题；可通过 `TLS_ENDPOINT`、`TLS_PROJECT_ID`
+和 `TLS_TOPIC_ID` 覆盖。不要将 TLS 凭据写入仓库、镜像或运行日志。
 
 ### 6. 初始化数据库表
 

@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+import backend.app.services.aigc_executor as executor_module
 from backend.app.repositories import (
     ActiveRunConflictError,
     InMemoryRepository,
@@ -143,6 +144,42 @@ def disconnected_llm_definition() -> AigcPipelineDefinition:
                     "flow-b-input",
                     "text",
                     "flow-b-model",
+                    "prompt",
+                ),
+            ],
+        }
+    )
+
+
+def shared_upstream_llm_definition() -> AigcPipelineDefinition:
+    return AigcPipelineDefinition.model_validate(
+        {
+            "nodes": [
+                node("shared-input", "text_input", 0, config={"text": "共享"}),
+                node("shared-model", "llm", 300),
+                node("branch-a-model", "llm", 600),
+                node("branch-b-model", "llm", 600),
+            ],
+            "edges": [
+                edge(
+                    "shared-input-model",
+                    "shared-input",
+                    "text",
+                    "shared-model",
+                    "prompt",
+                ),
+                edge(
+                    "shared-branch-a",
+                    "shared-model",
+                    "text",
+                    "branch-a-model",
+                    "prompt",
+                ),
+                edge(
+                    "shared-branch-b",
+                    "shared-model",
+                    "text",
+                    "branch-b-model",
                     "prompt",
                 ),
             ],
@@ -302,8 +339,11 @@ class FailingLeaseRecoveryRepository(FlakyLeaseRepository):
 
 
 class _NoopAssetStorage:
-    def delete_asset_objects(self, _asset) -> None:
-        return None
+    def __init__(self) -> None:
+        self.deleted_asset_ids: list[str] = []
+
+    def delete_asset_objects(self, asset) -> None:
+        self.deleted_asset_ids.append(asset.id)
 
     def with_access_url(self, asset):
         return asset
@@ -720,7 +760,16 @@ def image_reference_definition(
     )
 
 
-def test_runtime_executes_dependency_chain_and_projects_output() -> None:
+def test_runtime_executes_dependency_chain_and_projects_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        executor_module,
+        "log_event",
+        lambda _logger, event, **context: events.append((event, context)),
+    )
+
     async def scenario():
         repository = InMemoryRepository()
         pipeline = repository.create_aigc_pipeline(
@@ -749,6 +798,134 @@ def test_runtime_executes_dependency_chain_and_projects_output() -> None:
     assert by_id["output"].status == AigcRunNodeStatus.SUCCEEDED
     assert by_id["output"].result.kind == AigcResultKind.ASSETS
     assert gateway.calls == {"llm": 1, "image": 1}
+    task_events = [context for event, context in events if event == "aigc.task"]
+    assert any(
+        event["outcome"] == "started" and event["phase"] == "queued"
+        for event in task_events
+    )
+    assert sum(event["outcome"] == "succeeded" for event in task_events) == 2
+    assert {
+        event["task_type"] for event in task_events if event["outcome"] == "succeeded"
+    } == {"llm", "text_to_image"}
+    assert any(
+        event == "aigc.run" and context["outcome"] == "succeeded"
+        for event, context in events
+    )
+
+
+def test_llm_resolves_local_and_upstream_image_assets_without_urls() -> None:
+    repository = InMemoryRepository()
+    create_image_asset(repository, "local-image")
+    create_image_asset(repository, "run-image")
+    definition = canonicalize_aigc_definition(
+        v2_definition(
+            [
+                node("prompt", "text", 0, config={"text": "分析图片"}),
+                node(
+                    "upstream-image",
+                    "image",
+                    0,
+                    config={"asset_id": "local-image"},
+                ),
+                node("image", "image", 0, config={"asset_id": "local-image"}),
+                node("llm", "llm", 300),
+            ],
+            [
+                edge(
+                    "upstream-image-edge",
+                    "upstream-image",
+                    "image",
+                    "image",
+                    "image",
+                ),
+                edge("prompt-edge", "prompt", "text", "llm", "prompt"),
+                edge("image-edge", "image", "image", "llm", "image"),
+            ],
+        )
+    )
+    node_by_id = {item.id: item for item in definition.nodes}
+    run_node_by_id = {
+        "prompt": AigcPipelineRunNode(
+            node_id="prompt",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=AigcTaskResult(kind=AigcResultKind.TEXT, text="分析图片"),
+        ),
+        "image": AigcPipelineRunNode(
+            node_id="image",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=AigcTaskResult(
+                kind=AigcResultKind.ASSETS,
+                assets=[
+                    AigcResultAsset(
+                        asset_id="run-image",
+                        ordinal=0,
+                        mime_type="image/png",
+                        available=True,
+                    )
+                ],
+            ),
+        ),
+    }
+    runtime = AigcPipelineRuntime(
+        repository,
+        FakeGateway(),  # type: ignore[arg-type]
+    )
+    llm_edges = [
+        item for item in definition.edges if item.target_node_id == "llm"
+    ]
+
+    params, _ = runtime._resolve_task_params(
+        node_by_id["llm"],
+        llm_edges,
+        node_by_id,
+        run_node_by_id,
+        all_edges=definition.edges,
+    )
+    upstream_hash = runtime._hash_resolved_task(
+        node_by_id["llm"],
+        params,
+        llm_edges,
+        node_by_id,
+        run_node_by_id,
+        all_edges=definition.edges,
+    )
+    run_node_by_id["image"] = run_node_by_id["image"].model_copy(
+        update={
+            "result": AigcTaskResult(
+                kind=AigcResultKind.ASSETS,
+                assets=[
+                    AigcResultAsset(
+                        asset_id="local-image",
+                        ordinal=0,
+                        mime_type="image/png",
+                        available=True,
+                    )
+                ],
+            )
+        }
+    )
+    fallback_params, _ = runtime._resolve_task_params(
+        node_by_id["llm"],
+        llm_edges,
+        node_by_id,
+        run_node_by_id,
+        all_edges=definition.edges,
+    )
+    fallback_hash = runtime._hash_resolved_task(
+        node_by_id["llm"],
+        fallback_params,
+        llm_edges,
+        node_by_id,
+        run_node_by_id,
+        all_edges=definition.edges,
+    )
+
+    assert params["input_image_asset_id"] == "run-image"
+    assert "url" not in params
+    assert fallback_params["input_image_asset_id"] == "local-image"
+    assert upstream_hash != fallback_hash
 
 
 def test_v2_local_modalities_create_frozen_results_without_attempts() -> None:
@@ -3552,6 +3729,73 @@ def test_disconnected_flows_run_and_cancel_independently() -> None:
     ).status == AigcRunNodeStatus.SUCCEEDED
 
 
+def test_shared_upstream_branches_run_without_cache_and_isolate_tasks() -> None:
+    async def scenario():
+        repository = InMemoryRepository()
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(
+                name="shared upstream branches",
+                definition=shared_upstream_llm_definition(),
+            )
+        )
+        gateway = GatedLlmGateway()
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+            worker_count=2,
+            llm_concurrency=2,
+        )
+        try:
+            run_a = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(
+                    expected_revision=0,
+                    mode="from_node",
+                    start_node_id="branch-a-model",
+                ),
+                idempotency_key="shared-branch-a",
+            )
+            run_b = await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(
+                    expected_revision=0,
+                    mode="from_node",
+                    start_node_id="branch-b-model",
+                ),
+                idempotency_key="shared-branch-b",
+            )
+
+            started = [
+                await asyncio.wait_for(gateway.started.get(), timeout=1),
+                await asyncio.wait_for(gateway.started.get(), timeout=1),
+            ]
+            assert started == ["shared-model", "shared-model"]
+
+            await runtime.cancel_run(run_a.run.id)
+            gateway.release.set()
+            await asyncio.wait_for(runtime.wait_until_idle(), timeout=1)
+            return (
+                repository.get_aigc_run(run_a.run.id),
+                repository.get_aigc_run(run_b.run.id),
+                gateway.tasks,
+            )
+        finally:
+            gateway.release.set()
+            await runtime.stop()
+
+    run_a, run_b, tasks = run_runtime_scenario(scenario)
+    shared_tasks = [task for task in tasks if task.node_id == "shared-model"]
+
+    assert run_a.run.status == AigcPipelineRunStatus.CANCELED
+    assert run_b.run.status == AigcPipelineRunStatus.SUCCEEDED
+    assert len(shared_tasks) == 2
+    assert {task.run_id for task in shared_tasks} == {
+        run_a.run.id,
+        run_b.run.id,
+    }
+    assert len({task.task_id for task in shared_tasks}) == 2
+
+
 def test_incremental_run_reuses_valid_ancestor() -> None:
     async def scenario():
         repository = InMemoryRepository()
@@ -3991,6 +4235,87 @@ def test_resolve_layer_canvas_and_composite_params_preserves_snapshot_source() -
     assert edit_params["edit_layer"]["layer_id"] == "layer-1"
     assert composite_params["replacement"]["asset_id"] == "edited-asset"
     assert composite_params["input_layer_set"]["id"] == "layer-set-1"
+
+
+def test_resolve_layer_composite_params_without_replacement() -> None:
+    layer_set = AigcLayerSet.model_validate(layer_set_payload())
+    definition = canonicalize_aigc_definition(
+        AigcPipelineDefinition.model_validate(
+            {
+                "nodes": [
+                    node(
+                        "producer",
+                        "image_to_image",
+                        0,
+                        config={"operation": "layer_decomposition"},
+                    ),
+                    node(
+                        "canvas",
+                        "layer_canvas",
+                        200,
+                        config={
+                            "source_layer_set": {
+                                "id": layer_set.id,
+                                "version": layer_set.version,
+                                "digest": layer_set.digest,
+                            },
+                        },
+                    ),
+                    node("composite", "layer_composite", 400),
+                ],
+                "edges": [
+                    edge("layers", "producer", "layers", "canvas", "layers"),
+                    edge(
+                        "composite-layers",
+                        "canvas",
+                        "layers",
+                        "composite",
+                        "layers",
+                    ),
+                ],
+            }
+        )
+    )
+    node_by_id = {item.id: item for item in definition.nodes}
+    run_node_by_id = {
+        "producer": AigcPipelineRunNode(
+            node_id="producer",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=AigcTaskResult(
+                kind=AigcResultKind.LAYER_SET,
+                layer_set=layer_set,
+            ),
+        ),
+        "canvas": AigcPipelineRunNode(
+            node_id="canvas",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.SUCCEEDED,
+            result=AigcTaskResult(
+                kind=AigcResultKind.LAYER_CANVAS,
+                layer_set=layer_set,
+            ),
+        ),
+        "composite": AigcPipelineRunNode(
+            node_id="composite",
+            included_in_plan=True,
+            status=AigcRunNodeStatus.IDLE,
+        ),
+    }
+    runtime = AigcPipelineRuntime(
+        InMemoryRepository(),
+        FakeGateway(),  # type: ignore[arg-type]
+    )
+
+    params, _ = runtime._resolve_task_params(
+        node_by_id["composite"],
+        [definition.edges[1]],
+        node_by_id,
+        run_node_by_id,
+    )
+
+    assert params["input_layer_set"]["id"] == layer_set.id
+    assert "replacement" not in params
 
 
 def test_layer_canvas_rejects_stale_source_and_composite_rejects_mismatch() -> None:
@@ -4869,6 +5194,80 @@ def test_layer_canvas_cancellation_cleanup_preserves_shared_assets() -> None:
         }
         assert repository.get_asset("base-asset").id == "base-asset"
         assert repository.get_asset("layer-asset").id == "layer-asset"
+
+    run_runtime_scenario(scenario)
+
+
+def test_generated_media_cleanup_compensates_object_storage_and_draft_asset() -> None:
+    async def scenario() -> None:
+        repository = InMemoryRepository()
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(
+                name="generated cleanup",
+                definition=chain_definition(),
+            )
+        )
+        run = repository.create_aigc_run(
+            AigcPipelineRun(
+                pipeline_id=pipeline.id,
+                run_number=1,
+                pipeline_revision=pipeline.revision,
+                mode=AigcPipelineRunMode.FULL,
+                definition_snapshot=pipeline.definition,
+            ),
+            idempotency_key="generated-cleanup-run",
+            nodes=[
+                AigcPipelineRunNode(
+                    node_id=node.id,
+                    included_in_plan=True,
+                    status=AigcRunNodeStatus.READY,
+                )
+                for node in pipeline.definition.nodes
+            ],
+        )
+        task = repository.create_aigc_task_attempt(
+            AigcPipelineTaskAttempt(
+                pipeline_id=pipeline.id,
+                run_id=run.run.id,
+                node_id="image",
+                type=AigcTaskType.TEXT_TO_IMAGE,
+            ),
+            idempotency_key="generated-cleanup-attempt",
+        )
+        asset = repository.create_asset(
+            AssetCreate(
+                id="generated-cleanup-asset",
+                tool_asset_role=ToolAssetRole.OUTPUT,
+                type=AssetType.GENERATED_IMAGE,
+                status=Status.DRAFT,
+                object_key="aigc/generated-cleanup-asset.png",
+                mime_type="image/png",
+                metadata={"task_id": task.task_id},
+            )
+        )
+        repository.add_aigc_task_assets(
+            [
+                AigcPipelineTaskAssetReference(
+                    task_id=task.task_id,
+                    direction=AigcAssetDirection.OUTPUT,
+                    slot="image",
+                    ordinal=0,
+                    asset_id=asset.id,
+                )
+            ]
+        )
+        gateway = FakeGateway()
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+        )
+
+        await runtime._cleanup_task_outputs(task.task_id)
+
+        assert repository.list_aigc_task_assets(task.task_id) == []
+        assert gateway.asset_storage.deleted_asset_ids == [asset.id]
+        with pytest.raises(NotFoundError):
+            repository.get_asset(asset.id)
 
     run_runtime_scenario(scenario)
 

@@ -16,6 +16,9 @@ from backend.app.services.generation import (
 from backend.app.services.assets import AssetStorageService, get_asset_storage_service
 from backend.app.services.media_inspector import MediaInspector, get_media_inspector
 from backend.app.services.aigc_pipeline import AigcPipelineService
+from backend.app.services.aigc_pipeline_thumbnail import (
+    AigcPipelineThumbnailService,
+)
 from backend.app.services.aigc_executor import AigcPipelineRuntime
 from backend.app.services.aigc_gateway import AigcModelGateway
 from backend.app.services.background import BackgroundTaskRunner
@@ -29,6 +32,7 @@ from backend.app.services.mediakit_multitrack import MediaKitMultiTrackClient
 from backend.app.services.mediakit_video_enhancement import (
     MediaKitVideoEnhancementClient,
 )
+from backend.app.services.mediakit_video_ocr import MediaKitVideoOcrClient
 from backend.app.services.video_normalizer import VideoNormalizer, get_video_normalizer
 from backend.app.services.workflow import WorkflowService
 
@@ -55,6 +59,13 @@ def get_aigc_pipeline_service(
     return AigcPipelineService(repository)
 
 
+def get_aigc_pipeline_thumbnail_service(
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+) -> AigcPipelineThumbnailService:
+    return AigcPipelineThumbnailService(repository, asset_storage)
+
+
 def get_modelark_generation_service() -> ModelArkGenerationService:
     return get_generation_service()
 
@@ -73,6 +84,10 @@ def get_face_blur_video_client_factory() -> Callable[[], FaceBlurVideoClient]:
     return FaceBlurVideoClient
 
 
+def get_video_ocr_client_factory() -> Callable[[], MediaKitVideoOcrClient]:
+    return MediaKitVideoOcrClient
+
+
 def get_multitrack_client_factory() -> Callable[[], MediaKitMultiTrackClient]:
     return MediaKitMultiTrackClient
 
@@ -88,6 +103,9 @@ def get_aigc_pipeline_runtime(
     face_blur_client_factory: Callable[
         [], FaceBlurVideoClient
     ] = Depends(get_face_blur_video_client_factory),
+    video_ocr_client_factory: Callable[
+        [], MediaKitVideoOcrClient
+    ] = Depends(get_video_ocr_client_factory),
     multitrack_client_factory: Callable[
         [], MediaKitMultiTrackClient
     ] = Depends(get_multitrack_client_factory),
@@ -119,6 +137,13 @@ def get_aigc_pipeline_runtime(
                 face_blur_timeout_seconds=(
                     settings.mediakit_face_blur_timeout_seconds
                 ),
+                video_ocr_client_factory=video_ocr_client_factory,
+                video_ocr_poll_interval_seconds=(
+                    settings.mediakit_video_ocr_poll_interval_seconds
+                ),
+                video_ocr_timeout_seconds=(
+                    settings.mediakit_video_ocr_timeout_seconds
+                ),
                 multitrack_client_factory=multitrack_client_factory,
                 multitrack_poll_interval_seconds=(
                     settings.mediakit_multitrack_poll_interval_seconds
@@ -133,6 +158,9 @@ def get_aigc_pipeline_runtime(
             ),
             video_face_blur_concurrency=(
                 settings.aigc_video_face_blur_concurrency
+            ),
+            video_subtitle_extraction_concurrency=(
+                settings.aigc_video_subtitle_extraction_concurrency
             ),
             multitrack_concurrency=settings.aigc_multitrack_concurrency,
         )

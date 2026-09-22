@@ -106,6 +106,64 @@ describe("AIGC multi-track editor reducer", () => {
     ).toBe("#000000FF");
   });
 
+  it("commits repeated transient color previews as one history step", () => {
+    const initial = createAigcMultitrackEditorState({
+      config: config(),
+      sources: [availableVideoSource]
+    });
+    const initialConfig = structuredClone(initial.config);
+    const firstPreview = reduceAigcMultitrackEditor(initial, {
+      type: "config/replace-transient",
+      config: {
+        ...initial.config,
+        canvas: { ...initial.config.canvas, background_color: "#112233FF" }
+      }
+    });
+    const secondPreview = reduceAigcMultitrackEditor(firstPreview, {
+      type: "config/replace-transient",
+      config: {
+        ...firstPreview.config,
+        canvas: { ...firstPreview.config.canvas, background_color: "#44556680" }
+      }
+    });
+
+    expect(secondPreview.config.canvas.background_color).toBe("#44556680");
+    expect(secondPreview.past).toHaveLength(0);
+
+    const committed = reduceAigcMultitrackEditor(secondPreview, {
+      type: "config/commit-transient",
+      config: secondPreview.config,
+      initialConfig
+    });
+    expect(committed.past).toHaveLength(1);
+    expect(
+      reduceAigcMultitrackEditor(committed, { type: "history/undo" }).config
+        .canvas.background_color
+    ).toBe("#000000FF");
+  });
+
+  it("restores a canceled transient color preview without history", () => {
+    const initial = createAigcMultitrackEditorState({
+      config: config(),
+      sources: [availableVideoSource]
+    });
+    const preview = reduceAigcMultitrackEditor(initial, {
+      type: "config/replace-transient",
+      config: {
+        ...initial.config,
+        canvas: { ...initial.config.canvas, background_color: "#44556680" }
+      }
+    });
+    const canceled = reduceAigcMultitrackEditor(preview, {
+      type: "config/cancel-transient",
+      initialConfig: initial.config
+    });
+
+    expect(canceled.config.canvas.background_color).toBe("#000000FF");
+    expect(canceled.past).toHaveLength(0);
+    expect(canceled.canUndo).toBe(false);
+  });
+
   it("adds, renames, reorders, toggles, and removes tracks without mutation", () => {
     const initial = createAigcMultitrackEditorState({
       config: config(),
@@ -155,6 +213,26 @@ describe("AIGC multi-track editor reducer", () => {
       "video-track"
     ]);
     expect(state.config.tracks[0]?.order).toBe(0);
+  });
+
+  it("restores a removed track and all of its elements in one undo step", () => {
+    const initial = createAigcMultitrackEditorState({
+      config: config(),
+      sources: [availableVideoSource]
+    });
+    const removed = reduceAigcMultitrackEditor(initial, {
+      type: "track/remove",
+      trackId: "video-track"
+    });
+
+    expect(removed.config.tracks).toHaveLength(0);
+    expect(removed.past).toHaveLength(1);
+
+    const restored = reduceAigcMultitrackEditor(removed, {
+      type: "history/undo"
+    });
+    expect(restored.config.tracks).toEqual(initial.config.tracks);
+    expect(restored.config.tracks[0]?.elements).toHaveLength(1);
   });
 
   it("rejects structurally invalid additions instead of hiding repairs", () => {

@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 import re
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError
 
 import backend.app.services.modelark as modelark_module
 from backend.app.core.config import Settings
 from backend.app.schemas import (
+    AigcGeneratedMediaNamingRequest,
     AigcPromptOptimizeRequest,
+    AigcSeedreamPromptOptimizationResult,
     Brief,
     Stage,
     Status,
@@ -21,10 +25,14 @@ from backend.app.schemas import (
 from backend.app.schemas.tool_task import (
     ToolVideoGenerationRequest as ToolTaskVideoGenerationRequest,
 )
-from backend.app.services.generation import ModelArkGenerationService
+from backend.app.services.generation import (
+    ModelArkGenerationService,
+    StoryboardGenerationResult,
+)
 from backend.app.services.modelark import (
     AigcImagePromptOptimizationRequest,
     AigcImagePromptOptimizationResult,
+    AigcTextGenerationRequest,
     BytePlusModelArkAdapter,
     CharacterGenerationRequest,
     CharacterImageEditRequest,
@@ -34,6 +42,7 @@ from backend.app.services.modelark import (
     ImagePromptGenerationRequest,
     MockModelArkAdapter,
     ModelArkProviderError,
+    ModelArkStreamEvent,
     ModelArkTextParseError,
     SeedanceVideoGenerationRequest,
     TextGenerationRequest,
@@ -42,7 +51,9 @@ from backend.app.services.modelark import (
     VideoGenerationRequest,
     VideoPromptOptimizationRequest,
     VideoPromptOptimizationShotContext,
+    aigc_local_edit_mode_allowed,
 )
+from backend.app.prompts import load_seedream_image_prompt
 from backend.app.video_prompt import build_single_shot_video_prompt
 
 
@@ -84,11 +95,22 @@ class FakeChatClient:
 class FakeResponsesClient:
     def __init__(self, responses: list[object] | None = None) -> None:
         self.calls: list[dict[str, object]] = []
+        self.raw_calls: list[dict[str, object]] = []
         self.responses = list(responses or [])
-        self.with_raw_response = SimpleNamespace(create=self.create)
+        self.with_raw_response = SimpleNamespace(create=self.create_raw)
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
+        if not self.responses:
+            raise RuntimeError("provider raw secret response")
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    def create_raw(self, **kwargs):
+        self.calls.append(kwargs)
+        self.raw_calls.append(kwargs)
         if not self.responses:
             raise RuntimeError("provider raw secret response")
         response = self.responses.pop(0)
@@ -1671,6 +1693,133 @@ def test_byteplus_text_adapter_calls_responses_for_image_inputs() -> None:
     assert content[2]["detail"] == "auto"
 
 
+def test_aigc_llm_uses_responses_only_when_given_an_image() -> None:
+    image_url = "https://assets.example.com/image.png?signature=controlled"
+    client = FakeArkClient(
+        response_responses=[
+            FakeRawResponse(
+                {
+                    "output": [
+                        {"content": [{"text": "图片分析结果"}]},
+                    ]
+                }
+            )
+        ],
+    )
+    adapter = BytePlusModelArkAdapter(_settings(), client=client)
+
+    result = asyncio.run(
+        adapter.generate_aigc_text(
+            AigcTextGenerationRequest(
+                model="doubao-seed-evolving",
+                prompt="分析图片",
+                system_prompt="简洁回答",
+                image_url=image_url,
+            )
+        )
+    )
+
+    assert result == "图片分析结果"
+    assert client.chat.completions.calls == []
+    assert len(client.responses.raw_calls) == 1
+    call = client.responses.raw_calls[0]
+    assert [message["role"] for message in call["input"]] == ["system", "user"]
+    content = call["input"][1]["content"]
+    assert content == [
+        {"type": "input_text", "text": "分析图片"},
+        {
+            "type": "input_image",
+            "image_url": image_url,
+            "detail": "auto",
+        },
+    ]
+
+
+def test_generated_media_naming_uses_fixed_model_and_ordered_visual_blocks() -> None:
+    client = FakeArkClient(
+        response_responses=[
+            FakeRawResponse(
+                {"output": [{"content": [{"text": '{"name":"雨夜霓虹跑车"}'}]}]}
+            )
+        ]
+    )
+    adapter = BytePlusModelArkAdapter(_settings(), client=client)
+    request = AigcGeneratedMediaNamingRequest(
+        prompt="雨夜霓虹街道中的红色跑车",
+        visual_inputs=[
+            {"type": "image", "url": "https://assets.example/first.png"},
+            {
+                "type": "video",
+                "url": "https://assets.example/reference.mp4",
+                "fps": 0.3,
+            },
+            {"type": "image", "url": "https://assets.example/last.png"},
+        ],
+    )
+
+    result = asyncio.run(adapter.generate_aigc_media_name(request))
+
+    assert result.name == "雨夜霓虹跑车"
+    call = client.responses.calls[0]
+    assert call["model"] == "doubao-seed-2-0-mini-260428"
+    assert call["text"]["format"]["type"] == "json_schema"
+    assert call["text"]["format"]["schema"]["additionalProperties"] is False
+    content = call["input"][1]["content"]
+    assert [item["type"] for item in content] == [
+        "input_text",
+        "input_image",
+        "input_video",
+        "input_image",
+    ]
+    assert content[1]["image_url"].endswith("/first.png")
+    assert content[2] == {
+        "type": "input_video",
+        "video_url": "https://assets.example/reference.mp4",
+        "fps": 0.3,
+    }
+    assert content[3]["image_url"].endswith("/last.png")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"name":"一二三四五六七八九十甲"}',
+        '{"name":"雨夜跑车","explanation":"候选"}',
+        "雨夜跑车",
+    ],
+)
+def test_generated_media_naming_rejects_invalid_provider_response(
+    payload: str,
+) -> None:
+    client = FakeArkClient(
+        response_responses=[
+            FakeRawResponse({"output": [{"content": [{"text": payload}]}]})
+        ]
+    )
+
+    with pytest.raises(
+        ModelArkTextParseError,
+        match="generated media naming response could not be parsed",
+    ):
+        asyncio.run(
+            BytePlusModelArkAdapter(_settings(), client=client)
+            .generate_aigc_media_name(
+                AigcGeneratedMediaNamingRequest(prompt="雨夜跑车")
+            )
+        )
+
+
+def test_mock_generated_media_naming_is_valid_and_deterministic() -> None:
+    adapter = MockModelArkAdapter(_settings())
+    request = AigcGeneratedMediaNamingRequest(prompt=" 雨夜 霓虹 街道中的跑车 ")
+
+    first = asyncio.run(adapter.generate_aigc_media_name(request))
+    second = asyncio.run(adapter.generate_aigc_media_name(request))
+
+    assert first == second
+    assert first.name == "创意生成"
+
+
 def test_byteplus_text_adapter_parses_storyboard_json() -> None:
     client = FakeArkClient(
         chat_responses=[
@@ -1977,7 +2126,174 @@ def test_aigc_prompt_optimizer_uses_responses_without_thinking() -> None:
     )
 
 
-def test_aigc_prompt_optimizer_accepts_observed_reference_field_alias() -> None:
+def test_seedream_prompt_resource_matches_product_specification() -> None:
+    source = (
+        Path(__file__).parents[2]
+        / "docs"
+        / "Seedream生图提示词生成规范.md"
+    ).read_text(encoding="utf-8")
+
+    assert load_seedream_image_prompt() == source
+
+
+@pytest.mark.parametrize(
+    ("generation_type", "prefix"),
+    [
+        ("文生图", ""),
+        ("图像编辑", "```text\n"),
+        ("参考图生图", "```markdown\n"),
+    ],
+)
+def test_parse_seedream_prompt_payload_accepts_supported_formats(
+    generation_type: str,
+    prefix: str,
+) -> None:
+    suffix = "\n```" if prefix else ""
+    result = BytePlusModelArkAdapter._parse_seedream_prompt_payload(
+        (
+            f"{prefix}【生图类型】：{generation_type}\n"
+            "【优化后提示词】\n"
+            "第一行画面描述。\n第二行画面描述。\n"
+            "【优化说明】: 明确了主体和环境。"
+            f"{suffix}"
+        )
+    )
+
+    assert isinstance(result, AigcSeedreamPromptOptimizationResult)
+    assert result.generation_type == generation_type
+    assert result.optimized_text == "第一行画面描述。\n第二行画面描述。"
+    assert result.optimization_explanation == "明确了主体和环境。"
+
+
+def test_parse_seedream_prompt_payload_accepts_json_contract() -> None:
+    result = BytePlusModelArkAdapter._parse_seedream_prompt_payload(
+        json.dumps(
+            {
+                "generation_type": "文生图",
+                "optimized_text": "设计一张红色商品海报，使用竖版构图。",
+                "optimization_explanation": "补充了主体层级和构图。"
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    assert result.generation_type == "文生图"
+    assert result.optimized_text == "设计一张红色商品海报，使用竖版构图。"
+    assert result.optimization_explanation == "补充了主体层级和构图。"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "",
+        "【生图类型】文生图\n【优化后提示词】画一只猫。",
+        (
+            "【优化后提示词】画一只猫。\n"
+            "【生图类型】文生图\n"
+            "【优化说明】补充细节。"
+        ),
+        (
+            "【生图类型】未知\n"
+            "【优化后提示词】画一只猫。\n"
+            "【优化说明】补充细节。"
+        ),
+        (
+            "【生图类型】文生图\n"
+            "【优化后提示词】\n"
+            "【优化说明】补充细节。"
+        ),
+        (
+            "【生图类型】文生图\n"
+            "【优化后提示词】画一只猫。\n"
+            "【优化说明】补充细节。\n"
+            "【额外内容】不允许"
+        ),
+    ],
+)
+def test_parse_seedream_prompt_payload_rejects_malformed_output(
+    payload: str,
+) -> None:
+    with pytest.raises(
+        ModelArkTextParseError,
+        match="Seedream prompt optimization response could not be parsed",
+    ):
+        BytePlusModelArkAdapter._parse_seedream_prompt_payload(payload)
+
+
+def test_aigc_prompt_optimizer_uses_seedream_json_protocol() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="text_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "aspect_ratio": "9:16",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text="红色商品海报",
+    )
+    output = json.dumps(
+        {
+            "generation_type": "文生图",
+            "optimized_text": "设计一张红色商品海报，主体清晰，使用竖版构图。",
+            "optimization_explanation": "补充了主体层级和构图。"
+        },
+        ensure_ascii=False,
+    )
+    client = FakeArkClient(
+        response_responses=[
+            FakeRawResponse({"output": [{"content": [{"text": output}]}]})
+        ]
+    )
+
+    result = asyncio.run(
+        BytePlusModelArkAdapter(_settings(), client=client)
+        .optimize_aigc_prompt(request)
+    )
+
+    assert isinstance(result, AigcSeedreamPromptOptimizationResult)
+    assert result.generation_type == "文生图"
+    call = client.responses.calls[0]
+    assert call["text"] == {"format": {"type": "json_object"}}
+    assert call["input"][0]["content"][0]["text"] == load_seedream_image_prompt()
+    assert "canonical_anchors" not in call["input"][1]["content"][0]["text"]
+
+
+def test_aigc_prompt_optimizer_accepts_multi_reference_generation_type() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_to_image",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 3,
+        },
+        text="参考三张服装图片生成男模特上身图",
+    )
+    output = (
+        "【生图类型】参考图生图\n"
+        "【优化后提示词】\n"
+        "参考三张服装图片的版型与细节，生成男模特上身图。\n"
+        "【优化说明】\n"
+        "明确了多张参考图的用途。"
+    )
+    client = FakeArkClient(
+        response_responses=[
+            FakeRawResponse({"output": [{"content": [{"text": output}]}]})
+        ]
+    )
+
+    result = asyncio.run(
+        BytePlusModelArkAdapter(_settings(), client=client)
+        .optimize_aigc_prompt(request)
+    )
+
+    assert result.generation_type == "参考图生图"
+
+
+def test_aigc_prompt_optimizer_rejects_legacy_image_response() -> None:
     request = AigcPromptOptimizeRequest(
         target_node_id="image-model",
         target_type="image_to_image",
@@ -2016,13 +2332,443 @@ def test_aigc_prompt_optimizer_accepts_observed_reference_field_alias() -> None:
         ]
     )
 
+    with pytest.raises(
+        ModelArkTextParseError,
+        match="AIGC Seedream prompt optimization response has an invalid JSON structure",
+    ):
+        asyncio.run(
+            BytePlusModelArkAdapter(_settings(), client=client)
+            .optimize_aigc_prompt(request)
+        )
+
+
+def test_aigc_prompt_optimizer_parses_image_tagged_contract() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="text_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "aspect_ratio": "9:16",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text="红色商品海报",
+    )
+    payload = (
+        "【生图类型】文生图\n"
+        "【优化后提示词】\n"
+        "设计红色商品海报，使用清晰的竖版视觉层级和摄影棚光线。\n"
+        "【优化说明】\n"
+        "补充了构图和光影。"
+    )
+    client = FakeArkClient(
+        response_responses=[
+                FakeRawResponse({"output": [{"content": [{"text": payload}]}]})
+        ]
+    )
+
     result = asyncio.run(
         BytePlusModelArkAdapter(_settings(), client=client)
         .optimize_aigc_prompt(request)
     )
 
-    assert result.optimized_text == "生成清晰的家庭场景"
-    assert result.optimized_reference_instructions == ["参考图1"]
+    assert result.generation_type == "文生图"
+    assert result.optimization_explanation == "补充了构图和光影。"
+
+
+def test_aigc_prompt_optimizer_sends_one_image_outside_json_context() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_edit",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text="把人物外套改成蓝色，其他内容保持不变",
+    )
+    payload = (
+        "【生图类型】图像编辑\n"
+        "【优化后提示词】\n"
+        "把图中人物外套改成蓝色，保持其他内容不变。\n"
+        "【优化说明】\n"
+        "明确了编辑对象和保持范围。"
+    )
+    source_url = "https://assets.example.com/source.png?signature=secret"
+    client = FakeArkClient(
+        response_responses=[
+                FakeRawResponse({"output": [{"content": [{"text": payload}]}]})
+        ]
+    )
+
+    result = asyncio.run(
+        BytePlusModelArkAdapter(_settings(), client=client).optimize_aigc_prompt(
+            request,
+            source_image_url=source_url,
+        )
+    )
+
+    assert isinstance(result, AigcSeedreamPromptOptimizationResult)
+    assert result.generation_type == "图像编辑"
+    call = client.responses.calls[0]
+    user_content = call["input"][1]["content"]
+    assert [item["type"] for item in user_content] == [
+        "input_text",
+        "input_image",
+    ]
+    assert user_content[1]["image_url"] == source_url
+    assert source_url not in user_content[0]["text"]
+
+
+def test_aigc_prompt_optimizer_defers_incompatible_type_normalization_to_service() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_edit",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text="删除角落的小物件，其他内容保持不变",
+    )
+    local = (
+        "【生图类型】图像编辑\n"
+        "【优化后提示词】\n"
+        "删除角落的小物件，其他内容保持不变。\n"
+        "【优化说明】\n"
+        "明确了编辑对象。"
+    )
+    client = FakeArkClient(
+        response_responses=[
+                FakeRawResponse({"output": [{"content": [{"text": local}]}]})
+        ]
+    )
+
+    result = asyncio.run(
+        BytePlusModelArkAdapter(_settings(), client=client)
+        .optimize_aigc_prompt(request)
+    )
+    assert result.generation_type == "图像编辑"
+    with pytest.raises(ModelArkTextParseError, match="invalid structure"):
+        BytePlusModelArkAdapter._parse_aigc_prompt_sections_payload(
+            json.dumps(
+                {
+                    "optimization_mode": "local_edit",
+                    "optimized_text": "Edit only the requested object.",
+                    "optimized_reference_instructions": [],
+                    "sections": [
+                        {"label": "Subject", "content": "Invalid mixed result."}
+                    ],
+                }
+            )
+        )
+
+
+def test_image_edit_local_mode_uses_edit_source_not_reference_count() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_edit",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text="把外套改成蓝色，其他内容保持不变",
+    )
+
+    assert aigc_local_edit_mode_allowed(request, has_source_image=True)
+    assert not aigc_local_edit_mode_allowed(request, has_source_image=False)
+    assert not aigc_local_edit_mode_allowed(
+        request.model_copy(
+            update={
+                "target_config": request.target_config.model_copy(
+                    update={"reference_image_count": 1}
+                )
+            }
+        ),
+        has_source_image=True,
+    )
+
+
+def test_aigc_prompt_optimizer_normalizes_image_section_order() -> None:
+    payload = {
+        "optimization_mode": "full_design",
+        "sections": [
+            {
+                "label": "Reference Usage",
+                "content": "Use the reference image to preserve product identity.",
+            },
+            {
+                "label": "Subject & Action",
+                "content": "Show the floor washer lying completely flat at 180 degrees.",
+            },
+            {
+                "label": "Composition",
+                "content": "Use a 1:1 square frame with a low near-floor camera angle.",
+            },
+            {
+                "label": "Lighting & Realism",
+                "content": "Use realistic indoor lighting and crisp product details.",
+            },
+            {
+                "label": "Negative Prompt",
+                "content": "Avoid upright washer positioning and unrelated appliances.",
+            },
+        ],
+        "optimized_reference_instructions": [],
+    }
+
+    result = BytePlusModelArkAdapter._parse_aigc_prompt_sections_payload(
+        json.dumps(payload)
+    )
+
+    assert [section.label for section in result.sections] == [
+        "Reference Usage",
+        "Subject & Action",
+        "Lighting & Realism",
+        "Composition",
+        "Negative Prompt",
+    ]
+
+
+def test_aigc_prompt_optimizer_normalizes_labels_and_accepts_missing_composition() -> None:
+    payload = {
+        "optimization_mode": "full_design",
+        "sections": [
+            {
+                "label": "  Subject: ",
+                "content": "Show the requested product.",
+            },
+            {
+                "label": "Negative Prompt",
+                "content": "Avoid blur.",
+            },
+            {
+                "label": "Lighting",
+                "content": "Use soft light.",
+            },
+        ],
+        "optimized_reference_instructions": [],
+    }
+
+    result = BytePlusModelArkAdapter._parse_aigc_prompt_sections_payload(
+        json.dumps(payload)
+    )
+
+    assert [section.label for section in result.sections] == [
+        "Subject",
+        "Lighting",
+        "Negative Prompt",
+    ]
+
+
+def test_aigc_prompt_optimizer_rejects_provider_authored_constraint_evidence() -> None:
+    payload = {
+        "optimization_mode": "full_design",
+        "sections": [
+            {"label": "Product", "content": "Show the requested product."},
+            {"label": "Lighting", "content": "Use clean studio lighting."},
+            {"label": "Composition", "content": "Use balanced framing."},
+            {"label": "Negative Prompt", "content": "No unrelated objects."},
+        ],
+        "optimized_reference_instructions": [],
+        "source_constraint_evidence": [
+            {
+                "kind": "exclusion",
+                "source_text": "不要出现水滴",
+                "output_text": "no unrelated objects",
+            }
+        ],
+    }
+
+    with pytest.raises(ModelArkTextParseError, match="invalid structure"):
+        BytePlusModelArkAdapter._parse_aigc_prompt_sections_payload(
+            json.dumps(payload)
+        )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "室内客厅中的产品、人物和猫",
+        "红色商品主图",
+        "简洁纯背景",
+    ],
+)
+def test_mock_image_prompt_uses_deterministic_seedream_contract(
+    text: str,
+) -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="text_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "aspect_ratio": "9:16",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text=text,
+    )
+    adapter = MockModelArkAdapter(_settings())
+
+    first = asyncio.run(adapter.optimize_aigc_prompt(request))
+    second = asyncio.run(adapter.optimize_aigc_prompt(request))
+
+    assert first == second
+    assert first.generation_type == "文生图"
+    assert text in first.optimized_text
+    assert first.optimization_explanation
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "商品“不要出现多余人物”",
+        "室内有人",
+        "不要动物",
+        "禁止商品",
+        "无人物",
+        "no animals",
+        "without people",
+        "without products",
+    ],
+)
+def test_mock_image_prompt_preserves_positive_and_negative_source_text(
+    text: str,
+) -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="text_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "aspect_ratio": "9:16",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text=text,
+    )
+
+    result = asyncio.run(
+        MockModelArkAdapter(_settings()).optimize_aigc_prompt(request)
+    )
+
+    assert result.generation_type == "文生图"
+    assert text in result.optimized_text
+
+
+def test_mock_image_edit_classifies_reference_generation() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_edit",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 2,
+        },
+        text="只替换背景，保留红色产品",
+        reference_instructions=["缩小人物", "保持蓝色外套"],
+    )
+
+    result = asyncio.run(
+        MockModelArkAdapter(_settings()).optimize_aigc_prompt(
+            request,
+            source_image_url="https://example.com/source.png",
+        )
+    )
+
+    assert result.generation_type == "参考图生图"
+    assert "参考输入图片" in result.optimized_text
+    system_prompt, _ = MockModelArkAdapter.build_aigc_prompt_optimization_messages(
+        request
+    )
+    assert system_prompt == load_seedream_image_prompt()
+
+
+def test_real_and_mock_image_prompts_do_not_emit_canonical_anchors() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="text_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "aspect_ratio": "9:16",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text="青岚气泡水产品主图，展示 2 瓶产品，不要出现水滴",
+    )
+    system_prompt, user_prompt = (
+        MockModelArkAdapter.build_aigc_prompt_optimization_messages(request)
+    )
+    mock_result = asyncio.run(
+        MockModelArkAdapter(_settings()).optimize_aigc_prompt(request)
+    )
+    assert system_prompt == load_seedream_image_prompt()
+    assert "canonical_anchors" not in user_prompt
+    assert "青岚气泡水" in mock_result.optimized_text
+    assert "2 瓶产品" in mock_result.optimized_text
+    assert "不要出现水滴" in mock_result.optimized_text
+
+
+def test_mock_image_edit_passes_service_background_constraint_validation() -> None:
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_edit",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 0,
+        },
+        text="只替换背景，保留红色产品，品牌: ACME，型号: ZX-9。",
+    )
+
+    result = asyncio.run(
+        ModelArkGenerationService(adapter=MockModelArkAdapter(_settings()))
+        .optimize_aigc_prompt(
+            request,
+            source_image_url="https://example.com/source.png",
+        )
+    )
+
+    assert result.generation_type == "图像编辑"
+    assert "仅执行上述编辑" in result.optimized_text
+    assert "ACME" in result.optimized_text
+    assert "ZX-9" in result.optimized_text
+
+
+def test_mock_image_prompt_preserves_bbox_token_and_coordinates() -> None:
+    bbox_token = "Image 1 <bbox> 100 200 700 800 </bbox>"
+    request = AigcPromptOptimizeRequest(
+        target_node_id="image-model",
+        target_type="image_to_image",
+        target_config={
+            "model": "doubao-seedream-5-0-pro-260628",
+            "operation": "image_to_image",
+            "aspect_ratio": "1:1",
+            "size": "2K",
+            "reference_image_count": 1,
+        },
+        text="保留红色产品并调整框选人物。",
+        reference_instructions=[
+            f"缩小框选人物，保持蓝色外套，保留 {bbox_token}。"
+        ],
+    )
+
+    result = asyncio.run(
+        ModelArkGenerationService(adapter=MockModelArkAdapter(_settings()))
+        .optimize_aigc_prompt(request)
+    )
+
+    assert bbox_token in result.optimized_reference_instructions[0]
 
 
 def test_aigc_image_prompt_service_rejects_changed_reference_count() -> None:
@@ -2309,9 +3055,124 @@ def test_storyboard_prompt_includes_script_and_brief_constraints() -> None:
         "通勤白领",
         "30秒出杯、轻量便携",
         "镜头时长、画面描述、主体/场景、运镜、旁白、音效和转场建议",
+        "不得单独输出 camera_movement、sound 或 transition_recommendation 字段",
         "容差不超过 0.5 秒",
     ]:
         assert expected in prompt
+
+
+def test_storyboard_payload_merges_known_detail_fields_into_description() -> None:
+    payload = BytePlusModelArkAdapter._parse_text_payload(
+        json.dumps(
+            {
+                "title": "广告分镜",
+                "content": "完整分镜",
+                "storyboard_shots": [
+                    {
+                        "project_id": "project-1",
+                        "index": 1,
+                        "title": "开场",
+                        "description": "产品进入画面。",
+                        "visual_prompt": "产品特写",
+                        "narration": "旁白",
+                        "duration_seconds": 3,
+                        "camera_movement": "缓慢推进",
+                        "sound": "环境声",
+                        "transition_recommendation": "淡入",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    assert payload.storyboard_shots[0].description == (
+        "产品进入画面。\n"
+        "Camera movement: 缓慢推进\n"
+        "Sound: 环境声\n"
+        "Transition recommendation: 淡入"
+    )
+
+
+def test_storyboard_payload_still_rejects_unknown_extra_fields() -> None:
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        BytePlusModelArkAdapter._parse_text_payload(
+            json.dumps(
+                {
+                    "title": "广告分镜",
+                    "content": "完整分镜",
+                    "storyboard_shots": [
+                        {
+                            "project_id": "project-1",
+                            "index": 1,
+                            "title": "开场",
+                            "description": "产品进入画面。",
+                            "visual_prompt": "产品特写",
+                            "narration": "旁白",
+                            "duration_seconds": 3,
+                            "unknown_camera_field": "不可接受",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        )
+
+
+def test_storyboard_payload_recovers_missing_visual_prompt_from_description() -> None:
+    payload = BytePlusModelArkAdapter._parse_text_payload(
+        json.dumps(
+            {
+                "title": "广告分镜",
+                "content": "完整分镜",
+                "storyboard_shots": [
+                    {
+                        "project_id": "project-1",
+                        "index": 1,
+                        "title": "开场",
+                        "description": "产品在晨光中进入画面。",
+                        "narration": "旁白",
+                        "duration_seconds": 3,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    assert payload.storyboard_shots[0].visual_prompt == "产品在晨光中进入画面。"
+
+
+def test_storyboard_payload_rebuilds_server_owned_identity_and_index() -> None:
+    payload = BytePlusModelArkAdapter._parse_text_payload(
+        json.dumps(
+            {
+                "title": "广告分镜",
+                "content": "完整分镜",
+                "storyboard_shots": [
+                    {
+                        "project_id": "invented-project",
+                        "index": 9,
+                        "description": "第一镜头。",
+                        "visual_prompt": "第一镜头视觉。",
+                        "duration_seconds": 3,
+                    },
+                    {
+                        "description": "第二镜头。",
+                        "visual_prompt": "第二镜头视觉。",
+                        "duration_seconds": 3,
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        project_id="project-1",
+    )
+
+    assert [shot.index for shot in payload.storyboard_shots] == [1, 2]
+    assert {
+        shot.project_id for shot in payload.storyboard_shots
+    } == {"project-1"}
 
 
 def test_english_storyboard_prompt_enforces_english_structured_fields() -> None:
@@ -2449,41 +3310,98 @@ def test_mock_storyboard_output_reflects_script_and_duration_constraints() -> No
     assert result.metadata["has_upstream"] is True
 
 
-class InvalidStoryboardDurationAdapter:
+class MismatchedStoryboardDurationAdapter:
     async def generate_text(self, request: TextGenerationRequest) -> GeneratedTextResult:
         return GeneratedTextResult(
             stage=Stage.STORYBOARD,
-            title="Invalid Storyboard",
-            content="invalid storyboard",
+            title="Storyboard",
+            content="storyboard",
             storyboard_shots=[
                 StoryboardShotCreate(
                     project_id=request.project_id,
                     index=1,
-                    title="Too Short",
-                    description="duration does not match brief",
-                    visual_prompt="invalid prompt",
-                    narration="invalid narration",
-                    duration_seconds=1,
+                    title="Opening",
+                    description="Opening shot",
+                    visual_prompt="Opening visual",
+                    narration="Opening narration",
+                    duration_seconds=5,
                     status=Status.DRAFT,
-                )
+                ),
+                StoryboardShotCreate(
+                    project_id=request.project_id,
+                    index=2,
+                    title="Product",
+                    description="Product shot",
+                    visual_prompt="Product visual",
+                    narration="Product narration",
+                    duration_seconds=5,
+                    status=Status.DRAFT,
+                ),
+                StoryboardShotCreate(
+                    project_id=request.project_id,
+                    index=3,
+                    title="CTA",
+                    description="CTA shot",
+                    visual_prompt="CTA visual",
+                    narration="CTA narration",
+                    duration_seconds=3,
+                    status=Status.DRAFT,
+                ),
             ],
         )
 
+    async def stream_text(
+        self,
+        request: TextGenerationRequest,
+    ):
+        yield ModelArkStreamEvent(
+            kind="completed",
+            result=await self.generate_text(request),
+        )
 
-def test_storyboard_generation_service_rejects_duration_mismatch() -> None:
-    service = ModelArkGenerationService(adapter=InvalidStoryboardDurationAdapter())
 
-    with pytest.raises(ModelArkTextParseError) as exc_info:
-        asyncio.run(
-            service.generate_storyboard(
+def test_storyboard_generation_service_normalizes_duration_mismatch() -> None:
+    service = ModelArkGenerationService(adapter=MismatchedStoryboardDurationAdapter())
+
+    result = asyncio.run(
+        service.generate_storyboard(
+            "project-1",
+            Brief(
+                prompt="生成一条咖啡机广告",
+                duration_seconds=30,
+                product_name="便携咖啡机",
+            ),
+            "有效剧本正文",
+        )
+    )
+
+    durations = [shot.duration_seconds for shot in result.shots]
+    assert durations == [11.54, 11.54, 6.92]
+    assert sum(durations) == 30
+
+
+def test_storyboard_stream_normalizes_duration_mismatch() -> None:
+    service = ModelArkGenerationService(adapter=MismatchedStoryboardDurationAdapter())
+
+    async def collect() -> list[object]:
+        return [
+            event
+            async for event in service.stream_storyboard(
                 "project-1",
                 Brief(
                     prompt="生成一条咖啡机广告",
-                    duration_seconds=24,
+                    duration_seconds=30,
                     product_name="便携咖啡机",
                 ),
                 "有效剧本正文",
             )
-        )
+        ]
 
-    assert "duration total" in str(exc_info.value)
+    events = asyncio.run(collect())
+    completed = events[-1].result
+    assert isinstance(completed, StoryboardGenerationResult)
+    assert [shot.duration_seconds for shot in completed.shots] == [
+        11.54,
+        11.54,
+        6.92,
+    ]

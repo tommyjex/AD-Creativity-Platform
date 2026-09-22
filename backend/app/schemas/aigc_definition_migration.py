@@ -54,6 +54,7 @@ def _migrate_v1_node(node: dict[str, Any]) -> dict[str, Any]:
     node_type = node.get("type")
     config = node.get("config", {})
     migrated = deepcopy(node)
+    migrated.setdefault("custom_name", None)
 
     if node_type == "text_input":
         source = _normalized_config(TextInputConfig, config)
@@ -116,6 +117,7 @@ def _migrate_v1_node(node: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_v2_node(node: dict[str, Any]) -> dict[str, Any]:
     migrated = deepcopy(node)
+    migrated.setdefault("custom_name", None)
     config_models = {
         "text": TextConfig,
         "image": ImageConfig,

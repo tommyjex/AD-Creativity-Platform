@@ -29,6 +29,7 @@ export const AIGC_NODE_TYPES = [
   "video_generation",
   "video_enhancement",
   "video_face_blur",
+  "video_subtitle_extraction",
   "layer_canvas",
   "layer_composite",
   "text_output",
@@ -47,6 +48,7 @@ export const AIGC_V2_NODE_TYPES = [
   "video_generation",
   "video_enhancement",
   "video_face_blur",
+  "video_subtitle_extraction",
   "multi_track_edit",
   "json_parser",
   "layer_canvas",
@@ -62,6 +64,7 @@ export type AigcPortType =
   | "image_asset"
   | "video_asset"
   | "audio_asset"
+  | "subtitle_asset"
   | "layer_set"
   | "image_layer"
   | "edited_layer";
@@ -76,6 +79,7 @@ export type AigcTaskType =
   | "video_generation"
   | "video_enhancement"
   | "video_face_blur"
+  | "video_subtitle_extraction"
   | "multi_track_edit"
   | "json_parser";
 export type AigcPipelineRunMode = "full" | "from_node" | "retry_node";
@@ -115,6 +119,12 @@ export type AigcResultKind =
   | "layer_composite"
   | "unavailable";
 export type AigcAssetDirection = "input" | "output";
+export type AigcGeneratedMediaNamingStatus =
+  | "succeeded"
+  | "timeout"
+  | "provider_error"
+  | "invalid_response"
+  | "skipped";
 export type AigcImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
 export type AigcImagePresetSize = SeedreamImagePresetSize;
 export type AigcImageSize = SeedreamImageSize;
@@ -214,6 +224,21 @@ export interface AigcPromptVideoReferenceSummary {
   ordinal: number;
 }
 
+export interface AigcPromptPipelineSourceImage {
+  source_node_id: string;
+  source_handle: "image";
+  target_handle: "edit_image" | "image";
+  asset_id: string;
+  run_id: string | null;
+}
+
+export interface AigcPromptPipelineContext {
+  pipeline_id: string;
+  base_revision: number;
+  definition_snapshot: AigcPipelineDefinitionV2;
+  source_image: AigcPromptPipelineSourceImage | null;
+}
+
 export type AigcPromptOptimizeRequest =
   | {
       target_node_id: string;
@@ -252,6 +277,7 @@ export type AigcPromptOptimizeRequest =
       optimization_direction: string;
       text: string;
       reference_instructions: string[];
+      pipeline_context?: AigcPromptPipelineContext;
     }
   | {
       target_node_id: string;
@@ -270,9 +296,16 @@ export type AigcPromptOptimizeRequest =
       reference_instructions: [];
     };
 
+export type AigcSeedreamGenerationType =
+  | "文生图"
+  | "图像编辑"
+  | "参考图生图";
+
 export interface AigcPromptOptimizeResponse {
   optimized_text: string;
   optimized_reference_instructions: string[];
+  generation_type: AigcSeedreamGenerationType | null;
+  optimization_explanation: string;
 }
 
 export interface ImageInputConfig {
@@ -468,6 +501,10 @@ export interface VideoFaceBlurConfig {
   mask_strength: AigcVideoFaceBlurMaskStrength;
 }
 
+export interface VideoSubtitleExtractionConfig {
+  mode: "Subtitle";
+}
+
 export type MultiTrackKind =
   | "video"
   | "audio"
@@ -507,6 +544,7 @@ export interface MultiTrackTransform {
 }
 
 export interface MultiTrackTextStyle {
+  font_type?: string | null;
   font_size: number;
   color: string;
   bold: boolean;
@@ -605,6 +643,7 @@ export interface VideoOutputConfig {
 interface AigcNodeBase<TType extends string, TConfig> {
   id: string;
   type: TType;
+  custom_name?: string | null;
   position: AigcPoint;
   size: AigcSize;
   config: TConfig;
@@ -621,6 +660,10 @@ export type AigcNode =
   | AigcNodeBase<"video_generation", VideoGenerationConfig>
   | AigcNodeBase<"video_enhancement", VideoEnhancementConfig>
   | AigcNodeBase<"video_face_blur", VideoFaceBlurConfig>
+  | AigcNodeBase<
+      "video_subtitle_extraction",
+      VideoSubtitleExtractionConfig
+    >
   | AigcNodeBase<"layer_canvas", LayerCanvasConfig>
   | AigcNodeBase<"layer_composite", LayerCompositeConfig>
   | AigcNodeBase<"text_output", TextOutputConfig>
@@ -742,10 +785,37 @@ export interface AigcPipelineUpdate extends AigcNamedEntity {
   definition: AigcPipelineDefinition | AigcPipelineDefinitionV2;
 }
 
+export type AigcThumbnailMediaKind = "image" | "video";
+export type AigcPipelineThumbnailSource = "pinned" | "latest_output";
+
+export interface AigcPipelineThumbnail {
+  asset_id: string;
+  mime_type: string;
+  kind: AigcThumbnailMediaKind;
+  source: AigcPipelineThumbnailSource;
+  url: string;
+}
+
+export interface AigcPipelineThumbnailCandidate {
+  asset_id: string;
+  run_id: string;
+  node_id: string;
+  mime_type: string;
+  kind: AigcThumbnailMediaKind;
+  url: string;
+  created_at: DateTimeString;
+}
+
+export interface AigcPipelineThumbnailUpdate {
+  asset_id: string | null;
+}
+
 export interface AigcPipeline extends AigcPipelineCreate {
   id: string;
   revision: number;
   latest_run_status: AigcPipelineRunStatus | null;
+  thumbnail_asset_id: string | null;
+  thumbnail: AigcPipelineThumbnail | null;
   created_at: DateTimeString;
   updated_at: DateTimeString;
 }
@@ -785,6 +855,12 @@ export interface AigcJsonParserItem {
 
 export interface AigcTaskResult {
   kind: AigcResultKind;
+  metadata?: Record<string, JsonValue>;
+  naming?: {
+    status: AigcGeneratedMediaNamingStatus;
+    model: "doubao-seed-2-0-mini-260428";
+    name: string | null;
+  } | null;
   text: string | null;
   text_digest: string | null;
   items?: AigcJsonParserItem[];

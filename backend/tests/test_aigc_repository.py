@@ -21,6 +21,8 @@ from backend.app.repositories import (
 )
 from backend.app.schemas import (
     AigcAssetDirection,
+    AigcGeneratedMediaNamingResult,
+    AigcGeneratedMediaNamingStatus,
     AigcPipelineCreate,
     AigcPipelineDefinition,
     AigcPipelineDefinitionV2,
@@ -74,6 +76,13 @@ class AigcRepositoryContract(Protocol):
 
     def update_aigc_pipeline(self, pipeline_id: str, data): ...
 
+    def patch_aigc_pipeline_node_custom_name(
+        self,
+        pipeline_id: str,
+        node_id: str,
+        custom_name: str,
+    ): ...
+
     def delete_aigc_pipeline(self, pipeline_id: str): ...
 
     def list_aigc_pipeline_assets(self, pipeline_id: str): ...
@@ -108,6 +117,15 @@ class AigcRepositoryContract(Protocol):
         status,
         result,
         error,
+        metrics,
+    ): ...
+
+    def commit_aigc_generated_media_task_attempt(
+        self,
+        task_id: str,
+        *,
+        fencing_token: int,
+        result,
         metrics,
     ): ...
 
@@ -215,6 +233,66 @@ def disconnected_definition() -> AigcPipelineDefinition:
         {
             "nodes": nodes,
             "edges": edges,
+        }
+    )
+
+
+def shared_upstream_definition() -> AigcPipelineDefinition:
+    return AigcPipelineDefinition.model_validate(
+        {
+            "nodes": [
+                {
+                    "id": "shared-input",
+                    "type": "text_input",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 240, "height": 160},
+                    "config": {"text": "共享输入"},
+                },
+                {
+                    "id": "shared-model",
+                    "type": "llm",
+                    "position": {"x": 280, "y": 0},
+                    "size": {"width": 240, "height": 160},
+                    "config": {},
+                },
+                {
+                    "id": "branch-a-model",
+                    "type": "text_to_image",
+                    "position": {"x": 600, "y": -140},
+                    "size": {"width": 240, "height": 160},
+                    "config": {},
+                },
+                {
+                    "id": "branch-b-model",
+                    "type": "text_to_image",
+                    "position": {"x": 600, "y": 140},
+                    "size": {"width": 240, "height": 160},
+                    "config": {},
+                },
+            ],
+            "edges": [
+                {
+                    "id": "shared-input-model",
+                    "sourceNodeId": "shared-input",
+                    "sourceHandle": "text",
+                    "targetNodeId": "shared-model",
+                    "targetHandle": "prompt",
+                },
+                {
+                    "id": "shared-branch-a",
+                    "sourceNodeId": "shared-model",
+                    "sourceHandle": "text",
+                    "targetNodeId": "branch-a-model",
+                    "targetHandle": "prompt",
+                },
+                {
+                    "id": "shared-branch-b",
+                    "sourceNodeId": "shared-model",
+                    "sourceHandle": "text",
+                    "targetNodeId": "branch-b-model",
+                    "targetHandle": "prompt",
+                },
+            ],
         }
     )
 
@@ -1029,6 +1107,55 @@ def test_disjoint_flow_runs_can_be_active_together(
     assert flow_b.run.run_number == flow_a.run.run_number + 1
 
 
+def test_shared_upstream_branches_can_be_active_together(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=shared_upstream_definition(),
+    )
+
+    branch_a = create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="branch-a-model",
+        idempotency_key="shared-branch-a",
+    )
+    branch_b = create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="branch-b-model",
+        idempotency_key="shared-branch-b",
+    )
+
+    assert branch_a.run.status == AigcPipelineRunStatus.QUEUED
+    assert branch_b.run.status == AigcPipelineRunStatus.QUEUED
+    assert branch_b.run.run_number == branch_a.run.run_number + 1
+
+
+def test_shared_upstream_run_conflicts_with_active_branch(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=shared_upstream_definition(),
+    )
+    create_scoped_run(
+        aigc_repository,
+        pipeline,
+        start_node_id="branch-a-model",
+        idempotency_key="active-branch-a",
+    )
+
+    with pytest.raises(ActiveRunConflictError):
+        create_scoped_run(
+            aigc_repository,
+            pipeline,
+            start_node_id="shared-model",
+            idempotency_key="shared-upstream",
+        )
+
+
 def test_in_memory_concurrent_overlapping_flow_creates_only_one_run(
     repository: InMemoryRepository,
 ) -> None:
@@ -1378,3 +1505,457 @@ def test_task_claim_and_commit_require_current_fencing_token(
     )
     assert node.status == AigcRunNodeStatus.SUCCEEDED
     assert node.result.text == "done"
+
+
+def _generated_media_definition() -> AigcPipelineDefinition:
+    payload = definition().model_dump(mode="json", by_alias=True)
+    payload["nodes"].append(
+        {
+            "id": "model-2",
+            "type": "text_to_image",
+            "position": {"x": 640, "y": 240},
+            "size": {"width": 280, "height": 200},
+            "config": {"format": "png"},
+        }
+    )
+    return AigcPipelineDefinition.model_validate(payload)
+
+
+def _prepare_generated_media_attempt(
+    repository: AigcRepositoryContract,
+    *,
+    mime_types: tuple[str, ...] = ("image/png", "image/png"),
+    pipeline_definition: AigcPipelineDefinition | None = None,
+):
+    pipeline = create_pipeline(
+        repository,
+        pipeline_definition=pipeline_definition or _generated_media_definition(),
+    )
+    detail = create_run(repository, pipeline)
+    repository.update_aigc_run_node(
+        detail.run.id,
+        "model",
+        input_hash="b" * 64,
+    )
+    task = repository.create_aigc_task_attempt(
+        AigcPipelineTaskAttempt(
+            pipeline_id=pipeline.id,
+            run_id=detail.run.id,
+            node_id="model",
+            type=AigcTaskType.TEXT_TO_IMAGE,
+        ),
+        idempotency_key=f"generated-media-{mime_types!r}",
+    )
+    lease = repository.acquire_aigc_worker_lease(
+        "generated-media-worker",
+        now=utc_now(),
+        lease_seconds=30,
+    )
+    assert lease is not None
+    assert repository.claim_aigc_task_attempt(
+        task.task_id,
+        fencing_token=lease.fencing_token,
+    )
+    assets = [
+        repository.create_asset(
+            AssetCreate(
+                id=f"generated-media-{index}",
+                tool_asset_role=ToolAssetRole.OUTPUT,
+                type=AssetType.GENERATED_IMAGE,
+                status=Status.DRAFT,
+                object_key=f"aigc/generated-media-{index}.png",
+                mime_type=mime_type,
+                metadata={
+                    "origin": "aigc",
+                    "task_id": task.task_id,
+                    "trace_marker": f"trace-{index}",
+                },
+            )
+        )
+        for index, mime_type in enumerate(mime_types)
+    ]
+    repository.add_aigc_task_assets(
+        [
+            AigcPipelineTaskAssetReference(
+                task_id=task.task_id,
+                direction=AigcAssetDirection.OUTPUT,
+                slot="image",
+                ordinal=index,
+                asset_id=asset.id,
+            )
+            for index, asset in enumerate(assets)
+        ]
+    )
+    return pipeline, detail, task, lease, assets
+
+
+def test_node_name_patches_preserve_latest_definition_and_increment_revision(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=_generated_media_definition(),
+    )
+    original = pipeline.definition.model_dump(mode="json", by_alias=True)
+
+    first = aigc_repository.patch_aigc_pipeline_node_custom_name(
+        pipeline.id,
+        "model",
+        "首图",
+    )
+    second = aigc_repository.patch_aigc_pipeline_node_custom_name(
+        pipeline.id,
+        "model-2",
+        "细节图",
+    )
+
+    names = {node.id: node.custom_name for node in second.definition.nodes}
+    assert names["model"] == "首图"
+    assert names["model-2"] == "细节图"
+    assert first.revision == pipeline.revision + 1
+    assert second.revision == pipeline.revision + 2
+    assert second.definition.edges == pipeline.definition.edges
+    assert second.definition.nodes[0].config == pipeline.definition.nodes[0].config
+    assert original["nodes"][0]["config"] == second.definition.model_dump(
+        mode="json",
+        by_alias=True,
+    )["nodes"][0]["config"]
+
+
+def test_concurrent_node_name_patches_merge_without_lost_updates(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline = create_pipeline(
+        aigc_repository,
+        pipeline_definition=_generated_media_definition(),
+    )
+    barrier = Barrier(2)
+
+    def patch(node_id: str, name: str) -> None:
+        barrier.wait()
+        aigc_repository.patch_aigc_pipeline_node_custom_name(
+            pipeline.id,
+            node_id,
+            name,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(patch, "model", "首图"),
+            executor.submit(patch, "model-2", "细节图"),
+        ]
+        for future in futures:
+            future.result()
+
+    current = aigc_repository.get_aigc_pipeline(pipeline.id)
+    assert current.revision == pipeline.revision + 2
+    assert {
+        node.id: node.custom_name
+        for node in current.definition.nodes
+        if node.id in {"model", "model-2"}
+    } == {"model": "首图", "model-2": "细节图"}
+
+
+def test_generated_media_commit_overwrites_name_and_publishes_assets_atomically(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline, detail, task, lease, assets = _prepare_generated_media_attempt(
+        aigc_repository
+    )
+    frozen_snapshot = detail.run.definition_snapshot.model_dump(
+        mode="json",
+        by_alias=True,
+    )
+    aigc_repository.patch_aigc_pipeline_node_custom_name(
+        pipeline.id,
+        "model",
+        "运行中人工名称",
+    )
+    result = AigcTaskResult(
+        kind=AigcResultKind.ASSETS,
+        naming=AigcGeneratedMediaNamingResult(
+            status=AigcGeneratedMediaNamingStatus.SUCCEEDED,
+            name="秋日咖啡",
+        ),
+        assets=[
+            AigcResultAsset(
+                asset_id=asset.id,
+                ordinal=index,
+                mime_type=asset.mime_type,
+            )
+            for index, asset in enumerate(assets)
+        ],
+    )
+
+    committed, accepted = (
+        aigc_repository.commit_aigc_generated_media_task_attempt(
+            task.task_id,
+            fencing_token=lease.fencing_token,
+            result=result,
+            metrics=AigcTaskMetrics(duration_ms=88),
+        )
+    )
+
+    assert accepted is True
+    assert committed.status == AigcTaskStatus.SUCCEEDED
+    current = aigc_repository.get_aigc_pipeline(pipeline.id)
+    assert next(
+        node.custom_name for node in current.definition.nodes if node.id == "model"
+    ) == "秋日咖啡"
+    assert current.revision == pipeline.revision + 2
+    stored_assets = [aigc_repository.get_asset(asset.id) for asset in assets]
+    assert [asset.status for asset in stored_assets] == [
+        Status.SUCCEEDED,
+        Status.SUCCEEDED,
+    ]
+    assert [asset.metadata["name"] for asset in stored_assets] == [
+        "秋日咖啡.png",
+        "秋日咖啡-2.png",
+    ]
+    for index, asset in enumerate(stored_assets):
+        assert asset.metadata["name_scheme"] == "aigc_generated_node_v2"
+        assert asset.metadata["generated_name"] == "秋日咖啡"
+        assert asset.metadata["name_source"] == "ai"
+        assert asset.metadata["naming_model"] == "doubao-seed-2-0-mini-260428"
+        assert asset.metadata["naming_status"] == "succeeded"
+        assert asset.metadata["output_ordinal"] == index
+        assert asset.metadata["trace_marker"] == f"trace-{index}"
+    persisted_run = aigc_repository.get_aigc_run(detail.run.id)
+    assert persisted_run.run.definition_snapshot.model_dump(
+        mode="json",
+        by_alias=True,
+    ) == frozen_snapshot
+    persisted_node = next(
+        node for node in persisted_run.nodes if node.node_id == "model"
+    )
+    assert persisted_node.status == AigcRunNodeStatus.SUCCEEDED
+    assert persisted_node.input_hash == "b" * 64
+
+
+def test_generated_media_commit_names_direct_output_nodes_once(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    payload = _generated_media_definition().model_dump(mode="json", by_alias=True)
+    payload["nodes"].extend(
+        [
+            {
+                "id": "output-primary",
+                "type": "image_output",
+                "position": {"x": 960, "y": 0},
+                "size": {"width": 240, "height": 200},
+                "config": {},
+            },
+            {
+                "id": "output-secondary",
+                "type": "image_output",
+                "position": {"x": 960, "y": 240},
+                "size": {"width": 240, "height": 200},
+                "config": {},
+            },
+            {
+                "id": "unrelated-output",
+                "type": "image_output",
+                "position": {"x": 960, "y": 480},
+                "size": {"width": 240, "height": 200},
+                "config": {},
+            },
+        ]
+    )
+    payload["edges"].extend(
+        [
+            {
+                "id": "edge-model-output-primary",
+                "sourceNodeId": "model",
+                "sourceHandle": "image",
+                "targetNodeId": "output-primary",
+                "targetHandle": "image",
+            },
+            {
+                "id": "edge-model-output-secondary",
+                "sourceNodeId": "model",
+                "sourceHandle": "image",
+                "targetNodeId": "output-secondary",
+                "targetHandle": "image",
+            },
+        ]
+    )
+    pipeline, _, task, lease, assets = _prepare_generated_media_attempt(
+        aigc_repository,
+        mime_types=("image/png",),
+        pipeline_definition=AigcPipelineDefinition.model_validate(payload),
+    )
+    result = AigcTaskResult(
+        kind=AigcResultKind.ASSETS,
+        naming=AigcGeneratedMediaNamingResult(
+            status=AigcGeneratedMediaNamingStatus.SUCCEEDED,
+            name="CK棒球领夹克",
+        ),
+        assets=[
+            AigcResultAsset(
+                asset_id=assets[0].id,
+                ordinal=0,
+                mime_type=assets[0].mime_type,
+            )
+        ],
+    )
+
+    _, accepted = aigc_repository.commit_aigc_generated_media_task_attempt(
+        task.task_id,
+        fencing_token=lease.fencing_token,
+        result=result,
+        metrics=AigcTaskMetrics(duration_ms=88),
+    )
+
+    assert accepted is True
+    current = aigc_repository.get_aigc_pipeline(pipeline.id)
+    names = {node.id: node.custom_name for node in current.definition.nodes}
+    assert names["model"] is None
+    assert names["output-primary"] == "CK棒球领夹克"
+    assert names["output-secondary"] == "CK棒球领夹克"
+    assert names["unrelated-output"] is None
+    assert current.revision == pipeline.revision + 1
+    assert (
+        aigc_repository.get_asset(assets[0].id).metadata["display_node_id"]
+        == "output-primary"
+    )
+
+
+def test_generated_media_naming_failure_publishes_with_current_fallback_name(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline, _, task, lease, assets = _prepare_generated_media_attempt(
+        aigc_repository,
+        mime_types=("image/png",),
+    )
+    named = aigc_repository.patch_aigc_pipeline_node_custom_name(
+        pipeline.id,
+        "model",
+        "现有节点名",
+    )
+    result = AigcTaskResult(
+        kind=AigcResultKind.ASSETS,
+        naming=AigcGeneratedMediaNamingResult(
+            status=AigcGeneratedMediaNamingStatus.PROVIDER_ERROR,
+        ),
+        assets=[
+            AigcResultAsset(
+                asset_id=assets[0].id,
+                ordinal=0,
+                mime_type=assets[0].mime_type,
+            )
+        ],
+    )
+
+    committed, accepted = (
+        aigc_repository.commit_aigc_generated_media_task_attempt(
+            task.task_id,
+            fencing_token=lease.fencing_token,
+            result=result,
+            metrics=AigcTaskMetrics(),
+        )
+    )
+
+    assert accepted is True
+    assert committed.status == AigcTaskStatus.SUCCEEDED
+    current = aigc_repository.get_aigc_pipeline(pipeline.id)
+    assert current.revision == named.revision
+    assert next(
+        node.custom_name for node in current.definition.nodes if node.id == "model"
+    ) == "现有节点名"
+    asset = aigc_repository.get_asset(assets[0].id)
+    assert asset.status == Status.SUCCEEDED
+    assert asset.metadata["name"] == "现有节点名.png"
+    assert asset.metadata["generated_name"] is None
+    assert asset.metadata["name_source"] == "fallback"
+    assert asset.metadata["naming_model"] == "doubao-seed-2-0-mini-260428"
+    assert asset.metadata["naming_status"] == "provider_error"
+
+
+def test_canceled_generated_media_commit_does_not_publish_name_or_asset(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline, detail, task, lease, assets = _prepare_generated_media_attempt(
+        aigc_repository,
+        mime_types=("image/png",),
+    )
+    aigc_repository.update_aigc_run(
+        detail.run.id,
+        cancellation_requested=True,
+    )
+    result = AigcTaskResult(
+        kind=AigcResultKind.ASSETS,
+        naming=AigcGeneratedMediaNamingResult(
+            status=AigcGeneratedMediaNamingStatus.SUCCEEDED,
+            name="不应发布",
+        ),
+        assets=[
+            AigcResultAsset(
+                asset_id=assets[0].id,
+                ordinal=0,
+                mime_type=assets[0].mime_type,
+            )
+        ],
+    )
+
+    committed, accepted = (
+        aigc_repository.commit_aigc_generated_media_task_attempt(
+            task.task_id,
+            fencing_token=lease.fencing_token,
+            result=result,
+            metrics=AigcTaskMetrics(),
+        )
+    )
+
+    assert accepted is False
+    assert committed.status == AigcTaskStatus.CANCELED
+    assert committed.result == AigcTaskResult()
+    current = aigc_repository.get_aigc_pipeline(pipeline.id)
+    assert current.revision == pipeline.revision
+    assert next(
+        node.custom_name for node in current.definition.nodes if node.id == "model"
+    ) is None
+    asset = aigc_repository.get_asset(assets[0].id)
+    assert asset.status == Status.DRAFT
+    assert "generated_name" not in asset.metadata
+
+
+def test_generated_media_commit_failure_rolls_back_name_asset_and_task(
+    aigc_repository: AigcRepositoryContract,
+) -> None:
+    pipeline, _, task, lease, assets = _prepare_generated_media_attempt(
+        aigc_repository,
+        mime_types=("image/gif",),
+    )
+    result = AigcTaskResult(
+        kind=AigcResultKind.ASSETS,
+        naming=AigcGeneratedMediaNamingResult(
+            status=AigcGeneratedMediaNamingStatus.SUCCEEDED,
+            name="不会发布",
+        ),
+        assets=[
+            AigcResultAsset(
+                asset_id=assets[0].id,
+                ordinal=0,
+                mime_type=assets[0].mime_type,
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="unsupported AIGC output MIME type"):
+        aigc_repository.commit_aigc_generated_media_task_attempt(
+            task.task_id,
+            fencing_token=lease.fencing_token,
+            result=result,
+            metrics=AigcTaskMetrics(),
+        )
+
+    current = aigc_repository.get_aigc_pipeline(pipeline.id)
+    assert current.revision == pipeline.revision
+    assert next(
+        node.custom_name for node in current.definition.nodes if node.id == "model"
+    ) is None
+    assert aigc_repository.get_asset(assets[0].id).status == Status.DRAFT
+    assert (
+        aigc_repository.get_aigc_task_attempt(task.task_id).status
+        == AigcTaskStatus.RUNNING
+    )

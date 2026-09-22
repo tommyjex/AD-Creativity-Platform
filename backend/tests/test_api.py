@@ -13,7 +13,7 @@ from backend.app.api.dependencies import (
     get_repository,
     get_workflow_service,
 )
-from backend.app.api.routes import _http_error
+from backend.app.api.routes import _http_error, _safe_stream_error_detail
 from backend.app.main import create_app
 from backend.app.repositories import InMemoryRepository, MySQLRepository
 from backend.app.schemas import (
@@ -31,6 +31,7 @@ from backend.app.services.generation import (
     ModelArkGenerationService,
     StoryboardGenerationResult,
 )
+from backend.app.services.modelark import ModelArkTextParseError
 from backend.app.services.assets import AssetStorageService
 from backend.app.services.composer import VideoCompositionError
 from backend.app.services.workflow import WorkflowService
@@ -60,6 +61,15 @@ def _sse_error(response) -> dict[str, object]:
     errors = [data for event, data in _sse_events(response) if event == "error"]
     assert len(errors) == 1
     return errors[0]
+
+
+def test_stream_parse_error_is_not_labeled_as_provider_error() -> None:
+    assert (
+        _safe_stream_error_detail(
+            ModelArkTextParseError("storyboard response could not be parsed")
+        )
+        == "phase=response_validation"
+    )
 
 
 def test_health_check_returns_app_metadata(client: TestClient) -> None:

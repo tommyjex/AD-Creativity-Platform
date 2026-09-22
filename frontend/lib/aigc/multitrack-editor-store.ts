@@ -33,6 +33,10 @@ export interface AigcTimelineSource extends MultiTrackSource {
   kind: Exclude<MultiTrackKind, "subtitle">;
   available: boolean;
   duration_ms?: number | null;
+  mime_type?: string | null;
+  preview_url?: string | null;
+  preview_text?: string | null;
+  text_preview_status?: "resolved" | "configured" | "unavailable";
 }
 
 export interface TimelineSnapOptions {
@@ -76,6 +80,16 @@ export interface AigcMultitrackEditorInitialState {
 
 export type AigcMultitrackEditorAction =
   | { type: "config/replace"; config: MultiTrackEditConfig }
+  | { type: "config/replace-transient"; config: MultiTrackEditConfig }
+  | {
+      type: "config/commit-transient";
+      config: MultiTrackEditConfig;
+      initialConfig: MultiTrackEditConfig;
+    }
+  | {
+      type: "config/cancel-transient";
+      initialConfig: MultiTrackEditConfig;
+    }
   | { type: "track/add"; track: MultiTrackTrack }
   | { type: "track/remove"; trackId: string }
   | { type: "track/rename"; trackId: string; name: string }
@@ -202,6 +216,16 @@ export function reduceAigcMultitrackEditor(
   switch (action.type) {
     case "config/replace":
       return updateConfigIfChanged(state, action.config);
+    case "config/replace-transient":
+      return replaceConfigTransiently(state, action.config);
+    case "config/commit-transient":
+      return commitTransientConfig(
+        state,
+        action.initialConfig,
+        action.config
+      );
+    case "config/cancel-transient":
+      return replaceConfigTransiently(state, action.initialConfig);
     case "track/add":
       if (!canAddTrack(state.config, action.track)) {
         return state;
@@ -684,6 +708,43 @@ function commitNormalizedConfig(
     past: [
       ...state.past,
       { config: structuredClone(state.config) }
+    ].slice(-HISTORY_LIMIT),
+    future: [],
+    saveStatus: "idle",
+    saveError: null
+  });
+}
+
+function replaceConfigTransiently(
+  state: AigcMultitrackEditorState,
+  config: MultiTrackEditConfig
+) {
+  const normalized = normalizeMultiTrackEditConfig(config);
+  if (sameConfig(normalized, state.config)) return state;
+  return deriveState({
+    ...state,
+    config: normalized,
+    saveStatus: "idle",
+    saveError: null
+  });
+}
+
+function commitTransientConfig(
+  state: AigcMultitrackEditorState,
+  initialConfig: MultiTrackEditConfig,
+  config: MultiTrackEditConfig
+) {
+  const normalizedInitial = normalizeMultiTrackEditConfig(initialConfig);
+  const normalized = normalizeMultiTrackEditConfig(config);
+  if (sameConfig(normalizedInitial, normalized)) {
+    return replaceConfigTransiently(state, normalized);
+  }
+  return deriveState({
+    ...state,
+    config: normalized,
+    past: [
+      ...state.past,
+      { config: structuredClone(normalizedInitial) }
     ].slice(-HISTORY_LIMIT),
     future: [],
     saveStatus: "idle",

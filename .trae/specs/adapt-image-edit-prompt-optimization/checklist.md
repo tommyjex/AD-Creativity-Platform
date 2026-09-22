@@ -1,0 +1,66 @@
+# Checklist
+
+- [x] 仅 `image_to_image` 请求参与 `local_edit / full_design` 判别
+- [x] 文生图始终使用现有 `full_design` 英文动态分层
+- [x] LLM 和生视频提示词优化语言、结构和响应无回归
+- [x] 单次 Provider 调用同时完成模式判别和提示词优化
+- [x] 内部响应包含 `optimization_mode` 且使用合法判别联合
+- [x] `local_edit` 只包含单段 `optimized_text`，不得包含 `sections`
+- [x] `full_design` 只包含 `sections`，不得包含单段 `optimized_text`
+- [x] 两种模式均保持 `optimized_reference_instructions` 数量和顺序
+- [x] 缺少模式、混合字段或非法联合结构时整次响应被拒绝
+- [x] 普通图生图只有恰好一张参考图时允许 `local_edit`
+- [x] `image_edit` operation 允许 `local_edit`
+- [x] 多参考图、图层拆分和非图生图目标不允许 `local_edit`
+- [x] 图生图请求只新增可选 `pipeline_context`，旧客户端和模板编辑器请求仍可执行 `full_design`
+- [x] `pipeline_context` 包含当前 `definition_snapshot` 和服务端 `base_revision`，优化接口不保存该快照
+- [x] 普通图生图仅从唯一 `image` 直接入边解析被编辑原图
+- [x] `image_edit` 仅从唯一 `edit_image` 直接入边解析被编辑原图
+- [x] 本地图片来源使用当前图片节点资产且 `run_id=null`
+- [x] 上游图片来源使用成功 RunNode 的实际投影资产和 Run ID
+- [x] 等待、失败、unavailable、非图片和无有效资产时不提交来源图
+- [x] 客户端不提交图片 URL、对象 Key、签名参数或图片二进制
+- [x] 后端验证 Pipeline 访问权限、快照 schema、目标 operation、参考图数量和唯一直接入边
+- [x] 后端独立验证本地资产访问范围，或验证 Run、Run definition、成功 RunNode 与结果资产关系
+- [x] 伪造节点、入边、Run 或资产关系在 Provider 调用前被拒绝
+- [x] 服务端 revision 等于 `base_revision` 时允许使用未保存的当前快照
+- [x] 自动保存推进 revision 但服务端 definition 与请求快照相同时不误报冲突
+- [x] revision 已推进且服务端 definition 与请求快照不同时返回 conflict 且不调用 Provider
+- [x] 只有合法、成功、公开、可访问的图片资产才生成短期受控 URL
+- [x] 合法局部候选的 Provider 请求恰好包含一项 `input_image`
+- [x] 多参考图、无合法来源图和非图生图请求不包含 `input_image`
+- [x] 没有合法 `input_image` 时 Provider 只能返回 `full_design`
+- [x] 图片 URL 不进入文本 JSON 上下文、公开响应、Pipeline、Run、Task、日志或错误
+- [x] 加一行文字可判定为 `local_edit`
+- [x] 修改衣服或商品颜色可判定为 `local_edit`
+- [x] 删除或增加明确的小对象可判定为 `local_edit`
+- [x] 替换背景且明确保留主体时可判定为 `local_edit`
+- [x] 整体换风格、重新构图、重建场景和主体身份变化使用 `full_design`
+- [x] 模糊或可能影响整体画面的请求保守使用 `full_design`
+- [x] 局部编辑结果为一个非空英文段落
+- [x] 局部编辑结果明确编辑对象、位置、动作和目标值
+- [x] 局部编辑结果明确以原图为基础并保持所有未编辑内容
+- [x] 局部编辑结果不含换行、section label、Markdown、JSON、编号、解释或候选方案
+- [x] 局部编辑结果不强制 `Composition` 或 `Negative Prompt`
+- [x] 用户明确否定条件作为同段英文子句保留
+- [x] 局部编辑不补充未请求的镜头、画质、美学、构图或负面词
+- [x] Provider 将局部改色扩大为背景、姿态、构图或风格变化时被拒绝
+- [x] Provider 缺少未编辑内容保持语义时被拒绝
+- [x] `full_design` 继续满足 4–10 层、唯一标题、`Composition` 和末尾 `Negative Prompt`
+- [x] `full_design` 继续使用现有规范化、warning 和稳定渲染逻辑
+- [x] 品牌、产品、型号、画面文字、URL、比例和带单位数字在两种模式下保持
+- [x] 明确颜色、对象数量和否定条件在两种模式下保持
+- [x] BBox 引用 ID、数量、顺序、token 和坐标在两种模式下保持
+- [x] BBox 引用说明继续优化为英文单段且不与普通参考图混用
+- [x] 任一主文本或引用说明失败时原子拒绝，不部分写回
+- [x] 公开 API 继续只返回 `optimized_text + optimized_reference_instructions`
+- [x] 前端无需识别内部模式即可写回单段或完整分层文本
+- [x] loading、取消、过期响应、无变化、单次撤销和不自动保存无回归
+- [x] 结构化日志只记录目标类型、operation、参考图数量、模式和 `has_source_image`，不记录原文、输出、URL、资产 ID、Run ID 或密钥
+- [x] 优化 API 不保存 Pipeline、不创建 Run/Task、不调用图片生成
+- [x] Mock Provider 对合法单图局部编辑和完整设计固定语料确定性返回对应模式
+- [x] 后端 schema、ModelArk、服务、路由定向测试及完整 pytest 通过
+- [x] 前端定向测试、完整 Vitest、TypeScript、ESLint 和 production build 通过
+- [x] Mock 浏览器验收覆盖单图加字、改色、背景替换、无图回退、整体换风格、重新构图和多参考图
+- [x] 桌面与窄屏下单段和多行结果无溢出、重叠或不可达操作
+- [x] 浏览器控制台无新增错误，且一次优化仅一次 Provider 调用、最多发送一张受控图片、未触发真实图片生成
