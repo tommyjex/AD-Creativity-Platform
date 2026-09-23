@@ -338,7 +338,7 @@ function AigcAudioPlayer({ className, duration = null, mimeType, name, unavailab
     const resolvedDuration = loadedDuration ?? duration;
     if (!url) {
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-            className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("grid place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300", variant === "node" ? "nodrag min-h-0 flex-1" : "h-24", className),
+            className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("grid place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300", variant === "node" ? "min-h-0 flex-1" : "h-24", className),
             children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -373,7 +373,7 @@ function AigcAudioPlayer({ className, duration = null, mimeType, name, unavailab
         mimeType
     ].filter((value)=>Boolean(value));
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("flex flex-col justify-center gap-2 overflow-hidden bg-slate-950 p-3 text-white", variant === "node" ? "nodrag nowheel min-h-0 flex-1" : "rounded border border-slate-800", className),
+        className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("flex flex-col justify-center gap-2 overflow-hidden bg-slate-950 p-3 text-white", variant === "node" ? "min-h-0 flex-1" : "rounded border border-slate-800", className),
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                 className: "truncate text-[10px] font-medium",
@@ -386,7 +386,7 @@ function AigcAudioPlayer({ className, duration = null, mimeType, name, unavailab
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("audio", {
                 "aria-label": `播放音频：${name}`,
-                className: "h-8 w-full",
+                className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("h-8 w-full", variant === "node" && "nodrag nowheel"),
                 controls: true,
                 onLoadedMetadata: (event)=>{
                     const nextDuration = event.currentTarget.duration;
@@ -405,7 +405,7 @@ function AigcAudioPlayer({ className, duration = null, mimeType, name, unavailab
                 children: details.join(" · ") || "元数据读取中"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-audio-player.tsx",
-                lineNumber: 79,
+                lineNumber: 82,
                 columnNumber: 7
             }, this)
         ]
@@ -904,6 +904,24 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
             equals: editorDraftsEqual,
             getErrorMessage: autosaveErrorMessage,
             save: async ({ expectedRevision, snapshot })=>{
+                // #region debug-point C:autosave-payload
+                void fetch("http://127.0.0.1:7777/event", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        sessionId: "pipeline-nodes-missing",
+                        runId: "post-fix",
+                        hypothesisId: "C",
+                        location: "frontend/components/workspace/aigc/aigc-editor.tsx:autosave",
+                        msg: "[DEBUG] Autosave pipeline payload",
+                        data: {
+                            entityId: entity.id,
+                            expectedRevision,
+                            nodeIds: snapshot.definition.nodes.map((node)=>node.id)
+                        },
+                        ts: Date.now()
+                    })
+                }).catch(()=>{});
+                // #endregion
                 const saved = mode === "template" ? await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$client$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["apiClient"].updateAigcTemplate(entity.id, {
                     expected_revision: expectedRevision,
                     name: snapshot.name.trim(),
@@ -1081,6 +1099,27 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useEffect"])(()=>{
         const server = pipelineQuery.data;
         if (mode !== "pipeline" || !server) return;
+        // #region debug-point B-C:server-rebase
+        void fetch("http://127.0.0.1:7777/event", {
+            method: "POST",
+            body: JSON.stringify({
+                sessionId: "pipeline-nodes-missing",
+                runId: "post-fix",
+                hypothesisId: "B-C",
+                location: "frontend/components/workspace/aigc/aigc-editor.tsx:server-rebase",
+                msg: "[DEBUG] Rebase server revision into editor",
+                data: {
+                    entityId: entity.id,
+                    editorRevision: editorStore.getState().revision,
+                    serverRevision: server.revision,
+                    editorDirty: editorStore.getState().dirty,
+                    editorNodeIds: editorStore.getState().definition.nodes.map((node)=>node.id),
+                    serverNodeIds: server.definition.nodes.map((node)=>node.id)
+                },
+                ts: Date.now()
+            })
+        }).catch(()=>{});
+        // #endregion
         const authoritativeNodeNames = new Map(authoritativeNodeNamesRef.current);
         void autosaveCoordinator.rebase({
             merge: (base, local, remote)=>(0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$editor$2d$store$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["mergeAigcServerRevision"])(base, local, remote, authoritativeNodeNames),
@@ -1105,6 +1144,8 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
     }, [
         applyServerRevision,
         autosaveCoordinator,
+        editorStore,
+        entity.id,
         mode,
         pipelineQuery.data
     ]);
@@ -1481,17 +1522,17 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                         className: "h-4 w-4"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1110,
+                                        lineNumber: 1153,
                                         columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1109,
+                                    lineNumber: 1152,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1102,
+                                lineNumber: 1145,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1503,12 +1544,12 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                     children: name
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1114,
+                                    lineNumber: 1157,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1113,
+                                lineNumber: 1156,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Badge"], {
@@ -1518,13 +1559,13 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                 children: mode === "pipeline" ? "画布" : "模板"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1122,
+                                lineNumber: 1165,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1098,
+                        lineNumber: 1141,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1536,12 +1577,12 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                         children: autosaveStatusText(autosaveState)
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1130,
+                        lineNumber: 1173,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ToolbarStarMap, {}, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1139,
+                        lineNumber: 1182,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1568,23 +1609,23 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                         className: "h-4 w-4"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1163,
+                                        lineNumber: 1206,
                                         columnNumber: 17
                                     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$panel$2d$right$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__PanelRight$3e$__["PanelRight"], {
                                         className: "h-4 w-4"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1165,
+                                        lineNumber: 1208,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1151,
+                                    lineNumber: 1194,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1145,
+                                lineNumber: 1188,
                                 columnNumber: 11
                             }, this),
                             mode === "pipeline" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -1613,13 +1654,13 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                                     className: "h-4 w-4 animate-spin"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                    lineNumber: 1193,
+                                                    lineNumber: 1236,
                                                     columnNumber: 21
                                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$files$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Files$3e$__["Files"], {
                                                     className: "h-4 w-4"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                    lineNumber: 1195,
+                                                    lineNumber: 1238,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1627,18 +1668,18 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                                     children: "另存为模板"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                    lineNumber: 1197,
+                                                    lineNumber: 1240,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                            lineNumber: 1177,
+                                            lineNumber: 1220,
                                             columnNumber: 17
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1171,
+                                        lineNumber: 1214,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1659,13 +1700,13 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                                     className: "h-4 w-4 animate-spin"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                    lineNumber: 1222,
+                                                    lineNumber: 1265,
                                                     columnNumber: 21
                                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$play$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Play$3e$__["Play"], {
                                                     className: "h-4 w-4"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                    lineNumber: 1224,
+                                                    lineNumber: 1267,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1673,36 +1714,36 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                                     children: fullExecutionInProgress ? "运行中" : "执行"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                    lineNumber: 1226,
+                                                    lineNumber: 1269,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                            lineNumber: 1206,
+                                            lineNumber: 1249,
                                             columnNumber: 17
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1200,
+                                        lineNumber: 1243,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1170,
+                                lineNumber: 1213,
                                 columnNumber: 13
                             }, this) : null
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1140,
+                        lineNumber: 1183,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1094,
+                lineNumber: 1137,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1713,7 +1754,7 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                         onClose: ()=>setDesktopNodePalettePreference(false)
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1238,
+                        lineNumber: 1281,
                         columnNumber: 11
                     }, this) : null,
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -1735,17 +1776,17 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                         className: "h-4 w-4"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1259,
+                                        lineNumber: 1302,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1249,
+                                    lineNumber: 1292,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1248,
+                                lineNumber: 1291,
                                 columnNumber: 13
                             }, this) : null,
                             !isDesktop && openPanel !== "inspector" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1764,12 +1805,12 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                             className: "h-4 w-4"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                            lineNumber: 1290,
+                                            lineNumber: 1333,
                                             columnNumber: 17
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1272,
+                                        lineNumber: 1315,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -1782,18 +1823,18 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                             className: "h-4 w-4"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                            lineNumber: 1299,
+                                            lineNumber: 1342,
                                             columnNumber: 17
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1292,
+                                        lineNumber: 1335,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1264,
+                                lineNumber: 1307,
                                 columnNumber: 13
                             }, this) : null,
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$run$2d$context$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcRunActionsProvider"], {
@@ -1853,17 +1894,17 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                         }
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1305,
+                                        lineNumber: 1348,
                                         columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1304,
+                                    lineNumber: 1347,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1303,
+                                lineNumber: 1346,
                                 columnNumber: 11
                             }, this),
                             contextMenu?.kind === "picker" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$canvas$2d$context$2d$menu$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcCanvasNodePicker"], {
@@ -1875,7 +1916,7 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                 position: contextMenu.position
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1354,
+                                lineNumber: 1397,
                                 columnNumber: 13
                             }, this) : contextMenu?.kind === "node" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$canvas$2d$context$2d$menu$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcNodeContextMenu"], {
                                 onClose: ()=>setContextMenu(null),
@@ -1886,7 +1927,7 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                 position: contextMenu.position
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1363,
+                                lineNumber: 1406,
                                 columnNumber: 13
                             }, this) : null,
                             feedback ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1895,7 +1936,7 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                 children: feedback
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1373,
+                                lineNumber: 1416,
                                 columnNumber: 13
                             }, this) : null,
                             !isDesktop && openPanel === "nodes" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NodePalette, {
@@ -1906,7 +1947,7 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                 }
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1381,
+                                lineNumber: 1424,
                                 columnNumber: 13
                             }, this) : null,
                             !isDesktop && openPanel === "inspector" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(Inspector, {
@@ -1932,13 +1973,13 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                 tab: inspectorTab
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1390,
+                                lineNumber: 1433,
                                 columnNumber: 13
                             }, this) : null
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1243,
+                        lineNumber: 1286,
                         columnNumber: 9
                     }, this),
                     isDesktop && openPanel === "inspector" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(Inspector, {
@@ -1963,13 +2004,13 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                         tab: inspectorTab
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1417,
+                        lineNumber: 1460,
                         columnNumber: 11
                     }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1236,
+                lineNumber: 1279,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Dialog"], {
@@ -1993,20 +2034,20 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                         children: "另存为模板"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1458,
+                                        lineNumber: 1501,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["DialogDescription"], {
                                         children: "当前画布将保存为可复用模板，具体图片和框选引用不会写入模板。"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1459,
+                                        lineNumber: 1502,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1457,
+                                lineNumber: 1500,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2017,7 +2058,7 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                         children: "模板名称"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1464,
+                                        lineNumber: 1507,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$input$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Input"], {
@@ -2032,7 +2073,7 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                         value: templateName
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1465,
+                                        lineNumber: 1508,
                                         columnNumber: 15
                                     }, this),
                                     templateError ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2041,13 +2082,13 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                         children: templateError
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1477,
+                                        lineNumber: 1520,
                                         columnNumber: 17
                                     }, this) : null
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1463,
+                                lineNumber: 1506,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["DialogFooter"], {
@@ -2061,7 +2102,7 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                         children: "取消"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1483,
+                                        lineNumber: 1526,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -2072,48 +2113,48 @@ function AigcEditorContent({ allowExecution, entity, mode }) {
                                                 className: "h-4 w-4 animate-spin"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 1496,
+                                                lineNumber: 1539,
                                                 columnNumber: 19
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$files$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Files$3e$__["Files"], {
                                                 className: "h-4 w-4"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 1498,
+                                                lineNumber: 1541,
                                                 columnNumber: 19
                                             }, this),
                                             isSavingTemplate ? "保存中" : "保存模板"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1491,
+                                        lineNumber: 1534,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1482,
+                                lineNumber: 1525,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1451,
+                        lineNumber: 1494,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1450,
+                    lineNumber: 1493,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1442,
+                lineNumber: 1485,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 1090,
+        lineNumber: 1133,
         columnNumber: 5
     }, this);
 }
@@ -2131,7 +2172,7 @@ function NodePalette({ className, onAdd, onClose }) {
                         children: "节点"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1529,
+                        lineNumber: 1572,
                         columnNumber: 9
                     }, this),
                     onClose ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -2148,18 +2189,18 @@ function NodePalette({ className, onAdd, onClose }) {
                             className: "h-4 w-4"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 1542,
+                            lineNumber: 1585,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1531,
+                        lineNumber: 1574,
                         columnNumber: 11
                     }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1528,
+                lineNumber: 1571,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2167,7 +2208,7 @@ function NodePalette({ className, onAdd, onClose }) {
                 children: "点击添加到画布"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1546,
+                lineNumber: 1589,
                 columnNumber: 7
             }, this),
             [
@@ -2182,7 +2223,7 @@ function NodePalette({ className, onAdd, onClose }) {
                             children: category === "modality" ? "模态" : category === "model" ? "模型" : "控制"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 1549,
+                            lineNumber: 1592,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2196,7 +2237,7 @@ function NodePalette({ className, onAdd, onClose }) {
                                             className: "h-4 w-4 text-info"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                            lineNumber: 1567,
+                                            lineNumber: 1610,
                                             columnNumber: 19
                                         }, this) : item.type.includes("video") ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$video$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Video$3e$__["Video"], {
                                             className: "h-4 w-4",
@@ -2205,49 +2246,49 @@ function NodePalette({ className, onAdd, onClose }) {
                                             }
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                            lineNumber: 1569,
+                                            lineNumber: 1612,
                                             columnNumber: 19
                                         }, this) : item.type.includes("audio") ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$audio$2d$lines$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__AudioLines$3e$__["AudioLines"], {
                                             className: "h-4 w-4 text-info"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                            lineNumber: 1576,
+                                            lineNumber: 1619,
                                             columnNumber: 19
                                         }, this) : item.type.includes("text") ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$type$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Type$3e$__["Type"], {
                                             className: "h-4 w-4 text-info"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                            lineNumber: 1578,
+                                            lineNumber: 1621,
                                             columnNumber: 19
                                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$sparkles$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Sparkles$3e$__["Sparkles"], {
                                             className: "h-4 w-4 text-primary"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                            lineNumber: 1580,
+                                            lineNumber: 1623,
                                             columnNumber: 19
                                         }, this),
                                         item.label
                                     ]
                                 }, item.type, true, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1560,
+                                    lineNumber: 1603,
                                     columnNumber: 15
                                 }, this))
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 1556,
+                            lineNumber: 1599,
                             columnNumber: 11
                         }, this)
                     ]
                 }, category, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1548,
+                    lineNumber: 1591,
                     columnNumber: 9
                 }, this))
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 1520,
+        lineNumber: 1563,
         columnNumber: 5
     }, this);
 }
@@ -2277,12 +2318,12 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                                 children: item === "config" ? "配置" : item === "result" ? "结果" : "运行"
                             }, item, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1649,
+                                lineNumber: 1692,
                                 columnNumber: 13
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1647,
+                        lineNumber: 1690,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -2297,18 +2338,18 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                             className: "h-4 w-4"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 1675,
+                            lineNumber: 1718,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1666,
+                        lineNumber: 1709,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1646,
+                lineNumber: 1689,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2323,7 +2364,7 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                                     children: "名称"
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1682,
+                                    lineNumber: 1725,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$input$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Input"], {
@@ -2334,13 +2375,13 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                                     value: name
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1683,
+                                    lineNumber: 1726,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 1681,
+                            lineNumber: 1724,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2350,7 +2391,7 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                                     children: "描述"
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1692,
+                                    lineNumber: 1735,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$textarea$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Textarea"], {
@@ -2361,13 +2402,13 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                                     value: description
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1693,
+                                    lineNumber: 1736,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 1691,
+                            lineNumber: 1734,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2379,7 +2420,7 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                                         node: node
                                     }, `${node.id}:${node.custom_name ?? ""}`, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1704,
+                                        lineNumber: 1747,
                                         columnNumber: 19
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NodeConfig, {
@@ -2388,22 +2429,22 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                                         runDetail: nodeRunDetail
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 1708,
+                                        lineNumber: 1751,
                                         columnNumber: 19
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1703,
+                                lineNumber: 1746,
                                 columnNumber: 17
                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(InspectorEmpty, {}, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 1715,
+                                lineNumber: 1758,
                                 columnNumber: 17
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 1701,
+                            lineNumber: 1744,
                             columnNumber: 13
                         }, this),
                         allowExecution && mode === "pipeline" && node && (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$node$2d$registry$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$locals$3e$__["isAigcExecutionNodeType"])(node.type) ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -2418,20 +2459,20 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                                     className: "h-4 w-4"
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 1730,
+                                    lineNumber: 1773,
                                     columnNumber: 17
                                 }, this),
                                 "从此节点运行"
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 1722,
+                            lineNumber: 1765,
                             columnNumber: 15
                         }, this) : null
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1680,
+                    lineNumber: 1723,
                     columnNumber: 11
                 }, this) : tab === "result" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ResultPanel, {
                     definition: definition,
@@ -2439,14 +2480,14 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                     runDetail: nodeRunDetail
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1736,
+                    lineNumber: 1779,
                     columnNumber: 11
                 }, this) : mode === "template" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(InspectorPlaceholder, {
                     copy: "模板不可执行，请先创建画布实例。",
                     title: "模板编辑模式"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1743,
+                    lineNumber: 1786,
                     columnNumber: 13
                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(RunPanel, {
                     onCancel: onCancelRun,
@@ -2458,18 +2499,18 @@ function Inspector({ allowExecution, className, mode, node, onCancelRun, onDescr
                     selectedRunId: selectedRunId
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1748,
+                    lineNumber: 1791,
                     columnNumber: 13
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1678,
+                lineNumber: 1721,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 1639,
+        lineNumber: 1682,
         columnNumber: 5
     }, this);
 }
@@ -2484,7 +2525,7 @@ function NodeCustomNameField({ node }) {
                 children: "节点名称"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1773,
+                lineNumber: 1816,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$input$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Input"], {
@@ -2515,7 +2556,7 @@ function NodeCustomNameField({ node }) {
                 value: draft
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1774,
+                lineNumber: 1817,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2523,13 +2564,13 @@ function NodeCustomNameField({ node }) {
                 children: "清空后恢复系统自动名称"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1801,
+                lineNumber: 1844,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 1772,
+        lineNumber: 1815,
         columnNumber: 5
     }, this);
 }
@@ -2549,7 +2590,7 @@ function NodeConfig({ mode, node, runDetail }) {
             runDetail: runDetail
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 1832,
+            lineNumber: 1875,
             columnNumber: 7
         }, this);
     }
@@ -2562,7 +2603,7 @@ function NodeConfig({ mode, node, runDetail }) {
                     input: imageInput
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1849,
+                    lineNumber: 1892,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$label$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Label"], {
@@ -2570,7 +2611,7 @@ function NodeConfig({ mode, node, runDetail }) {
                     children: "模型"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1850,
+                    lineNumber: 1893,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -2586,12 +2627,12 @@ function NodeConfig({ mode, node, runDetail }) {
                             children: model
                         }, model, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 1860,
+                            lineNumber: 1903,
                             columnNumber: 13
                         }, this))
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1851,
+                    lineNumber: 1894,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$label$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Label"], {
@@ -2600,7 +2641,7 @@ function NodeConfig({ mode, node, runDetail }) {
                     children: "System Prompt"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1863,
+                    lineNumber: 1906,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$textarea$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Textarea"], {
@@ -2613,13 +2654,13 @@ function NodeConfig({ mode, node, runDetail }) {
                     value: node.config.system_prompt
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 1864,
+                    lineNumber: 1907,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 1848,
+            lineNumber: 1891,
             columnNumber: 7
         }, this);
     }
@@ -2629,7 +2670,7 @@ function NodeConfig({ mode, node, runDetail }) {
             node: node
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 1879,
+            lineNumber: 1922,
             columnNumber: 12
         }, this);
     }
@@ -2639,7 +2680,7 @@ function NodeConfig({ mode, node, runDetail }) {
             node: node
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 1882,
+            lineNumber: 1925,
             columnNumber: 12
         }, this);
     }
@@ -2649,7 +2690,7 @@ function NodeConfig({ mode, node, runDetail }) {
             node: node
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 1885,
+            lineNumber: 1928,
             columnNumber: 12
         }, this);
     }
@@ -2660,7 +2701,7 @@ function NodeConfig({ mode, node, runDetail }) {
             runDetail: runDetail
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 1889,
+            lineNumber: 1932,
             columnNumber: 7
         }, this);
     }
@@ -2670,7 +2711,7 @@ function NodeConfig({ mode, node, runDetail }) {
             node: node
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 1897,
+            lineNumber: 1940,
             columnNumber: 12
         }, this);
     }
@@ -2683,12 +2724,12 @@ function NodeConfig({ mode, node, runDetail }) {
                 onChange: (config)=>update(node.id, config)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1902,
+                lineNumber: 1945,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 1901,
+            lineNumber: 1944,
             columnNumber: 7
         }, this);
     }
@@ -2700,12 +2741,12 @@ function NodeConfig({ mode, node, runDetail }) {
                 children: "图层配置将在对应的图层工作流中编辑。"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1913,
+                lineNumber: 1956,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 1912,
+            lineNumber: 1955,
             columnNumber: 7
         }, this);
     }
@@ -2722,7 +2763,7 @@ function LlmImageInputStatus({ input }) {
                 children: "图片输入"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1940,
+                lineNumber: 1983,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2734,13 +2775,13 @@ function LlmImageInputStatus({ input }) {
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1941,
+                lineNumber: 1984,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 1928,
+        lineNumber: 1971,
         columnNumber: 5
     }, this);
 }
@@ -2759,7 +2800,7 @@ function JsonParserNodeConfig({ displayName, node, runDetail }) {
                 children: "JSONPath"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1966,
+                lineNumber: 2009,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$input$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Input"], {
@@ -2777,7 +2818,7 @@ function JsonParserNodeConfig({ displayName, node, runDetail }) {
                 value: node.config.json_path
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1967,
+                lineNumber: 2010,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2787,7 +2828,7 @@ function JsonParserNodeConfig({ displayName, node, runDetail }) {
                 children: feedback.message
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1983,
+                lineNumber: 2026,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dl", {
@@ -2798,14 +2839,14 @@ function JsonParserNodeConfig({ displayName, node, runDetail }) {
                         children: "状态"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1996,
+                        lineNumber: 2039,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                         children: runNode ? nodeStatusLabel(runNode.status) : "未运行"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1997,
+                        lineNumber: 2040,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dt", {
@@ -2813,20 +2854,20 @@ function JsonParserNodeConfig({ displayName, node, runDetail }) {
                         children: "Item 数量"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1998,
+                        lineNumber: 2041,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                         children: count === null ? "-" : `${count} 项`
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 1999,
+                        lineNumber: 2042,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 1995,
+                lineNumber: 2038,
                 columnNumber: 7
             }, this),
             error ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2837,7 +2878,7 @@ function JsonParserNodeConfig({ displayName, node, runDetail }) {
                         children: error.code ?? "json_parser_failed"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 2003,
+                        lineNumber: 2046,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2845,13 +2886,13 @@ function JsonParserNodeConfig({ displayName, node, runDetail }) {
                         children: errorMessage
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 2006,
+                        lineNumber: 2049,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 2002,
+                lineNumber: 2045,
                 columnNumber: 9
             }, this) : null,
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2859,13 +2900,13 @@ function JsonParserNodeConfig({ displayName, node, runDetail }) {
                 children: "items 输出由系统自动连接，最多生成 20 个文本节点。"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 2009,
+                lineNumber: 2052,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 1965,
+        lineNumber: 2008,
         columnNumber: 5
     }, this);
 }
@@ -2908,7 +2949,7 @@ function SeedreamImageConfig({ displayName, node }) {
                             children: "操作模式"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2053,
+                            lineNumber: 2096,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2926,18 +2967,18 @@ function SeedreamImageConfig({ displayName, node }) {
                                     children: option.label
                                 }, option.value, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 2060,
+                                    lineNumber: 2103,
                                     columnNumber: 15
                                 }, this))
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2054,
+                            lineNumber: 2097,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2052,
+                    lineNumber: 2095,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2948,20 +2989,20 @@ function SeedreamImageConfig({ displayName, node }) {
                             children: "Seedream 5.0 Pro"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2083,
+                            lineNumber: 2126,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             children: operation === "image_to_image" ? "连接 1-10 张参考图和必填提示词，输出新图片。" : operation === "image_edit" ? "连接一张编辑图片或一个编辑图层，并连接必填提示词。" : "连接一张 PNG/JPEG；提示词可选，留空时自动识别主要元素。"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2084,
+                            lineNumber: 2127,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2082,
+                    lineNumber: 2125,
                     columnNumber: 9
                 }, this),
                 operation === "layer_decomposition" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -2984,7 +3025,7 @@ function SeedreamImageConfig({ displayName, node }) {
                             value: node.config.size
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2094,
+                            lineNumber: 2137,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2992,13 +3033,13 @@ function SeedreamImageConfig({ displayName, node }) {
                             children: "输入比例 1:16-16:1，总像素 262,144-36,000,000，文件小于 30 MB。"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2110,
+                            lineNumber: 2153,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2093,
+                    lineNumber: 2136,
                     columnNumber: 11
                 }, this) : operation === "image_to_image" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$image$2d$dimensions$2d$field$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcImageDimensionsField"], {
                     config: node.config,
@@ -3009,7 +3050,7 @@ function SeedreamImageConfig({ displayName, node }) {
                         })
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2115,
+                    lineNumber: 2158,
                     columnNumber: 11
                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
                     children: [
@@ -3032,7 +3073,7 @@ function SeedreamImageConfig({ displayName, node }) {
                                     value: node.config.aspect_ratio
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 2125,
+                                    lineNumber: 2168,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3049,13 +3090,13 @@ function SeedreamImageConfig({ displayName, node }) {
                                     value: node.config.size
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 2136,
+                                    lineNumber: 2179,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2124,
+                            lineNumber: 2167,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3077,13 +3118,13 @@ function SeedreamImageConfig({ displayName, node }) {
                             value: node.config.format
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2148,
+                            lineNumber: 2191,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2123,
+                    lineNumber: 2166,
                     columnNumber: 11
                 }, this),
                 issue ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3092,18 +3133,18 @@ function SeedreamImageConfig({ displayName, node }) {
                     children: issue.message
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2165,
+                    lineNumber: 2208,
                     columnNumber: 11
                 }, this) : null
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2051,
+            lineNumber: 2094,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 2050,
+        lineNumber: 2093,
         columnNumber: 5
     }, this);
 }
@@ -3183,7 +3224,7 @@ function VideoGenerationConfig({ displayName, node }) {
                     value: node.config.model
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2248,
+                    lineNumber: 2291,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3196,7 +3237,7 @@ function VideoGenerationConfig({ displayName, node }) {
                     value: node.config.generation_mode
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2257,
+                    lineNumber: 2300,
                     columnNumber: 9
                 }, this),
                 node.config.generation_mode === "multimodal_reference" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3209,7 +3250,7 @@ function VideoGenerationConfig({ displayName, node }) {
                     value: node.config.task_type ?? "generate"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2269,
+                    lineNumber: 2312,
                     columnNumber: 11
                 }, this) : null,
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3227,7 +3268,7 @@ function VideoGenerationConfig({ displayName, node }) {
                             value: node.config.resolution
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2282,
+                            lineNumber: 2325,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3242,13 +3283,13 @@ function VideoGenerationConfig({ displayName, node }) {
                             value: node.config.aspect_ratio
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2293,
+                            lineNumber: 2336,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2281,
+                    lineNumber: 2324,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3275,7 +3316,7 @@ function VideoGenerationConfig({ displayName, node }) {
                     value: String(node.config.duration_seconds)
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2305,
+                    lineNumber: 2348,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -3292,13 +3333,13 @@ function VideoGenerationConfig({ displayName, node }) {
                             type: "checkbox"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2332,
+                            lineNumber: 2375,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2330,
+                    lineNumber: 2373,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3315,7 +3356,7 @@ function VideoGenerationConfig({ displayName, node }) {
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2344,
+                    lineNumber: 2387,
                     columnNumber: 9
                 }, this),
                 node.config.generation_mode === "multimodal_reference" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3334,7 +3375,7 @@ function VideoGenerationConfig({ displayName, node }) {
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2350,
+                    lineNumber: 2393,
                     columnNumber: 11
                 }, this) : null,
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3345,7 +3386,7 @@ function VideoGenerationConfig({ displayName, node }) {
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2356,
+                    lineNumber: 2399,
                     columnNumber: 9
                 }, this),
                 promptWarning ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3353,7 +3394,7 @@ function VideoGenerationConfig({ displayName, node }) {
                     children: promptWarning
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2360,
+                    lineNumber: 2403,
                     columnNumber: 11
                 }, this) : null,
                 issue ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3362,18 +3403,18 @@ function VideoGenerationConfig({ displayName, node }) {
                     children: issue.message
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2365,
+                    lineNumber: 2408,
                     columnNumber: 11
                 }, this) : null
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2247,
+            lineNumber: 2290,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 2246,
+        lineNumber: 2289,
         columnNumber: 5
     }, this);
 }
@@ -3433,7 +3474,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                             value: config.tool_version
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2434,
+                            lineNumber: 2477,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3448,13 +3489,13 @@ function VideoEnhancementConfig({ displayName, node }) {
                             value: config.enhance_style
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2448,
+                            lineNumber: 2491,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2433,
+                    lineNumber: 2476,
                     columnNumber: 9
                 }, this),
                 config.tool_version === "standard" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3469,7 +3510,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                     value: config.scene
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2465,
+                    lineNumber: 2508,
                     columnNumber: 11
                 }, this) : null,
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ConfigSection, {
@@ -3493,7 +3534,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                             value: config.resolution_mode
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2481,
+                            lineNumber: 2524,
                             columnNumber: 11
                         }, this),
                         config.resolution_mode === "preset" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3508,7 +3549,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                             value: config.resolution
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2497,
+                            lineNumber: 2540,
                             columnNumber: 13
                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NumberField, {
                             label: "短边像素",
@@ -3520,13 +3561,13 @@ function VideoEnhancementConfig({ displayName, node }) {
                             value: config.resolution_limit
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2512,
+                            lineNumber: 2555,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2480,
+                    lineNumber: 2523,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ConfigSection, {
@@ -3550,7 +3591,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                             value: config.fps === null ? "source" : "custom"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2523,
+                            lineNumber: 2566,
                             columnNumber: 11
                         }, this),
                         config.fps === null ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3558,7 +3599,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                             className: "hidden sm:block"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2540,
+                            lineNumber: 2583,
                             columnNumber: 13
                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NumberField, {
                             label: "目标 FPS",
@@ -3570,7 +3611,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                             value: config.fps
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2542,
+                            lineNumber: 2585,
                             columnNumber: 13
                         }, this),
                         config.bit_depth !== 16 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -3593,7 +3634,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                                     value: config.bitrate_mode
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 2552,
+                                    lineNumber: 2595,
                                     columnNumber: 15
                                 }, this),
                                 config.bitrate_mode === "level" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3608,7 +3649,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                                     value: config.bitrate_level
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 2566,
+                                    lineNumber: 2609,
                                     columnNumber: 17
                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NumberField, {
                                     label: "码率 (kbps)",
@@ -3620,19 +3661,19 @@ function VideoEnhancementConfig({ displayName, node }) {
                                     value: config.bitrate
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                    lineNumber: 2583,
+                                    lineNumber: 2626,
                                     columnNumber: 17
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2551,
+                            lineNumber: 2594,
                             columnNumber: 13
                         }, this) : null
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2522,
+                    lineNumber: 2565,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3648,7 +3689,7 @@ function VideoEnhancementConfig({ displayName, node }) {
                     value: String(config.bit_depth)
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2595,
+                    lineNumber: 2638,
                     columnNumber: 9
                 }, this),
                 config.tool_version === "standard" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3656,14 +3697,14 @@ function VideoEnhancementConfig({ displayName, node }) {
                     children: "标准版固定输出 8-bit；专业版可选择更高色深。"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2610,
+                    lineNumber: 2653,
                     columnNumber: 11
                 }, this) : config.bit_depth === 16 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                     className: "rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[10px] leading-4 text-amber-900",
                     children: "16-bit 为高成本 MOV 输出，仅支持不超过 40 秒的视频，码率由服务自动处理。"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2614,
+                    lineNumber: 2657,
                     columnNumber: 11
                 }, this) : null,
                 highCost.length > 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3674,18 +3715,18 @@ function VideoEnhancementConfig({ displayName, node }) {
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2619,
+                    lineNumber: 2662,
                     columnNumber: 11
                 }, this) : null
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2432,
+            lineNumber: 2475,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 2431,
+        lineNumber: 2474,
         columnNumber: 5
     }, this);
 }
@@ -3714,7 +3755,7 @@ function VideoFaceBlurNodeConfig({ displayName, node }) {
                     value: node.config.mask_mode
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2646,
+                    lineNumber: 2689,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SelectField, {
@@ -3729,18 +3770,18 @@ function VideoFaceBlurNodeConfig({ displayName, node }) {
                     value: node.config.mask_strength
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2657,
+                    lineNumber: 2700,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2645,
+            lineNumber: 2688,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 2644,
+        lineNumber: 2687,
         columnNumber: 5
     }, this);
 }
@@ -3759,7 +3800,7 @@ function ModalityNodeConfig({ displayName, mode, node, runDetail }) {
                 children: "内容标题"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 2714,
+                lineNumber: 2757,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$input$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Input"], {
@@ -3774,7 +3815,7 @@ function ModalityNodeConfig({ displayName, mode, node, runDetail }) {
                 value: node.config.title ?? ""
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 2715,
+                lineNumber: 2758,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3790,7 +3831,7 @@ function ModalityNodeConfig({ displayName, mode, node, runDetail }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2728,
+                            lineNumber: 2771,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3801,18 +3842,18 @@ function ModalityNodeConfig({ displayName, mode, node, runDetail }) {
                                 children: node.config.text || "无对应 item"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 2735,
+                                lineNumber: 2778,
                                 columnNumber: 15
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2731,
+                            lineNumber: 2774,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2727,
+                    lineNumber: 2770,
                     columnNumber: 11
                 }, this) : upstream && node.type === "text" ? projection && [
                     "reused",
@@ -3825,7 +3866,7 @@ function ModalityNodeConfig({ displayName, mode, node, runDetail }) {
                             runDetail: runDetail
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2745,
+                            lineNumber: 2788,
                             columnNumber: 15
                         }, this),
                         node.config.upstream_text_override != null ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -3840,13 +3881,13 @@ function ModalityNodeConfig({ displayName, mode, node, runDetail }) {
                             children: "恢复上游文本"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2747,
+                            lineNumber: 2790,
                             columnNumber: 17
                         }, this) : null
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2744,
+                    lineNumber: 2787,
                     columnNumber: 13
                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ModalityProjectionPreview, {
                     displayName: displayName,
@@ -3855,7 +3896,7 @@ function ModalityNodeConfig({ displayName, mode, node, runDetail }) {
                     runDetail: runDetail
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2764,
+                    lineNumber: 2807,
                     columnNumber: 13
                 }, this) : upstream ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ModalityProjectionPreview, {
                     displayName: displayName,
@@ -3864,14 +3905,14 @@ function ModalityNodeConfig({ displayName, mode, node, runDetail }) {
                     runDetail: runDetail
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2772,
+                    lineNumber: 2815,
                     columnNumber: 11
                 }, this) : node.type === "text" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$prompt$2d$editor$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcPromptEditor"], {
                     node: node,
                     runDetail: runDetail
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2779,
+                    lineNumber: 2822,
                     columnNumber: 11
                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MediaInputConfig, {
                     displayName: displayName,
@@ -3880,18 +3921,18 @@ function ModalityNodeConfig({ displayName, mode, node, runDetail }) {
                     node: node
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2781,
+                    lineNumber: 2824,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 2725,
+                lineNumber: 2768,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 2713,
+        lineNumber: 2756,
         columnNumber: 5
     }, this);
 }
@@ -3907,7 +3948,7 @@ function ModalityProjectionPreview({ displayName, node, projection, runDetail })
             copy: "等待上游结果"
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2806,
+            lineNumber: 2849,
             columnNumber: 12
         }, this);
     }
@@ -3922,7 +3963,7 @@ function ModalityProjectionPreview({ displayName, node, projection, runDetail })
             tone: "error"
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2813,
+            lineNumber: 2856,
             columnNumber: 12
         }, this);
     }
@@ -3934,7 +3975,7 @@ function ModalityProjectionPreview({ displayName, node, projection, runDetail })
                     children: projection.text
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2818,
+                    lineNumber: 2861,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -3948,20 +3989,20 @@ function ModalityProjectionPreview({ displayName, node, projection, runDetail })
                             className: "h-4 w-4"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 2828,
+                            lineNumber: 2871,
                             columnNumber: 11
                         }, this),
                         "复制文本"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 2821,
+                    lineNumber: 2864,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2817,
+            lineNumber: 2860,
             columnNumber: 7
         }, this);
     }
@@ -3970,7 +4011,7 @@ function ModalityProjectionPreview({ displayName, node, projection, runDetail })
             copy: "上游结果不可用，播放和下载已禁用"
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2835,
+            lineNumber: 2878,
             columnNumber: 12
         }, this);
     }
@@ -3983,7 +4024,7 @@ function ModalityProjectionPreview({ displayName, node, projection, runDetail })
         type: node.type
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 2838,
+        lineNumber: 2881,
         columnNumber: 5
     }, this);
 }
@@ -3994,7 +4035,7 @@ function ModalityStatus({ copy, tone = "muted" }) {
         children: copy
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 2857,
+        lineNumber: 2900,
         columnNumber: 5
     }, this);
 }
@@ -4068,7 +4109,7 @@ function MediaInputConfig({ displayName, embedded = false, mode, node }) {
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2961,
+            lineNumber: 3004,
             columnNumber: 7
         }, this);
         return embedded ? content : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ConfigGroup, {
@@ -4076,7 +4117,7 @@ function MediaInputConfig({ displayName, embedded = false, mode, node }) {
             children: content
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 2966,
+            lineNumber: 3009,
             columnNumber: 7
         }, this);
     }
@@ -4127,7 +4168,7 @@ function MediaInputConfig({ displayName, embedded = false, mode, node }) {
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3007,
+                lineNumber: 3050,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$media$2d$asset$2d$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcMediaAssetDialog"], {
@@ -4143,7 +4184,7 @@ function MediaInputConfig({ displayName, embedded = false, mode, node }) {
                     })
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3008,
+                lineNumber: 3051,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -4153,13 +4194,13 @@ function MediaInputConfig({ displayName, embedded = false, mode, node }) {
                         className: "h-4 w-4 animate-spin"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3028,
+                        lineNumber: 3071,
                         columnNumber: 11
                     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$upload$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Upload$3e$__["Upload"], {
                         className: "h-4 w-4"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3030,
+                        lineNumber: 3073,
                         columnNumber: 11
                     }, this),
                     isUploading ? "上传中" : "本地上传",
@@ -4174,13 +4215,13 @@ function MediaInputConfig({ displayName, embedded = false, mode, node }) {
                         type: "file"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3033,
+                        lineNumber: 3076,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3026,
+                lineNumber: 3069,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -4188,7 +4229,7 @@ function MediaInputConfig({ displayName, embedded = false, mode, node }) {
                 children: isLayerDecompositionInput ? "PNG / JPEG；比例 1:16-16:1；总像素 262,144-36,000,000；小于 30 MB" : options.hint
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3048,
+                lineNumber: 3091,
                 columnNumber: 7
             }, this),
             uploadError ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -4196,13 +4237,13 @@ function MediaInputConfig({ displayName, embedded = false, mode, node }) {
                 children: uploadError
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3054,
+                lineNumber: 3097,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3006,
+        lineNumber: 3049,
         columnNumber: 5
     }, this);
     return embedded ? content : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ConfigGroup, {
@@ -4210,7 +4251,7 @@ function MediaInputConfig({ displayName, embedded = false, mode, node }) {
         children: content
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3059,
+        lineNumber: 3102,
         columnNumber: 5
     }, this);
 }
@@ -4239,7 +4280,7 @@ function ConfigGroup({ children, title }) {
                         className: "h-4 w-4 text-primary"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3083,
+                        lineNumber: 3126,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -4247,20 +4288,20 @@ function ConfigGroup({ children, title }) {
                         children: title
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3084,
+                        lineNumber: 3127,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3082,
+                lineNumber: 3125,
                 columnNumber: 7
             }, this),
             children
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3081,
+        lineNumber: 3124,
         columnNumber: 5
     }, this);
 }
@@ -4273,14 +4314,14 @@ function ConfigSection({ children, title }) {
                 children: title
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3100,
+                lineNumber: 3143,
                 columnNumber: 7
             }, this),
             children
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3099,
+        lineNumber: 3142,
         columnNumber: 5
     }, this);
 }
@@ -4299,13 +4340,13 @@ function NumberField({ label, max, min, onChange, value }) {
                 value: value
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3124,
+                lineNumber: 3167,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3122,
+        lineNumber: 3165,
         columnNumber: 5
     }, this);
 }
@@ -4329,19 +4370,19 @@ function SelectField({ disabled = false, label, onChange, options, value }) {
                         children: item.label
                     }, item.value, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3165,
+                        lineNumber: 3208,
                         columnNumber: 13
                     }, this);
                 })
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3153,
+                lineNumber: 3196,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3151,
+        lineNumber: 3194,
         columnNumber: 5
     }, this);
 }
@@ -4357,7 +4398,7 @@ function ResultPanel({ definition, nodeId, runDetail }) {
             title: "暂无结果"
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 3197,
+            lineNumber: 3240,
             columnNumber: 7
         }, this);
     }
@@ -4380,7 +4421,7 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                                 children: sourceName
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3233,
+                                lineNumber: 3276,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Badge"], {
@@ -4388,20 +4429,20 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                                 children: item.status === "reused" ? "复用" : "完成"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3236,
+                                lineNumber: 3279,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3232,
+                        lineNumber: 3275,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ResultExecutionMetadata, {
                         node: item
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3240,
+                        lineNumber: 3283,
                         columnNumber: 11
                     }, this),
                     item.result.kind === "text" && item.result.text ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -4411,7 +4452,7 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                                 children: modalityProjection?.text ?? item.result.text
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3243,
+                                lineNumber: 3286,
                                 columnNumber: 15
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -4425,20 +4466,20 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                                         className: "h-4 w-4"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 3257,
+                                        lineNumber: 3300,
                                         columnNumber: 17
                                     }, this),
                                     "复制文本"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3246,
+                                lineNumber: 3289,
                                 columnNumber: 15
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3242,
+                        lineNumber: 3285,
                         columnNumber: 13
                     }, this) : null,
                     item.result.kind === "assets" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4451,12 +4492,12 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                                 title: sourceName
                             }, asset.asset_id, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3265,
+                                lineNumber: 3308,
                                 columnNumber: 17
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3263,
+                        lineNumber: 3306,
                         columnNumber: 13
                     }, this) : null,
                     item.result.kind === "none" && item.result.metadata?.empty === true ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -4464,7 +4505,7 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                         children: "未识别到字幕"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3278,
+                        lineNumber: 3321,
                         columnNumber: 13
                     }, this) : null,
                     compositeProjection ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4478,14 +4519,14 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                                 title: sourceName
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3285,
+                                lineNumber: 3328,
                                 columnNumber: 17
                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                 className: "text-xs text-muted-foreground",
                                 children: "最终扁平图片暂不可用"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3293,
+                                lineNumber: 3336,
                                 columnNumber: 17
                             }, this),
                             compositeProjection.layerSet ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4503,7 +4544,7 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 3299,
+                                        lineNumber: 3342,
                                         columnNumber: 19
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -4511,19 +4552,19 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                                         children: "已保留新图层集，可连接后续图层画布继续编辑"
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 3303,
+                                        lineNumber: 3346,
                                         columnNumber: 19
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3298,
+                                lineNumber: 3341,
                                 columnNumber: 17
                             }, this) : null
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3283,
+                        lineNumber: 3326,
                         columnNumber: 13
                     }, this) : null,
                     item.result.kind === "unavailable" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -4531,19 +4572,19 @@ function ResultPanel({ definition, nodeId, runDetail }) {
                         children: "历史结果已不可用，资产可能已删除或无权访问"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3311,
+                        lineNumber: 3354,
                         columnNumber: 13
                     }, this) : null
                 ]
             }, item.node_id, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3231,
+                lineNumber: 3274,
                 columnNumber: 11
             }, this);
         })
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3204,
+        lineNumber: 3247,
         columnNumber: 5
     }, this);
 }
@@ -4559,7 +4600,7 @@ function ResultAsset({ asset, definition, nodeId, runDetail, title }) {
             title: resultTitle
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 3351,
+            lineNumber: 3394,
             columnNumber: 7
         }, this);
     }
@@ -4573,7 +4614,7 @@ function ResultAsset({ asset, definition, nodeId, runDetail, title }) {
             type: modalityProjection.modality
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 3363,
+            lineNumber: 3406,
             columnNumber: 7
         }, this);
     }
@@ -4604,14 +4645,14 @@ function ResultAsset({ asset, definition, nodeId, runDetail, title }) {
                     variant: "panel"
                 }, `${runDetail.run.id}:${asset.asset_id}`, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3390,
+                    lineNumber: 3433,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(VideoResultMetadata, {
                     projection: projection
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3408,
+                    lineNumber: 3451,
                     columnNumber: 9
                 }, this),
                 download && resultUrl ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -4627,25 +4668,25 @@ function ResultAsset({ asset, definition, nodeId, runDetail, title }) {
                                 className: "h-4 w-4"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3412,
+                                lineNumber: 3455,
                                 columnNumber: 15
                             }, this),
                             "下载视频"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3411,
+                        lineNumber: 3454,
                         columnNumber: 13
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3410,
+                    lineNumber: 3453,
                     columnNumber: 11
                 }, this) : null
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 3389,
+            lineNumber: 3432,
             columnNumber: 7
         }, this);
     }
@@ -4664,12 +4705,12 @@ function ResultAsset({ asset, definition, nodeId, runDetail, title }) {
                     src: resultUrl
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3432,
+                    lineNumber: 3475,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3424,
+                lineNumber: 3467,
                 columnNumber: 7
             }, this),
             download ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -4685,32 +4726,32 @@ function ResultAsset({ asset, definition, nodeId, runDetail, title }) {
                             className: "h-4 w-4"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 3441,
+                            lineNumber: 3484,
                             columnNumber: 13
                         }, this),
                         "下载图片"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3440,
+                    lineNumber: 3483,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3439,
+                lineNumber: 3482,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3423,
+        lineNumber: 3466,
         columnNumber: 5
     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
         className: "text-xs text-muted-foreground",
         children: "结果资产已不可用，资产可能已删除或无权访问"
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3448,
+        lineNumber: 3491,
         columnNumber: 5
     }, this);
 }
@@ -4737,7 +4778,7 @@ function SubtitleResultAsset({ asset, title }) {
             children: "字幕结果已不可用，预览和下载已禁用"
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 3477,
+            lineNumber: 3520,
             columnNumber: 7
         }, this);
     }
@@ -4751,21 +4792,21 @@ function SubtitleResultAsset({ asset, title }) {
                     children: "正在加载字幕预览"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3486,
+                    lineNumber: 3529,
                     columnNumber: 11
                 }, this) : subtitleQuery.isError ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                     className: "text-xs text-destructive",
                     children: "字幕预览加载失败"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3488,
+                    lineNumber: 3531,
                     columnNumber: 11
                 }, this) : preview.length === 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                     className: "text-xs text-muted-foreground",
                     children: "未识别到字幕"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3490,
+                    lineNumber: 3533,
                     columnNumber: 11
                 }, this) : preview.map((segment)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "grid grid-cols-[112px_1fr] gap-2 text-xs",
@@ -4775,7 +4816,7 @@ function SubtitleResultAsset({ asset, title }) {
                                 children: segment.time
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3494,
+                                lineNumber: 3537,
                                 columnNumber: 15
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -4783,18 +4824,18 @@ function SubtitleResultAsset({ asset, title }) {
                                 children: segment.text
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3497,
+                                lineNumber: 3540,
                                 columnNumber: 15
                             }, this)
                         ]
                     }, segment.key, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3493,
+                        lineNumber: 3536,
                         columnNumber: 13
                     }, this))
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3484,
+                lineNumber: 3527,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4807,7 +4848,7 @@ function SubtitleResultAsset({ asset, title }) {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3505,
+                        lineNumber: 3548,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -4818,13 +4859,13 @@ function SubtitleResultAsset({ asset, title }) {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3506,
+                        lineNumber: 3549,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3504,
+                lineNumber: 3547,
                 columnNumber: 7
             }, this),
             download ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -4840,25 +4881,25 @@ function SubtitleResultAsset({ asset, title }) {
                             className: "h-4 w-4"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 3516,
+                            lineNumber: 3559,
                             columnNumber: 13
                         }, this),
                         "下载字幕"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3515,
+                    lineNumber: 3558,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3514,
+                lineNumber: 3557,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3483,
+        lineNumber: 3526,
         columnNumber: 5
     }, this);
 }
@@ -4904,7 +4945,7 @@ function ModalityAsset({ asset, definition, nodeId, runDetail, title, type }) {
                     variant: "panel"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3581,
+                    lineNumber: 3624,
                     columnNumber: 9
                 }, this),
                 download && resultUrl ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -4920,25 +4961,25 @@ function ModalityAsset({ asset, definition, nodeId, runDetail, title, type }) {
                                 className: "h-4 w-4"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3603,
+                                lineNumber: 3646,
                                 columnNumber: 15
                             }, this),
                             "下载视频"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3602,
+                        lineNumber: 3645,
                         columnNumber: 13
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3601,
+                    lineNumber: 3644,
                     columnNumber: 11
                 }, this) : null
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 3580,
+            lineNumber: 3623,
             columnNumber: 7
         }, this);
     }
@@ -4956,7 +4997,7 @@ function ModalityAsset({ asset, definition, nodeId, runDetail, title, type }) {
                     variant: "panel"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3615,
+                    lineNumber: 3658,
                     columnNumber: 9
                 }, this),
                 download && resultUrl ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -4972,25 +5013,25 @@ function ModalityAsset({ asset, definition, nodeId, runDetail, title, type }) {
                                 className: "h-4 w-4"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3626,
+                                lineNumber: 3669,
                                 columnNumber: 15
                             }, this),
                             "下载音频"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3625,
+                        lineNumber: 3668,
                         columnNumber: 13
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3624,
+                    lineNumber: 3667,
                     columnNumber: 11
                 }, this) : null
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 3614,
+            lineNumber: 3657,
             columnNumber: 7
         }, this);
     }
@@ -5010,12 +5051,12 @@ function ModalityAsset({ asset, definition, nodeId, runDetail, title, type }) {
                     src: resultUrl
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3647,
+                    lineNumber: 3690,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3638,
+                lineNumber: 3681,
                 columnNumber: 7
             }, this),
             download ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -5031,31 +5072,31 @@ function ModalityAsset({ asset, definition, nodeId, runDetail, title, type }) {
                             className: "h-4 w-4"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                            lineNumber: 3656,
+                            lineNumber: 3699,
                             columnNumber: 13
                         }, this),
                         "下载图片"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 3655,
+                    lineNumber: 3698,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3654,
+                lineNumber: 3697,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3637,
+        lineNumber: 3680,
         columnNumber: 5
     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ModalityStatus, {
         copy: "图片结果已不可用，预览和下载已禁用"
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3663,
+        lineNumber: 3706,
         columnNumber: 5
     }, this);
 }
@@ -5139,7 +5180,7 @@ function VideoResultMetadata({ projection }) {
                         children: label
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3737,
+                        lineNumber: 3780,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
@@ -5147,18 +5188,18 @@ function VideoResultMetadata({ projection }) {
                         children: value
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3738,
+                        lineNumber: 3781,
                         columnNumber: 11
                     }, this)
                 ]
             }, label, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3736,
+                lineNumber: 3779,
                 columnNumber: 9
             }, this))
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3731,
+        lineNumber: 3774,
         columnNumber: 5
     }, this);
 }
@@ -5175,42 +5216,42 @@ function ResultExecutionMetadata({ node }) {
                 children: "状态"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3760,
+                lineNumber: 3803,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                 children: nodeStatusLabel(node.status)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3761,
+                lineNumber: 3804,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dt", {
                 children: "耗时"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3762,
+                lineNumber: 3805,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                 children: attempt ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$run$2d$log$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatAigcDuration"])(attempt.started_at, attempt.finished_at, active) : "-"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3763,
+                lineNumber: 3806,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dt", {
                 children: "Attempt"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3772,
+                lineNumber: 3815,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                 children: attempt ? `#${attempt.attempt}` : "-"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3773,
+                lineNumber: 3816,
                 columnNumber: 7
             }, this),
             cacheSource ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -5219,7 +5260,7 @@ function ResultExecutionMetadata({ node }) {
                         children: "缓存复用"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3776,
+                        lineNumber: 3819,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
@@ -5227,13 +5268,13 @@ function ResultExecutionMetadata({ node }) {
                         children: cacheSource
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3777,
+                        lineNumber: 3820,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3775,
+                lineNumber: 3818,
                 columnNumber: 9
             }, this) : null,
             providerTrace?.taskId ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -5242,7 +5283,7 @@ function ResultExecutionMetadata({ node }) {
                         children: "供应商任务"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3782,
+                        lineNumber: 3825,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
@@ -5250,13 +5291,13 @@ function ResultExecutionMetadata({ node }) {
                         children: providerTrace.taskId
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3783,
+                        lineNumber: 3826,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3781,
+                lineNumber: 3824,
                 columnNumber: 9
             }, this) : null,
             providerTrace?.requestId ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -5265,7 +5306,7 @@ function ResultExecutionMetadata({ node }) {
                         children: "Request ID"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3788,
+                        lineNumber: 3831,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
@@ -5273,19 +5314,19 @@ function ResultExecutionMetadata({ node }) {
                         children: providerTrace.requestId
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3789,
+                        lineNumber: 3832,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3787,
+                lineNumber: 3830,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3756,
+        lineNumber: 3799,
         columnNumber: 5
     }, this);
 }
@@ -5296,7 +5337,7 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
             title: "暂无运行"
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-            lineNumber: 3815,
+            lineNumber: 3858,
             columnNumber: 7
         }, this);
     }
@@ -5324,18 +5365,18 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                 ]
                             }, run.id, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3832,
+                                lineNumber: 3875,
                                 columnNumber: 15
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3826,
+                        lineNumber: 3869,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3824,
+                lineNumber: 3867,
                 columnNumber: 9
             }, this) : null,
             !runDetail && runDetailState ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -5344,7 +5385,7 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                 children: runDetailState === "error" ? "运行详情加载失败，正在重试。" : "正在加载运行详情…"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3841,
+                lineNumber: 3884,
                 columnNumber: 9
             }, this) : null,
             runDetail ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -5360,7 +5401,7 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3850,
+                                lineNumber: 3893,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Badge"], {
@@ -5368,20 +5409,20 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                 children: runStatusLabel(runDetail.run.status)
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3853,
+                                lineNumber: 3896,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3849,
+                        lineNumber: 3892,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(RunTimingSummary, {
                         run: runDetail.run
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3857,
+                        lineNumber: 3900,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(LogErrorDetails, {
@@ -5389,7 +5430,7 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                         label: "Run 失败原因"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3858,
+                        lineNumber: 3901,
                         columnNumber: 11
                     }, this),
                     (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$queries$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["isAigcRunActive"])(runDetail) ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -5403,14 +5444,14 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                 className: "h-4 w-4"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3870,
+                                lineNumber: 3913,
                                 columnNumber: 15
                             }, this),
                             "取消运行"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3863,
+                        lineNumber: 3906,
                         columnNumber: 13
                     }, this) : null,
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5436,7 +5477,7 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                                         children: node.node_id
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                        lineNumber: 3892,
+                                                        lineNumber: 3935,
                                                         columnNumber: 25
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -5447,13 +5488,13 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                        lineNumber: 3895,
+                                                        lineNumber: 3938,
                                                         columnNumber: 25
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3891,
+                                                lineNumber: 3934,
                                                 columnNumber: 23
                                             }, this),
                                             [
@@ -5471,30 +5512,30 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                                     className: "h-4 w-4"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                    lineNumber: 3911,
+                                                    lineNumber: 3954,
                                                     columnNumber: 27
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3903,
+                                                lineNumber: 3946,
                                                 columnNumber: 25
                                             }, this) : node.status === "succeeded" || node.status === "reused" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$circle$2d$check$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__CheckCircle2$3e$__["CheckCircle2"], {
                                                 className: "h-4 w-4 text-success"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3915,
+                                                lineNumber: 3958,
                                                 columnNumber: 25
                                             }, this) : node.status === "running" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$loader$2d$circle$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__LoaderCircle$3e$__["LoaderCircle"], {
                                                 className: "h-4 w-4 animate-spin text-primary"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3917,
+                                                lineNumber: 3960,
                                                 columnNumber: 25
                                             }, this) : null
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 3890,
+                                        lineNumber: 3933,
                                         columnNumber: 21
                                     }, this),
                                     attempt ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dl", {
@@ -5504,48 +5545,48 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                                 children: "开始"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3922,
+                                                lineNumber: 3965,
                                                 columnNumber: 25
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                                                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$run$2d$log$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatAigcLogTime"])(attempt.started_at)
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3923,
+                                                lineNumber: 3966,
                                                 columnNumber: 25
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dt", {
                                                 children: "结束"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3924,
+                                                lineNumber: 3967,
                                                 columnNumber: 25
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                                                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$run$2d$log$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatAigcEndTime"])(attempt.finished_at, attemptActive)
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3925,
+                                                lineNumber: 3968,
                                                 columnNumber: 25
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dt", {
                                                 children: "耗时"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3931,
+                                                lineNumber: 3974,
                                                 columnNumber: 25
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                                                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$run$2d$log$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatAigcDuration"])(attempt.started_at, attempt.finished_at, attemptActive)
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3932,
+                                                lineNumber: 3975,
                                                 columnNumber: 25
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 3921,
+                                        lineNumber: 3964,
                                         columnNumber: 23
                                     }, this) : null,
                                     cacheSource ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -5558,13 +5599,13 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                                 children: cacheSource
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3944,
+                                                lineNumber: 3987,
                                                 columnNumber: 25
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 3942,
+                                        lineNumber: 3985,
                                         columnNumber: 23
                                     }, this) : null,
                                     providerTrace ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dl", {
@@ -5577,7 +5618,7 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                                         children: "供应商任务 ID"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                        lineNumber: 3956,
+                                                        lineNumber: 3999,
                                                         columnNumber: 29
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
@@ -5585,13 +5626,13 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                                         children: providerTrace.taskId
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                        lineNumber: 3957,
+                                                        lineNumber: 4000,
                                                         columnNumber: 29
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3955,
+                                                lineNumber: 3998,
                                                 columnNumber: 27
                                             }, this) : null,
                                             providerTrace.requestId ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -5600,7 +5641,7 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                                         children: "供应商 Request ID"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                        lineNumber: 3964,
+                                                        lineNumber: 4007,
                                                         columnNumber: 29
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
@@ -5608,19 +5649,19 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                                         children: providerTrace.requestId
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                        lineNumber: 3965,
+                                                        lineNumber: 4008,
                                                         columnNumber: 29
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                                lineNumber: 3963,
+                                                lineNumber: 4006,
                                                 columnNumber: 27
                                             }, this) : null
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 3950,
+                                        lineNumber: 3993,
                                         columnNumber: 23
                                     }, this) : null,
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(LogErrorDetails, {
@@ -5628,31 +5669,31 @@ function RunPanel({ onCancel, onRetry, onSelectRun, runDetail, runDetailState, r
                                         label: `节点失败原因：${node.node_id}`
                                     }, void 0, false, {
                                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                        lineNumber: 3972,
+                                        lineNumber: 4015,
                                         columnNumber: 21
                                     }, this)
                                 ]
                             }, node.node_id, true, {
                                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                                lineNumber: 3884,
+                                lineNumber: 3927,
                                 columnNumber: 19
                             }, this);
                         })
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                        lineNumber: 3874,
+                        lineNumber: 3917,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3848,
+                lineNumber: 3891,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3822,
+        lineNumber: 3865,
         columnNumber: 5
     }, this);
 }
@@ -5667,14 +5708,14 @@ function RunTimingSummary({ run }) {
                 children: "开始时间"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3993,
+                lineNumber: 4036,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$run$2d$log$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatAigcLogTime"])(run.started_at)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3994,
+                lineNumber: 4037,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dt", {
@@ -5682,14 +5723,14 @@ function RunTimingSummary({ run }) {
                 children: "结束时间"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3995,
+                lineNumber: 4038,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$run$2d$log$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatAigcEndTime"])(run.finished_at, active)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3996,
+                lineNumber: 4039,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dt", {
@@ -5697,20 +5738,20 @@ function RunTimingSummary({ run }) {
                 children: "耗时"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3997,
+                lineNumber: 4040,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("dd", {
                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$run$2d$log$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatAigcDuration"])(run.started_at, run.finished_at, active)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 3998,
+                lineNumber: 4041,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 3989,
+        lineNumber: 4032,
         columnNumber: 5
     }, this);
 }
@@ -5731,7 +5772,7 @@ function LogErrorDetails({ error, label }) {
                 children: message
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 4023,
+                lineNumber: 4066,
                 columnNumber: 7
             }, this),
             metadata.length > 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -5739,13 +5780,13 @@ function LogErrorDetails({ error, label }) {
                 children: metadata.join(" · ")
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 4025,
+                lineNumber: 4068,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 4019,
+        lineNumber: 4062,
         columnNumber: 5
     }, this);
 }
@@ -5802,7 +5843,7 @@ function InspectorEmpty() {
         children: "选择节点后编辑配置"
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 4098,
+        lineNumber: 4141,
         columnNumber: 5
     }, this);
 }
@@ -5815,7 +5856,7 @@ function InspectorPlaceholder({ copy, title }) {
                 children: title
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 4107,
+                lineNumber: 4150,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -5823,13 +5864,13 @@ function InspectorPlaceholder({ copy, title }) {
                 children: copy
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                lineNumber: 4108,
+                lineNumber: 4151,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 4106,
+        lineNumber: 4149,
         columnNumber: 5
     }, this);
 }
@@ -6058,7 +6099,7 @@ function ToolbarStarMap() {
                     }
                 }, `line-${index}`, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 4336,
+                    lineNumber: 4379,
                     columnNumber: 9
                 }, this)),
             pointPositions.map((point, index)=>{
@@ -6076,14 +6117,14 @@ function ToolbarStarMap() {
                     }
                 }, `${modality}-${index}`, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-                    lineNumber: 4351,
+                    lineNumber: 4394,
                     columnNumber: 11
                 }, this);
             })
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-editor.tsx",
-        lineNumber: 4330,
+        lineNumber: 4373,
         columnNumber: 5
     }, this);
 }
@@ -6213,6 +6254,7 @@ function AigcFlowNodeComponent({ data, id, selected }) {
     const managedSource = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$json$2d$parser$2d$ui$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["managedTextSource"])(data.node, definition.nodes);
     const resolvedDisplayName = data.node.custom_name?.trim() || managedSource?.itemLabel || displayName;
     const renaming = renamingNodeId === id;
+    const showsCanvasTitle = registration?.category !== "modality";
     const videoProjection = modality === "video" && modalityProjection && runDetail ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$result$2d$projection$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["projectAigcVideoResult"])(runDetail.run.definition_snapshot, data.node.id, modalityProjection?.asset ? [
         modalityProjection.asset
     ] : []) : null;
@@ -6238,6 +6280,8 @@ function AigcFlowNodeComponent({ data, id, selected }) {
     const multiTrackDownload = multiTrackProjection ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$download$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getAigcVideoDownload"])(multiTrackProjection.asset, multiTrackProjection.title, definition) : null;
     const outputDownload = generatedMediaDownload ?? modalityDownload ?? multiTrackDownload;
     const outputTitle = generatedMediaDownload ? resolvedDisplayName : modality ? modalityTitle : multiTrackProjection?.title ?? "";
+    const hasNodeActions = Boolean(outputDownload);
+    const showsTitleRow = showsCanvasTitle || renaming;
     const displayAsset = modalityProjection?.asset;
     const preciseEditAssetId = data.node.type !== "image" ? null : currentModalityMode === "upstream" ? displayAsset?.available ? displayAsset.asset_id : null : inputAsset?.id ?? null;
     const preciseEditUrl = data.node.type !== "image" ? null : currentModalityMode === "upstream" ? displayAsset?.available ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$asset$2d$display$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getAssetContentUrlById"])(displayAsset.asset_id) : null : inputAsset ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$asset$2d$display$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getSafePreviewUrl"])(inputAsset) : null;
@@ -6307,292 +6351,298 @@ function AigcFlowNodeComponent({ data, id, selected }) {
         runDetail?.run.status
     ]);
     // #endregion
-    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card shadow-md", selected && "ring-2 ring-primary/20"),
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
         children: [
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$react$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$locals$3e$__["NodeResizer"], {
-                color: "hsl(var(--primary))",
-                isVisible: selected,
-                minHeight: minimumSize.height,
-                minWidth: minimumSize.width,
-                onResizeEnd: (_, size)=>resizeNode(id, {
-                        height: size.height,
-                        width: size.width
-                    })
-            }, void 0, false, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 432,
-                columnNumber: 7
-            }, this),
-            renderedInputPorts.map((port, index)=>{
-                const modalityColors = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$modality$2d$colors$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getAigcModalityColors"])(port.type);
-                const count = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$video$2d$generation$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["videoInputCount"])(edges, id, port.id);
-                const limit = data.node.type === "video_generation" ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$video$2d$generation$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["videoInputLimit"])(data.node, port) : seedreamNode ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$seedream$2d$image$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["seedreamImageInputLimit"])(seedreamNode, port) : port.max_connections;
-                const inactive = data.node.type === "video_generation" && !(0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$video$2d$generation$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["isVideoPortActive"])(port, data.node.config.generation_mode) || Boolean(seedreamNode && !(0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$seedream$2d$image$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["isSeedreamImageInputActive"])(seedreamNode, port.id, edges));
-                const full = imageInputFull && port.id === imageInputPort?.id || count >= limit;
-                const stateText = inactive ? "，与当前模式不兼容" : full ? data.node.type === "image_to_image" && port.type === "image_asset" ? `，已达到 ${limit} 张上限` : `，已达到 ${limit} 个连接上限` : "";
-                return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$react$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$locals$3e$__["Handle"], {
-                    "aria-label": `${port.label}输入${stateText}`,
-                    className: "!h-2.5 !w-2.5 !border-2 !border-card",
-                    id: port.id,
-                    isConnectable: !inactive && !full,
-                    position: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$system$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Position"].Left,
-                    style: {
-                        backgroundColor: modalityColors.handleColor,
-                        opacity: inactive ? 0.4 : 1,
-                        top: `${(index + 1) / (renderedInputPorts.length + 1) * 100}%`
-                    },
-                    title: inactive ? `${port.label}输入与当前模式不兼容，请断开连线` : full ? data.node.type === "image_to_image" && port.type === "image_asset" ? `${port.label}输入已满，最多支持 ${limit} 张参考图` : `${port.label}输入已满，最多支持 ${limit} 个连接` : `${port.label}输入`,
-                    type: "target"
-                }, port.id, false, {
-                    fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                    lineNumber: 468,
-                    columnNumber: 11
-                }, this);
-            }),
-            renderedOutputPorts.map((port, index)=>{
-                const inactive = Boolean(seedreamNode && !(0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$seedream$2d$image$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["isSeedreamImageOutputActive"])(seedreamNode, port.id, edges));
-                const stateText = inactive ? "，与当前模式或编辑目标不兼容" : "";
-                return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$react$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$locals$3e$__["Handle"], {
-                    "aria-label": `${port.label}输出${port.system_only ? "，仅系统可连接" : stateText}`,
-                    className: "!h-2.5 !w-2.5 !border-2 !border-card",
-                    id: port.id,
-                    isConnectable: !inactive && !port.system_only,
-                    position: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$system$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Position"].Right,
-                    style: {
-                        backgroundColor: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$modality$2d$colors$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getAigcModalityColors"])(port.type).handleColor,
-                        opacity: inactive ? 0.4 : 1,
-                        top: `${(index + 1) / (renderedOutputPorts.length + 1) * 100}%`
-                    },
-                    title: port.system_only ? `${port.label}输出由系统自动管理` : inactive ? `${port.label}输出与当前模式或编辑目标不兼容，请断开连线` : `${port.label}输出`,
-                    type: "source"
-                }, port.id, false, {
-                    fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                    lineNumber: 501,
-                    columnNumber: 11
-                }, this);
-            }),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "group/title flex h-7 shrink-0 items-center justify-between px-2.5",
-                "data-testid": "aigc-node-title-row",
+                "aria-label": resolvedDisplayName,
+                className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card shadow-md", selected && "ring-2 ring-primary/20"),
+                role: "group",
                 children: [
-                    renaming ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(InlineNodeNameInput, {
-                        initialValue: resolvedDisplayName,
-                        onCancel: ()=>setRenamingNodeId(null),
-                        onSave: (value)=>{
-                            setNodeCustomName(id, value);
-                            setRenamingNodeId(null);
-                        }
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$react$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$locals$3e$__["NodeResizer"], {
+                        color: "hsl(var(--primary))",
+                        isVisible: selected,
+                        minHeight: minimumSize.height,
+                        minWidth: minimumSize.width,
+                        onResizeEnd: (_, size)=>resizeNode(id, {
+                                height: size.height,
+                                width: size.width
+                            })
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 530,
-                        columnNumber: 11
-                    }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                        className: "min-w-0 truncate text-[11px] font-medium text-foreground",
-                        "data-testid": "aigc-node-title",
-                        children: resolvedDisplayName
-                    }, void 0, false, {
-                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 539,
-                        columnNumber: 11
+                        lineNumber: 438,
+                        columnNumber: 7
                     }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "nodrag flex shrink-0 items-center gap-0.5",
+                    renderedInputPorts.map((port, index)=>{
+                        const modalityColors = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$modality$2d$colors$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getAigcModalityColors"])(port.type);
+                        const count = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$video$2d$generation$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["videoInputCount"])(edges, id, port.id);
+                        const limit = data.node.type === "video_generation" ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$video$2d$generation$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["videoInputLimit"])(data.node, port) : seedreamNode ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$seedream$2d$image$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["seedreamImageInputLimit"])(seedreamNode, port) : port.max_connections;
+                        const inactive = data.node.type === "video_generation" && !(0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$video$2d$generation$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["isVideoPortActive"])(port, data.node.config.generation_mode) || Boolean(seedreamNode && !(0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$seedream$2d$image$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["isSeedreamImageInputActive"])(seedreamNode, port.id, edges));
+                        const full = imageInputFull && port.id === imageInputPort?.id || count >= limit;
+                        const stateText = inactive ? "，与当前模式不兼容" : full ? data.node.type === "image_to_image" && port.type === "image_asset" ? `，已达到 ${limit} 张上限` : `，已达到 ${limit} 个连接上限` : "";
+                        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$react$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$locals$3e$__["Handle"], {
+                            "aria-label": `${port.label}输入${stateText}`,
+                            className: "!h-2.5 !w-2.5 !border-2 !border-card",
+                            id: port.id,
+                            isConnectable: !inactive && !full,
+                            position: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$system$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Position"].Left,
+                            style: {
+                                backgroundColor: modalityColors.handleColor,
+                                opacity: inactive ? 0.4 : 1,
+                                top: `${(index + 1) / (renderedInputPorts.length + 1) * 100}%`
+                            },
+                            title: inactive ? `${port.label}输入与当前模式不兼容，请断开连线` : full ? data.node.type === "image_to_image" && port.type === "image_asset" ? `${port.label}输入已满，最多支持 ${limit} 张参考图` : `${port.label}输入已满，最多支持 ${limit} 个连接` : `${port.label}输入`,
+                            type: "target"
+                        }, port.id, false, {
+                            fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                            lineNumber: 474,
+                            columnNumber: 11
+                        }, this);
+                    }),
+                    renderedOutputPorts.map((port, index)=>{
+                        const inactive = Boolean(seedreamNode && !(0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$seedream$2d$image$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["isSeedreamImageOutputActive"])(seedreamNode, port.id, edges));
+                        const stateText = inactive ? "，与当前模式或编辑目标不兼容" : "";
+                        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$react$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$locals$3e$__["Handle"], {
+                            "aria-label": `${port.label}输出${port.system_only ? "，仅系统可连接" : stateText}`,
+                            className: "!h-2.5 !w-2.5 !border-2 !border-card",
+                            id: port.id,
+                            isConnectable: !inactive && !port.system_only,
+                            position: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$xyflow$2f$system$2f$dist$2f$esm$2f$index$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Position"].Right,
+                            style: {
+                                backgroundColor: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$modality$2d$colors$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getAigcModalityColors"])(port.type).handleColor,
+                                opacity: inactive ? 0.4 : 1,
+                                top: `${(index + 1) / (renderedOutputPorts.length + 1) * 100}%`
+                            },
+                            title: port.system_only ? `${port.label}输出由系统自动管理` : inactive ? `${port.label}输出与当前模式或编辑目标不兼容，请断开连线` : `${port.label}输出`,
+                            type: "source"
+                        }, port.id, false, {
+                            fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                            lineNumber: 507,
+                            columnNumber: 11
+                        }, this);
+                    }),
+                    showsTitleRow ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "group/title flex h-7 shrink-0 items-center justify-between px-2.5",
+                        "data-testid": "aigc-node-title-row",
                         children: [
-                            outputDownload ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100",
-                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
-                                    "aria-label": `下载${downloadKindLabel(data.node)}：${outputTitle}`,
-                                    className: "nodrag grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-card hover:text-foreground",
-                                    download: outputDownload.filename,
-                                    href: outputDownload.url,
-                                    onClick: (event)=>event.stopPropagation(),
-                                    title: `下载${downloadKindLabel(data.node)}`,
-                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$download$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Download$3e$__["Download"], {
-                                        className: "h-3.5 w-3.5"
-                                    }, void 0, false, {
-                                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                        lineNumber: 557,
-                                        columnNumber: 17
-                                    }, this)
-                                }, void 0, false, {
-                                    fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                    lineNumber: 549,
-                                    columnNumber: 15
-                                }, this)
+                            renaming ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(InlineNodeNameInput, {
+                                initialValue: resolvedDisplayName,
+                                onCancel: ()=>setRenamingNodeId(null),
+                                onSave: (value)=>{
+                                    setNodeCustomName(id, value);
+                                    setRenamingNodeId(null);
+                                }
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                lineNumber: 548,
+                                lineNumber: 537,
                                 columnNumber: 13
-                            }, this) : null,
-                            data.node.type === "image" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$precise$2d$edit$2d$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcPreciseEditDialog"], {
-                                assetId: preciseEditAssetId,
-                                assetName: preciseEditName,
-                                bboxState: imageBboxBinding?.state ?? "none",
-                                node: data.node,
-                                sourceMode: currentModalityMode,
-                                url: preciseEditUrl
+                            }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                className: "min-w-0 truncate text-[11px] font-medium text-foreground",
+                                "data-testid": "aigc-node-title",
+                                children: resolvedDisplayName
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                lineNumber: 562,
+                                lineNumber: 546,
+                                columnNumber: 13
+                            }, this),
+                            hasNodeActions ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NodeActions, {
+                                outputDownload: outputDownload,
+                                outputTitle: outputTitle,
+                                type: data.node,
+                                visible: renaming && !showsCanvasTitle
+                            }, void 0, false, {
+                                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                                lineNumber: 554,
                                 columnNumber: 13
                             }, this) : null
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 546,
+                        lineNumber: 532,
+                        columnNumber: 9
+                    }, this) : hasNodeActions ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NodeActions, {
+                        compact: true,
+                        outputDownload: outputDownload,
+                        outputTitle: outputTitle,
+                        type: data.node,
+                        visible: true
+                    }, void 0, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 563,
+                        columnNumber: 9
+                    }, this) : null,
+                    modality === "text" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ModalityTextBody, {
+                        displayName: modalityTitle,
+                        managedSource: managedSource,
+                        mode: modalityMode,
+                        projection: modalityProjection,
+                        text: data.node.config.text ?? ""
+                    }, void 0, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 572,
+                        columnNumber: 9
+                    }, this) : modality === "video" && modalityProjection ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$video$2d$player$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcVideoPlayer"], {
+                        audioState: videoProjection?.audioState,
+                        bitDepth: videoProjection?.bitDepth,
+                        fps: videoProjection?.fps,
+                        initialMetadata: {
+                            duration: resultMetadataNumber(displayAsset, "duration_seconds") ?? videoProjection?.duration ?? null,
+                            height: resultMetadataNumber(displayAsset, "height"),
+                            width: resultMetadataNumber(displayAsset, "width")
+                        },
+                        mimeType: displayAsset?.mime_type ?? null,
+                        name: modalityTitle,
+                        resolutionLabel: videoProjection?.resolution,
+                        toolVersion: videoProjection?.toolVersion,
+                        unavailableText: modalityStateText(modalityProjection, "video"),
+                        url: displayAsset?.available ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$asset$2d$display$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getSafeAssetContentUrl"])(displayAsset.download_url) : null
+                    }, `${runDetail?.run.id ?? "none"}:${displayAsset?.asset_id ?? "waiting"}`, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 580,
+                        columnNumber: 9
+                    }, this) : modality === "audio" && modalityProjection ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$audio$2d$player$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcAudioPlayer"], {
+                        duration: resultMetadataNumber(displayAsset, "duration_seconds"),
+                        mimeType: displayAsset?.mime_type ?? null,
+                        name: modalityTitle,
+                        unavailableText: modalityStateText(modalityProjection, "audio"),
+                        url: displayAsset?.available ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$asset$2d$display$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getSafeAssetContentUrl"])(displayAsset.download_url) : null
+                    }, `${runDetail?.run.id ?? "none"}:${displayAsset?.asset_id ?? "waiting"}`, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 605,
+                        columnNumber: 9
+                    }, this) : data.node.type === "video" || data.node.type === "audio" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NodeInputMedia, {
+                        asset: inputAsset,
+                        kind: data.node.type,
+                        loading: inputAssetQuery.isPending,
+                        referenced: Boolean(inputAssetId)
+                    }, `${data.node.type}:${inputAssetId ?? "empty"}:${inputAsset?.updated_at ?? "loading"}`, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 618,
+                        columnNumber: 9
+                    }, this) : media ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NodeImageMedia, {
+                        alt: media.alt,
+                        emptyText: media.emptyText,
+                        hasBbox: data.node.type === "image" && imageBboxBinding?.state === "valid",
+                        url: media.url
+                    }, void 0, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 626,
+                        columnNumber: 9
+                    }, this) : data.node.type === "layer_canvas" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(LayerCanvasNodeBody, {
+                        edges: edges,
+                        node: data.node,
+                        runDetail: layerCanvasRunDetail
+                    }, void 0, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 636,
+                        columnNumber: 9
+                    }, this) : data.node.type === "layer_composite" && layerCompositeProjection ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(LayerCompositeNodeBody, {
+                        nodeId: data.node.id,
+                        projection: layerCompositeProjection,
+                        status: runNode?.status ?? null
+                    }, void 0, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 642,
+                        columnNumber: 9
+                    }, this) : data.node.type === "multi_track_edit" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MultiTrackEditNodeBody, {
+                        node: data.node,
+                        projection: multiTrackProjection,
+                        status: runNode?.status ?? null
+                    }, void 0, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 648,
+                        columnNumber: 9
+                    }, this) : data.node.type === "json_parser" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(JsonParserNodeBody, {
+                        node: data.node,
+                        runNode: runNode
+                    }, void 0, false, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 654,
+                        columnNumber: 9
+                    }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "nodrag min-h-0 flex-1 overflow-hidden p-3",
+                        children: [
+                            seedreamNode && imageInputPort && (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$seedream$2d$image$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["seedreamImageOperation"])(seedreamNode) === "image_to_image" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                className: "mb-1 text-xs font-medium text-foreground",
+                                children: [
+                                    "参考图 ",
+                                    referenceImageCount,
+                                    "/",
+                                    imageInputPort.max_connections
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                                lineNumber: 663,
+                                columnNumber: 13
+                            }, this) : null,
+                            data.node.type === "video_generation" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(VideoGenerationSummary, {
+                                edges: edges,
+                                node: data.node
+                            }, void 0, false, {
+                                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                                lineNumber: 668,
+                                columnNumber: 13
+                            }, this) : null,
+                            data.node.type === "video_enhancement" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(VideoEnhancementCostBadges, {
+                                node: data.node
+                            }, void 0, false, {
+                                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                                lineNumber: 674,
+                                columnNumber: 13
+                            }, this) : null,
+                            llmImageInput ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(LlmImageInputSummary, {
+                                input: llmImageInput
+                            }, void 0, false, {
+                                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                                lineNumber: 677,
+                                columnNumber: 13
+                            }, this) : null,
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                className: "line-clamp-3 text-xs leading-5 text-muted-foreground",
+                                children: runNode?.result.metadata?.empty === true ? "未识别到字幕" : nodeSummary(data.node)
+                            }, void 0, false, {
+                                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                                lineNumber: 679,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                        lineNumber: 659,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 525,
+                lineNumber: 430,
                 columnNumber: 7
             }, this),
-            modality === "text" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ModalityTextBody, {
-                displayName: modalityTitle,
-                managedSource: managedSource,
-                mode: modalityMode,
-                projection: modalityProjection,
-                text: data.node.config.text ?? ""
+            data.node.type === "image" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "nodrag absolute right-0 top-0 z-10 grid h-[12px] w-[12px] -translate-y-[calc(100%+0.375rem)] place-items-center rounded-full border border-border bg-card shadow-md",
+                "data-testid": "aigc-image-node-actions",
+                onClick: (event)=>event.stopPropagation(),
+                onPointerDown: (event)=>event.stopPropagation(),
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$precise$2d$edit$2d$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcPreciseEditDialog"], {
+                    assetId: preciseEditAssetId,
+                    assetName: preciseEditName,
+                    bboxState: imageBboxBinding?.state ?? "none",
+                    compactTrigger: true,
+                    node: data.node,
+                    sourceMode: currentModalityMode,
+                    url: preciseEditUrl
+                }, void 0, false, {
+                    fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                    lineNumber: 694,
+                    columnNumber: 11
+                }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 574,
+                lineNumber: 688,
                 columnNumber: 9
-            }, this) : modality === "video" && modalityProjection ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$video$2d$player$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcVideoPlayer"], {
-                audioState: videoProjection?.audioState,
-                bitDepth: videoProjection?.bitDepth,
-                fps: videoProjection?.fps,
-                initialMetadata: {
-                    duration: resultMetadataNumber(displayAsset, "duration_seconds") ?? videoProjection?.duration ?? null,
-                    height: resultMetadataNumber(displayAsset, "height"),
-                    width: resultMetadataNumber(displayAsset, "width")
-                },
-                mimeType: displayAsset?.mime_type ?? null,
-                name: modalityTitle,
-                resolutionLabel: videoProjection?.resolution,
-                toolVersion: videoProjection?.toolVersion,
-                unavailableText: modalityStateText(modalityProjection, "video"),
-                url: displayAsset?.available ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$asset$2d$display$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getSafeAssetContentUrl"])(displayAsset.download_url) : null
-            }, `${runDetail?.run.id ?? "none"}:${displayAsset?.asset_id ?? "waiting"}`, false, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 582,
-                columnNumber: 9
-            }, this) : modality === "audio" && modalityProjection ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$aigc$2d$audio$2d$player$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["AigcAudioPlayer"], {
-                duration: resultMetadataNumber(displayAsset, "duration_seconds"),
-                mimeType: displayAsset?.mime_type ?? null,
-                name: modalityTitle,
-                unavailableText: modalityStateText(modalityProjection, "audio"),
-                url: displayAsset?.available ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$asset$2d$display$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getSafeAssetContentUrl"])(displayAsset.download_url) : null
-            }, `${runDetail?.run.id ?? "none"}:${displayAsset?.asset_id ?? "waiting"}`, false, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 607,
-                columnNumber: 9
-            }, this) : data.node.type === "video" || data.node.type === "audio" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NodeInputMedia, {
-                asset: inputAsset,
-                kind: data.node.type,
-                loading: inputAssetQuery.isPending,
-                referenced: Boolean(inputAssetId)
-            }, `${data.node.type}:${inputAssetId ?? "empty"}:${inputAsset?.updated_at ?? "loading"}`, false, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 620,
-                columnNumber: 9
-            }, this) : media ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(NodeImageMedia, {
-                alt: media.alt,
-                emptyText: media.emptyText,
-                hasBbox: data.node.type === "image" && imageBboxBinding?.state === "valid",
-                url: media.url
-            }, void 0, false, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 628,
-                columnNumber: 9
-            }, this) : data.node.type === "layer_canvas" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(LayerCanvasNodeBody, {
-                edges: edges,
-                node: data.node,
-                runDetail: layerCanvasRunDetail
-            }, void 0, false, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 638,
-                columnNumber: 9
-            }, this) : data.node.type === "layer_composite" && layerCompositeProjection ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(LayerCompositeNodeBody, {
-                nodeId: data.node.id,
-                projection: layerCompositeProjection,
-                status: runNode?.status ?? null
-            }, void 0, false, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 644,
-                columnNumber: 9
-            }, this) : data.node.type === "multi_track_edit" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MultiTrackEditNodeBody, {
-                node: data.node,
-                projection: multiTrackProjection,
-                status: runNode?.status ?? null
-            }, void 0, false, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 650,
-                columnNumber: 9
-            }, this) : data.node.type === "json_parser" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(JsonParserNodeBody, {
-                node: data.node,
-                runNode: runNode
-            }, void 0, false, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 656,
-                columnNumber: 9
-            }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "nodrag min-h-0 flex-1 overflow-hidden p-3",
-                children: [
-                    seedreamNode && imageInputPort && (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$seedream$2d$image$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["seedreamImageOperation"])(seedreamNode) === "image_to_image" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                        className: "mb-1 text-xs font-medium text-foreground",
-                        children: [
-                            "参考图 ",
-                            referenceImageCount,
-                            "/",
-                            imageInputPort.max_connections
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 665,
-                        columnNumber: 13
-                    }, this) : null,
-                    data.node.type === "video_generation" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(VideoGenerationSummary, {
-                        edges: edges,
-                        node: data.node
-                    }, void 0, false, {
-                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 670,
-                        columnNumber: 13
-                    }, this) : null,
-                    data.node.type === "video_enhancement" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(VideoEnhancementCostBadges, {
-                        node: data.node
-                    }, void 0, false, {
-                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 676,
-                        columnNumber: 13
-                    }, this) : null,
-                    llmImageInput ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(LlmImageInputSummary, {
-                        input: llmImageInput
-                    }, void 0, false, {
-                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 679,
-                        columnNumber: 13
-                    }, this) : null,
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                        className: "line-clamp-3 text-xs leading-5 text-muted-foreground",
-                        children: runNode?.result.metadata?.empty === true ? "未识别到字幕" : nodeSummary(data.node)
-                    }, void 0, false, {
-                        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 681,
-                        columnNumber: 11
-                    }, this)
-                ]
-            }, void 0, true, {
-                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 661,
-                columnNumber: 9
-            }, this)
+            }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 426,
+        lineNumber: 429,
         columnNumber: 5
     }, this);
 }
@@ -6607,7 +6657,7 @@ function LlmImageInputSummary({ input }) {
                 children: "图片输入"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 710,
+                lineNumber: 727,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -6617,7 +6667,7 @@ function LlmImageInputSummary({ input }) {
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 711,
+                lineNumber: 728,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -6627,13 +6677,43 @@ function LlmImageInputSummary({ input }) {
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 712,
+                lineNumber: 729,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 698,
+        lineNumber: 715,
+        columnNumber: 5
+    }, this);
+}
+function NodeActions({ compact = false, outputDownload, outputTitle, type, visible }) {
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("nodrag flex shrink-0 items-center gap-0.5", compact && "justify-end px-1 py-0.5", !visible && "opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100"),
+        "data-testid": "aigc-node-actions",
+        onClick: (event)=>event.stopPropagation(),
+        onPointerDown: (event)=>event.stopPropagation(),
+        children: outputDownload ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
+            "aria-label": `下载${downloadKindLabel(type)}：${outputTitle}`,
+            className: "nodrag grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-card hover:text-foreground",
+            download: outputDownload.filename,
+            href: outputDownload.url,
+            title: `下载${downloadKindLabel(type)}`,
+            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$download$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Download$3e$__["Download"], {
+                className: "h-3.5 w-3.5"
+            }, void 0, false, {
+                fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+                lineNumber: 767,
+                columnNumber: 11
+            }, this)
+        }, void 0, false, {
+            fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+            lineNumber: 760,
+            columnNumber: 9
+        }, this) : null
+    }, void 0, false, {
+        fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
+        lineNumber: 748,
         columnNumber: 5
     }, this);
 }
@@ -6641,7 +6721,7 @@ function ModalityTextBody({ displayName, managedSource, mode, projection, text }
     const visibleText = projection?.text ?? (mode === "local" || managedSource ? text : "");
     const stateText = projection || mode === "upstream" ? modalityStateText(projection, "text") : "配置输入文本";
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        className: "nodrag flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3",
+        className: "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3",
         children: [
             managedSource ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 className: "flex min-w-0 flex-wrap gap-1 text-[9px]",
@@ -6651,7 +6731,7 @@ function ModalityTextBody({ displayName, managedSource, mode, projection, text }
                         children: "只读上游内容"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 740,
+                        lineNumber: 797,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -6663,13 +6743,13 @@ function ModalityTextBody({ displayName, managedSource, mode, projection, text }
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 743,
+                        lineNumber: 800,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 739,
+                lineNumber: 796,
                 columnNumber: 9
             }, this) : null,
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6677,12 +6757,12 @@ function ModalityTextBody({ displayName, managedSource, mode, projection, text }
                 children: visibleText || stateText
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 751,
+                lineNumber: 808,
                 columnNumber: 7
             }, this),
             mode === "upstream" && visibleText ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                 "aria-label": `复制文本：${displayName}`,
-                className: "mt-auto inline-flex h-7 items-center justify-center gap-1.5 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground",
+                className: "nodrag mt-auto inline-flex h-7 items-center justify-center gap-1.5 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground",
                 onClick: (event)=>{
                     event.stopPropagation();
                     void navigator.clipboard.writeText(visibleText);
@@ -6693,20 +6773,20 @@ function ModalityTextBody({ displayName, managedSource, mode, projection, text }
                         className: "h-3 w-3"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 764,
+                        lineNumber: 821,
                         columnNumber: 11
                     }, this),
                     "复制"
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 755,
+                lineNumber: 812,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 737,
+        lineNumber: 794,
         columnNumber: 5
     }, this);
 }
@@ -6732,7 +6812,7 @@ function JsonParserNodeBody({ node, runNode }) {
                         children: "JSONPath"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 795,
+                        lineNumber: 852,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6741,13 +6821,13 @@ function JsonParserNodeBody({ node, runNode }) {
                         children: node.config.json_path
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 796,
+                        lineNumber: 853,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 794,
+                lineNumber: 851,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6758,7 +6838,7 @@ function JsonParserNodeBody({ node, runNode }) {
                         children: status
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 804,
+                        lineNumber: 861,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -6766,13 +6846,13 @@ function JsonParserNodeBody({ node, runNode }) {
                         children: count === null ? "等待 item" : `${count} 项`
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 816,
+                        lineNumber: 873,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 803,
+                lineNumber: 860,
                 columnNumber: 7
             }, this),
             error ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6783,7 +6863,7 @@ function JsonParserNodeBody({ node, runNode }) {
                         children: error.code ?? "json_parser_failed"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 822,
+                        lineNumber: 879,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6791,19 +6871,19 @@ function JsonParserNodeBody({ node, runNode }) {
                         children: errorMessage
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 825,
+                        lineNumber: 882,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 821,
+                lineNumber: 878,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 793,
+        lineNumber: 850,
         columnNumber: 5
     }, this);
 }
@@ -6837,7 +6917,7 @@ function LayerCompositeNodeBody({ nodeId, projection, status }) {
                         label: "图层集输入"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 878,
+                        lineNumber: 935,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(CompositeInputState, {
@@ -6845,13 +6925,13 @@ function LayerCompositeNodeBody({ nodeId, projection, status }) {
                         label: "替换图层输入"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 882,
+                        lineNumber: 939,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 877,
+                lineNumber: 934,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6862,7 +6942,7 @@ function LayerCompositeNodeBody({ nodeId, projection, status }) {
                         children: "替换目标"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 888,
+                        lineNumber: 945,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6871,13 +6951,13 @@ function LayerCompositeNodeBody({ nodeId, projection, status }) {
                         children: targetLabel
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 889,
+                        lineNumber: 946,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 887,
+                lineNumber: 944,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6891,13 +6971,13 @@ function LayerCompositeNodeBody({ nodeId, projection, status }) {
                                 children: outputState
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                lineNumber: 895,
+                                lineNumber: 952,
                                 columnNumber: 16
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 894,
+                        lineNumber: 951,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6908,19 +6988,19 @@ function LayerCompositeNodeBody({ nodeId, projection, status }) {
                                 children: projection.layerSet ? ` v${projection.layerSet.version} · ${projection.layerSet.layers.length + 1} 层` : " 等待运行"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                lineNumber: 899,
+                                lineNumber: 956,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 897,
+                        lineNumber: 954,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 893,
+                lineNumber: 950,
                 columnNumber: 7
             }, this),
             mode === "pipeline" && runActions ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6932,18 +7012,18 @@ function LayerCompositeNodeBody({ nodeId, projection, status }) {
                     runActions: runActions
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                    lineNumber: 911,
+                    lineNumber: 968,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 907,
+                lineNumber: 964,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 876,
+        lineNumber: 933,
         columnNumber: 5
     }, this);
 }
@@ -6958,7 +7038,7 @@ function CompositeInputState({ connected, label }) {
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 930,
+        lineNumber: 987,
         columnNumber: 5
     }, this);
 }
@@ -7030,7 +7110,7 @@ function LayerCanvasNodeBody({ edges, node, runDetail }) {
                         src: assetUrls.get(layerSet.base_asset_id)
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1024,
+                        lineNumber: 1081,
                         columnNumber: 11
                     }, this) : null,
                     layerSet ? layers.filter((layer)=>layer.visible).toSorted((a, b)=>a.z_index - b.z_index).map((layer)=>{
@@ -7050,7 +7130,7 @@ function LayerCanvasNodeBody({ edges, node, runDetail }) {
                             }
                         }, layer.id, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                            lineNumber: 1043,
+                            lineNumber: 1100,
                             columnNumber: 19
                         }, this) : null;
                     }) : null,
@@ -7059,13 +7139,13 @@ function LayerCanvasNodeBody({ edges, node, runDetail }) {
                         children: "当前 Run 无成功图层集"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1060,
+                        lineNumber: 1117,
                         columnNumber: 11
                     }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1017,
+                lineNumber: 1074,
                 columnNumber: 7
             }, this),
             failedAssetLabels.length > 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7079,7 +7159,7 @@ function LayerCanvasNodeBody({ edges, node, runDetail }) {
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1066,
+                lineNumber: 1123,
                 columnNumber: 9
             }, this) : null,
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7092,7 +7172,7 @@ function LayerCanvasNodeBody({ edges, node, runDetail }) {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1076,
+                        lineNumber: 1133,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7103,7 +7183,7 @@ function LayerCanvasNodeBody({ edges, node, runDetail }) {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1077,
+                        lineNumber: 1134,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7111,13 +7191,13 @@ function LayerCanvasNodeBody({ edges, node, runDetail }) {
                         children: current ? selected ? `已选：${selected.name}` : "尚未选择图层" : layerSet ? "上游已变化，需重新确认" : "暂无可编辑图层集"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1078,
+                        lineNumber: 1135,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1075,
+                lineNumber: 1132,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7139,21 +7219,21 @@ function LayerCanvasNodeBody({ edges, node, runDetail }) {
                                 className: "h-3 w-3 shrink-0"
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                lineNumber: 1107,
+                                lineNumber: 1164,
                                 columnNumber: 13
                             }, this),
                             "打开图层编辑器"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1096,
+                        lineNumber: 1153,
                         columnNumber: 11
                     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                         className: "text-center text-[10px] text-muted-foreground",
                         children: "Pipeline 实例中可编辑"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1111,
+                        lineNumber: 1168,
                         columnNumber: 11
                     }, this),
                     mode === "pipeline" && runActions ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ContinueFromLayerNodeButton, {
@@ -7162,19 +7242,19 @@ function LayerCanvasNodeBody({ edges, node, runDetail }) {
                         runActions: runActions
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1116,
+                        lineNumber: 1173,
                         columnNumber: 11
                     }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1088,
+                lineNumber: 1145,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 1016,
+        lineNumber: 1073,
         columnNumber: 5
     }, this);
 }
@@ -7206,7 +7286,7 @@ function MultiTrackEditNodeBody({ node, projection, status }) {
                 url: resultUrl
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1176,
+                lineNumber: 1233,
                 columnNumber: 9
             }, this) : null,
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7220,7 +7300,7 @@ function MultiTrackEditNodeBody({ node, projection, status }) {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1191,
+                        lineNumber: 1248,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7231,7 +7311,7 @@ function MultiTrackEditNodeBody({ node, projection, status }) {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1194,
+                        lineNumber: 1251,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7239,13 +7319,13 @@ function MultiTrackEditNodeBody({ node, projection, status }) {
                         children: formatTimelineDuration(durationMs)
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1197,
+                        lineNumber: 1254,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1190,
+                lineNumber: 1247,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7255,7 +7335,7 @@ function MultiTrackEditNodeBody({ node, projection, status }) {
                         children: canvas
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1202,
+                        lineNumber: 1259,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7265,13 +7345,13 @@ function MultiTrackEditNodeBody({ node, projection, status }) {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1203,
+                        lineNumber: 1260,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1201,
+                lineNumber: 1258,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7281,20 +7361,20 @@ function MultiTrackEditNodeBody({ node, projection, status }) {
                         children: dirty ? "未保存" : "已保存"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1206,
+                        lineNumber: 1263,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                         children: multiTrackRunStatusLabel(status)
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1207,
+                        lineNumber: 1264,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1205,
+                lineNumber: 1262,
                 columnNumber: 7
             }, this),
             href ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$app$2d$dir$2f$link$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["default"], {
@@ -7312,27 +7392,27 @@ function MultiTrackEditNodeBody({ node, projection, status }) {
                         className: "h-3 w-3"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1221,
+                        lineNumber: 1278,
                         columnNumber: 11
                     }, this),
                     "编辑时间线"
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1210,
+                lineNumber: 1267,
                 columnNumber: 9
             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                 className: "mt-auto text-center text-muted-foreground",
                 children: "Pipeline 实例中可编辑"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1225,
+                lineNumber: 1282,
                 columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 1174,
+        lineNumber: 1231,
         columnNumber: 5
     }, this);
 }
@@ -7376,14 +7456,14 @@ function ContinueFromLayerNodeButton({ nodeId, nodeLabel, runActions }) {
                 className: "h-3 w-3 shrink-0"
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1285,
+                lineNumber: 1342,
                 columnNumber: 7
             }, this),
             pending ? "正在执行" : "从此节点继续"
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 1273,
+        lineNumber: 1330,
         columnNumber: 5
     }, this);
 }
@@ -7401,7 +7481,7 @@ function VideoGenerationSummary({ edges, node }) {
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1301,
+                lineNumber: 1358,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7413,7 +7493,7 @@ function VideoGenerationSummary({ edges, node }) {
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1305,
+                lineNumber: 1362,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7425,13 +7505,13 @@ function VideoGenerationSummary({ edges, node }) {
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1309,
+                lineNumber: 1366,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 1300,
+        lineNumber: 1357,
         columnNumber: 5
     }, this);
 }
@@ -7442,10 +7522,11 @@ function NodeImageMedia({ alt, emptyText, hasBbox, url }) {
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "nodrag min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950 p-1.5",
+                className: "min-h-0 min-w-0 flex-1 overflow-hidden bg-card p-1.5",
+                "data-testid": "aigc-image-preview",
                 children: url ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                     "aria-label": `查看原图：${alt}`,
-                    className: "group relative block h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden",
+                    className: "nodrag group relative block h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden",
                     onClick: (event)=>{
                         event.stopPropagation();
                         setPreviewOpen(true);
@@ -7513,7 +7594,7 @@ function NodeImageMedia({ alt, emptyText, hasBbox, url }) {
                             src: url
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                            lineNumber: 1355,
+                            lineNumber: 1415,
                             columnNumber: 13
                         }, this),
                         resolution ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7521,7 +7602,7 @@ function NodeImageMedia({ alt, emptyText, hasBbox, url }) {
                             children: resolution
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                            lineNumber: 1415,
+                            lineNumber: 1475,
                             columnNumber: 15
                         }, this) : null,
                         hasBbox ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7529,25 +7610,25 @@ function NodeImageMedia({ alt, emptyText, hasBbox, url }) {
                             children: "已框选"
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                            lineNumber: 1420,
+                            lineNumber: 1480,
                             columnNumber: 15
                         }, this) : null
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                    lineNumber: 1343,
+                    lineNumber: 1403,
                     columnNumber: 11
                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                    className: "grid h-full min-h-0 w-full place-items-center px-3 text-center text-[10px] text-slate-300",
+                    className: "grid h-full min-h-0 w-full place-items-center px-3 text-center text-[10px] text-muted-foreground",
                     children: emptyText
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                    lineNumber: 1426,
+                    lineNumber: 1486,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1341,
+                lineNumber: 1398,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Dialog"], {
@@ -7563,7 +7644,7 @@ function NodeImageMedia({ alt, emptyText, hasBbox, url }) {
                                     children: "查看原图"
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                    lineNumber: 1434,
+                                    lineNumber: 1494,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["DialogDescription"], {
@@ -7574,13 +7655,13 @@ function NodeImageMedia({ alt, emptyText, hasBbox, url }) {
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                    lineNumber: 1435,
+                                    lineNumber: 1495,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                            lineNumber: 1433,
+                            lineNumber: 1493,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7592,29 +7673,29 @@ function NodeImageMedia({ alt, emptyText, hasBbox, url }) {
                                 src: url
                             }, void 0, false, {
                                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                                lineNumber: 1444,
+                                lineNumber: 1504,
                                 columnNumber: 15
                             }, this) : null
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                            lineNumber: 1440,
+                            lineNumber: 1500,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                    lineNumber: 1432,
+                    lineNumber: 1492,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1431,
+                lineNumber: 1491,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 1340,
+        lineNumber: 1397,
         columnNumber: 5
     }, this);
 }
@@ -7637,14 +7718,14 @@ function NodeInputMedia({ asset, kind, loading, referenced }) {
     }
     if (!url) {
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-            className: "nodrag grid min-h-0 flex-1 place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300",
+            className: "grid min-h-0 flex-1 place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300",
             children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                         children: emptyText
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1509,
+                        lineNumber: 1569,
                         columnNumber: 11
                     }, this),
                     referenced && !loading ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7652,24 +7733,24 @@ function NodeInputMedia({ asset, kind, loading, referenced }) {
                         children: asset?.id ?? "引用已删除或无法访问"
                     }, void 0, false, {
                         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                        lineNumber: 1511,
+                        lineNumber: 1571,
                         columnNumber: 13
                     }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1508,
+                lineNumber: 1568,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-            lineNumber: 1507,
+            lineNumber: 1567,
             columnNumber: 7
         }, this);
     }
     if (kind === "audio") {
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-            className: "nodrag nowheel flex min-h-0 flex-1 flex-col justify-center gap-2 overflow-hidden bg-slate-950 p-2 text-white",
+            className: "flex min-h-0 flex-1 flex-col justify-center gap-2 overflow-hidden bg-slate-950 p-2 text-white",
             children: [
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                     className: "truncate text-[10px] font-medium",
@@ -7677,19 +7758,19 @@ function NodeInputMedia({ asset, kind, loading, referenced }) {
                     children: name
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                    lineNumber: 1523,
+                    lineNumber: 1583,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("audio", {
                     "aria-label": `播放音频：${name}`,
-                    className: "h-8 w-full",
+                    className: "nodrag nowheel h-8 w-full",
                     controls: true,
                     onLoadedMetadata: (event)=>readMediaMetadata(event.currentTarget),
                     preload: "metadata",
                     src: url
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                    lineNumber: 1524,
+                    lineNumber: 1584,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7697,13 +7778,13 @@ function NodeInputMedia({ asset, kind, loading, referenced }) {
                     children: details
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                    lineNumber: 1532,
+                    lineNumber: 1592,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-            lineNumber: 1522,
+            lineNumber: 1582,
             columnNumber: 7
         }, this);
     }
@@ -7714,7 +7795,7 @@ function NodeInputMedia({ asset, kind, loading, referenced }) {
         url: url
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 1538,
+        lineNumber: 1598,
         columnNumber: 5
     }, this);
 }
@@ -7855,12 +7936,12 @@ function VideoEnhancementCostBadges({ node }) {
                 children: label
             }, label, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-                lineNumber: 1742,
+                lineNumber: 1802,
                 columnNumber: 9
             }, this))
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 1740,
+        lineNumber: 1800,
         columnNumber: 5
     }, this);
 }
@@ -7901,7 +7982,7 @@ function InlineNodeNameInput({ initialValue, onCancel, onSave }) {
         value: draft
     }, void 0, false, {
         fileName: "[project]/components/workspace/aigc/aigc-flow-node.tsx",
-        lineNumber: 1774,
+        lineNumber: 1834,
         columnNumber: 5
     }, this);
 }
@@ -8954,7 +9035,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$
 ;
 ;
 ;
-function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node, url }) {
+function AigcPreciseEditDialog({ assetId, assetName, bboxState, compactTrigger = false, sourceMode, node, url }) {
     const definition = (0, __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$providers$2f$aigc$2d$editor$2d$store$2d$provider$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useAigcEditorStore"])((state)=>state.definition);
     const mode = (0, __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$providers$2f$aigc$2d$editor$2d$store$2d$provider$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useAigcEditorStore"])((state)=>state.mode);
     const setBindings = (0, __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$workspace$2f$aigc$2f$providers$2f$aigc$2d$editor$2d$store$2d$provider$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useAigcEditorStore"])((state)=>state.setImageBboxBindings);
@@ -9005,7 +9086,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                 "aria-label": `精准编辑：${assetName}`,
-                className: "nodrag grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-card hover:text-primary disabled:cursor-not-allowed disabled:opacity-40",
+                className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("nodrag grid shrink-0 place-items-center rounded text-muted-foreground hover:bg-card hover:text-primary disabled:cursor-not-allowed disabled:opacity-40", compactTrigger ? "h-[10px] w-[10px]" : "h-6 w-6"),
                 disabled: !canOpen,
                 onClick: (event)=>{
                     event.stopPropagation();
@@ -9014,15 +9095,15 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                 title: canOpen ? "精准编辑" : sourceMode === "local" ? "选择图片后可精准编辑" : "等待可用的上游图片结果",
                 type: "button",
                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$scan$2d$search$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__ScanSearch$3e$__["ScanSearch"], {
-                    className: "h-3.5 w-3.5"
+                    className: compactTrigger ? "h-[6px] w-[6px]" : "h-3.5 w-3.5"
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                    lineNumber: 150,
+                    lineNumber: 155,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                lineNumber: 133,
+                lineNumber: 135,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Dialog"], {
@@ -9041,20 +9122,20 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                    lineNumber: 155,
+                                    lineNumber: 164,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$dialog$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["DialogDescription"], {
                                     children: "框选一个主体，并引用到与该图片共享图生图下游的文本节点。"
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                    lineNumber: 156,
+                                    lineNumber: 165,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                            lineNumber: 154,
+                            lineNumber: 163,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -9071,7 +9152,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                     children: "框选主体"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                    lineNumber: 163,
+                                                    lineNumber: 172,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -9085,20 +9166,20 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                             className: "h-4 w-4"
                                                         }, void 0, false, {
                                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                            lineNumber: 171,
+                                                            lineNumber: 180,
                                                             columnNumber: 19
                                                         }, this),
                                                         "重置"
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                    lineNumber: 164,
+                                                    lineNumber: 173,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                            lineNumber: 162,
+                                            lineNumber: 171,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -9113,18 +9194,18 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                 url: url
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                lineNumber: 176,
+                                                lineNumber: 185,
                                                 columnNumber: 17
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                            lineNumber: 175,
+                                            lineNumber: 184,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                    lineNumber: 161,
+                                    lineNumber: 170,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("aside", {
@@ -9136,7 +9217,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                             children: "上游图片已更新，请重新框选"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                            lineNumber: 189,
+                                            lineNumber: 198,
                                             columnNumber: 17
                                         }, this) : null,
                                         submitError ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -9145,7 +9226,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                             children: submitError
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                            lineNumber: 197,
+                                            lineNumber: 206,
                                             columnNumber: 17
                                         }, this) : null,
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -9156,7 +9237,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                     children: "当前框选"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                    lineNumber: 205,
+                                                    lineNumber: 214,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -9164,13 +9245,13 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                     children: draftBbox ? `${draftBbox.x1} ${draftBbox.y1} ${draftBbox.x2} ${draftBbox.y2}` : "尚未框选"
                                                 }, void 0, false, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                    lineNumber: 206,
+                                                    lineNumber: 215,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                            lineNumber: 204,
+                                            lineNumber: 213,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -9178,7 +9259,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                             children: "引用到文本节点"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                            lineNumber: 212,
+                                            lineNumber: 221,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -9200,7 +9281,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                             type: "checkbox"
                                                         }, void 0, false, {
                                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                            lineNumber: 238,
+                                                            lineNumber: 247,
                                                             columnNumber: 25
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -9211,7 +9292,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                                     children: displayNames.get(textNode.id)?.displayName ?? "文本节点"
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                                    lineNumber: 246,
+                                                                    lineNumber: 255,
                                                                     columnNumber: 27
                                                                 }, this),
                                                                 textNode.config.text.trim() ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -9219,7 +9300,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                                     children: textNode.config.text.trim()
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                                    lineNumber: 251,
+                                                                    lineNumber: 260,
                                                                     columnNumber: 29
                                                                 }, this) : null,
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -9227,19 +9308,19 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                                     children: !eligible ? "不满足共同图生图下游规则" : atLimit ? "已达到 10 条引用上限" : `${(0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$aigc$2f$bbox$2d$references$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["bboxReferences"])(textNode).length}/10 条引用`
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                                    lineNumber: 255,
+                                                                    lineNumber: 264,
                                                                     columnNumber: 27
                                                                 }, this)
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                            lineNumber: 245,
+                                                            lineNumber: 254,
                                                             columnNumber: 25
                                                         }, this)
                                                     ]
                                                 }, textNode.id, true, {
                                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                    lineNumber: 228,
+                                                    lineNumber: 237,
                                                     columnNumber: 23
                                                 }, this);
                                             }) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -9247,24 +9328,24 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                                 children: "暂无文本输入节点。先完成图片、文本与图生图节点连线。"
                                             }, void 0, false, {
                                                 fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                                lineNumber: 267,
+                                                lineNumber: 276,
                                                 columnNumber: 19
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                            lineNumber: 215,
+                                            lineNumber: 224,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                    lineNumber: 187,
+                                    lineNumber: 196,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                            lineNumber: 160,
+                            lineNumber: 169,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -9275,7 +9356,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                     children: "坐标由框选生成，保存后自动同步到所有引用。"
                                 }, void 0, false, {
                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                    lineNumber: 275,
+                                    lineNumber: 284,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -9288,7 +9369,7 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                             children: "取消"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                            lineNumber: 279,
+                                            lineNumber: 288,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$ui$2f$button$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Button"], {
@@ -9298,36 +9379,36 @@ function AigcPreciseEditDialog({ assetId, assetName, bboxState, sourceMode, node
                                             children: draftBbox ? `引用到 ${selectedTextNodeIds.size} 个节点` : "清除框选"
                                         }, void 0, false, {
                                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                            lineNumber: 282,
+                                            lineNumber: 291,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                                    lineNumber: 278,
+                                    lineNumber: 287,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                            lineNumber: 274,
+                            lineNumber: 283,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                    lineNumber: 153,
+                    lineNumber: 162,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-                lineNumber: 152,
+                lineNumber: 161,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/workspace/aigc/aigc-precise-edit-dialog.tsx",
-        lineNumber: 132,
+        lineNumber: 134,
         columnNumber: 5
     }, this);
 }
@@ -12447,7 +12528,7 @@ function AigcVideoPlayer({ audioState = null, bitDepth = null, className, fps = 
     }
     if (!url) {
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-            className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("grid place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300", variant === "node" ? "nodrag min-h-0 flex-1" : "h-44", className),
+            className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("grid place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300", variant === "node" ? "min-h-0 flex-1" : "h-44", className),
             children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -12479,11 +12560,11 @@ function AigcVideoPlayer({ audioState = null, bitDepth = null, className, fps = 
     }
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
         children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-            className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("relative overflow-hidden bg-slate-950 p-1.5", variant === "node" && "nodrag nopan nowheel", variant === "node" ? "min-h-0 flex-1" : "h-44", className),
+            className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("relative overflow-hidden bg-slate-950 p-1.5", variant === "node" ? "min-h-0 flex-1" : "h-44", className),
             children: [
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("video", {
                     "aria-label": `播放视频：${name}`,
-                    className: "block h-full w-full object-contain",
+                    className: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["cn"])("block h-full w-full object-contain", variant === "node" && "nodrag nopan nowheel"),
                     controls: true,
                     onLoadedMetadata: (event)=>readMetadata(event.currentTarget),
                     playsInline: true,
@@ -12492,7 +12573,7 @@ function AigcVideoPlayer({ audioState = null, bitDepth = null, className, fps = 
                     src: url
                 }, void 0, false, {
                     fileName: "[project]/components/workspace/aigc/aigc-video-player.tsx",
-                    lineNumber: 93,
+                    lineNumber: 92,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -12503,7 +12584,7 @@ function AigcVideoPlayer({ audioState = null, bitDepth = null, className, fps = 
                             children: name
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-video-player.tsx",
-                            lineNumber: 104,
+                            lineNumber: 106,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -12511,13 +12592,13 @@ function AigcVideoPlayer({ audioState = null, bitDepth = null, className, fps = 
                             children: details
                         }, void 0, false, {
                             fileName: "[project]/components/workspace/aigc/aigc-video-player.tsx",
-                            lineNumber: 105,
+                            lineNumber: 107,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/components/workspace/aigc/aigc-video-player.tsx",
-                    lineNumber: 103,
+                    lineNumber: 105,
                     columnNumber: 9
                 }, this)
             ]

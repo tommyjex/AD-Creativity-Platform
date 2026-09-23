@@ -1706,6 +1706,26 @@ function normalizeEditorSnapshot(source) {
     };
 }
 function mergeAigcServerRevision(base, local, server, authoritativeNodeNames = new Map()) {
+    // #region debug-point C:merge-input
+    if (("TURBOPACK compile-time value", "object") !== "undefined" && typeof fetch !== "undefined") {
+        void fetch("http://127.0.0.1:7777/event", {
+            method: "POST",
+            body: JSON.stringify({
+                sessionId: "pipeline-nodes-missing",
+                runId: "post-fix",
+                hypothesisId: "C",
+                location: "frontend/lib/aigc/editor-store.ts:mergeAigcServerRevision",
+                msg: "[DEBUG] Merge input snapshots",
+                data: {
+                    baseNodeIds: base.definition.nodes.map((node)=>node.id),
+                    localNodeIds: local.definition.nodes.map((node)=>node.id),
+                    serverNodeIds: server.definition.nodes.map((node)=>node.id)
+                },
+                ts: Date.now()
+            })
+        }).catch(()=>{});
+    }
+    // #endregion
     return {
         definition: mergeAigcServerDefinition(base.definition, local.definition, server.definition, authoritativeNodeNames),
         description: local.description,
@@ -1731,6 +1751,10 @@ function mergeAigcServerDefinition(base, local, server, authoritativeNodeNames) 
             ]
         ] : [];
     }));
+    const baseById = new Map(base.nodes.map((node)=>[
+            node.id,
+            node
+        ]));
     const localById = new Map(local.nodes.map((node)=>[
             node.id,
             node
@@ -1788,7 +1812,13 @@ function mergeAigcServerDefinition(base, local, server, authoritativeNodeNames) 
     });
     for (const serverNode of server.nodes){
         const key = managedNodeKey(serverNode);
-        if (!key || consumedManagedKeys.has(key) || deletedManagedKeys.has(key) || nodes.some((node)=>node.id === serverNode.id)) {
+        if (!key) {
+            if (!baseById.has(serverNode.id) && !localById.has(serverNode.id)) {
+                nodes.push(structuredClone(serverNode));
+            }
+            continue;
+        }
+        if (consumedManagedKeys.has(key) || deletedManagedKeys.has(key) || nodes.some((node)=>node.id === serverNode.id)) {
             continue;
         }
         nodes.push(structuredClone(serverNode));
@@ -1808,6 +1838,7 @@ function mergeAigcServerDefinition(base, local, server, authoritativeNodeNames) 
     }));
     const edges = [];
     const edgeSignatures = new Set();
+    const baseEdgeSignatures = new Set(base.edges.map(edgeSignature));
     const addEdge = (edge)=>{
         const remapped = {
             ...structuredClone(edge),
@@ -1827,8 +1858,29 @@ function mergeAigcServerDefinition(base, local, server, authoritativeNodeNames) 
     }
     for (const edge of server.edges){
         const key = systemEdgeKey(edge, server.nodes);
-        if (key && !deletedSystemKeys.has(key)) addEdge(edge);
+        if (key && !deletedSystemKeys.has(key) || !key && !baseEdgeSignatures.has(edgeSignature(edge))) {
+            addEdge(edge);
+        }
     }
+    // #region debug-point C:merge-output
+    if (("TURBOPACK compile-time value", "object") !== "undefined" && typeof fetch !== "undefined") {
+        void fetch("http://127.0.0.1:7777/event", {
+            method: "POST",
+            body: JSON.stringify({
+                sessionId: "pipeline-nodes-missing",
+                runId: "post-fix",
+                hypothesisId: "C",
+                location: "frontend/lib/aigc/editor-store.ts:mergeAigcServerDefinition",
+                msg: "[DEBUG] Merge output definition",
+                data: {
+                    nodeIds: nodes.map((node)=>node.id),
+                    edgeIds: edges.map((edge)=>edge.id)
+                },
+                ts: Date.now()
+            })
+        }).catch(()=>{});
+    }
+    // #endregion
     return {
         schemaVersion: 2,
         nodes,

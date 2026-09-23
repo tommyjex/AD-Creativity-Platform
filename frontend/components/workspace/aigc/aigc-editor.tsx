@@ -358,6 +358,24 @@ function AigcEditorContent({
         equals: editorDraftsEqual,
         getErrorMessage: autosaveErrorMessage,
         save: async ({ expectedRevision, snapshot }) => {
+          // #region debug-point C:autosave-payload
+          void fetch("http://127.0.0.1:7777/event", {
+            method: "POST",
+            body: JSON.stringify({
+              sessionId: "pipeline-nodes-missing",
+              runId: "post-fix",
+              hypothesisId: "C",
+              location: "frontend/components/workspace/aigc/aigc-editor.tsx:autosave",
+              msg: "[DEBUG] Autosave pipeline payload",
+              data: {
+                entityId: entity.id,
+                expectedRevision,
+                nodeIds: snapshot.definition.nodes.map((node) => node.id)
+              },
+              ts: Date.now()
+            })
+          }).catch(() => {});
+          // #endregion
           const saved =
             mode === "template"
               ? await apiClient.updateAigcTemplate(entity.id, {
@@ -566,6 +584,29 @@ function AigcEditorContent({
   useEffect(() => {
     const server = pipelineQuery.data;
     if (mode !== "pipeline" || !server) return;
+    // #region debug-point B-C:server-rebase
+    void fetch("http://127.0.0.1:7777/event", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "pipeline-nodes-missing",
+        runId: "post-fix",
+        hypothesisId: "B-C",
+        location: "frontend/components/workspace/aigc/aigc-editor.tsx:server-rebase",
+        msg: "[DEBUG] Rebase server revision into editor",
+        data: {
+          entityId: entity.id,
+          editorRevision: editorStore.getState().revision,
+          serverRevision: server.revision,
+          editorDirty: editorStore.getState().dirty,
+          editorNodeIds: editorStore
+            .getState()
+            .definition.nodes.map((node) => node.id),
+          serverNodeIds: server.definition.nodes.map((node) => node.id)
+        },
+        ts: Date.now()
+      })
+    }).catch(() => {});
+    // #endregion
     const authoritativeNodeNames = new Map(
       authoritativeNodeNamesRef.current
     );
@@ -610,6 +651,8 @@ function AigcEditorContent({
   }, [
     applyServerRevision,
     autosaveCoordinator,
+    editorStore,
+    entity.id,
     mode,
     pipelineQuery.data
   ]);

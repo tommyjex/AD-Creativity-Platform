@@ -698,6 +698,26 @@ export function mergeAigcServerRevision(
   server: Readonly<AigcEditorSnapshot>,
   authoritativeNodeNames: ReadonlyMap<string, string> = new Map()
 ): AigcEditorSnapshot {
+  // #region debug-point C:merge-input
+  if (typeof window !== "undefined" && typeof fetch !== "undefined") {
+    void fetch("http://127.0.0.1:7777/event", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "pipeline-nodes-missing",
+        runId: "post-fix",
+        hypothesisId: "C",
+        location: "frontend/lib/aigc/editor-store.ts:mergeAigcServerRevision",
+        msg: "[DEBUG] Merge input snapshots",
+        data: {
+          baseNodeIds: base.definition.nodes.map((node) => node.id),
+          localNodeIds: local.definition.nodes.map((node) => node.id),
+          serverNodeIds: server.definition.nodes.map((node) => node.id)
+        },
+        ts: Date.now()
+      })
+    }).catch(() => {});
+  }
+  // #endregion
   return {
     definition: mergeAigcServerDefinition(
       base.definition,
@@ -728,6 +748,7 @@ function mergeAigcServerDefinition(
       return key ? [[key, node] as const] : [];
     })
   );
+  const baseById = new Map(base.nodes.map((node) => [node.id, node]));
   const localById = new Map(local.nodes.map((node) => [node.id, node]));
   const serverById = new Map(server.nodes.map((node) => [node.id, node]));
   const deletedManagedKeys = new Set(
@@ -794,8 +815,13 @@ function mergeAigcServerDefinition(
   });
   for (const serverNode of server.nodes) {
     const key = managedNodeKey(serverNode);
+    if (!key) {
+      if (!baseById.has(serverNode.id) && !localById.has(serverNode.id)) {
+        nodes.push(structuredClone(serverNode));
+      }
+      continue;
+    }
     if (
-      !key ||
       consumedManagedKeys.has(key) ||
       deletedManagedKeys.has(key) ||
       nodes.some((node) => node.id === serverNode.id)
@@ -820,6 +846,7 @@ function mergeAigcServerDefinition(
   );
   const edges: AigcEdge[] = [];
   const edgeSignatures = new Set<string>();
+  const baseEdgeSignatures = new Set(base.edges.map(edgeSignature));
   const addEdge = (edge: AigcEdge) => {
     const remapped = {
       ...structuredClone(edge),
@@ -843,9 +870,33 @@ function mergeAigcServerDefinition(
   }
   for (const edge of server.edges) {
     const key = systemEdgeKey(edge, server.nodes);
-    if (key && !deletedSystemKeys.has(key)) addEdge(edge);
+    if (
+      (key && !deletedSystemKeys.has(key)) ||
+      (!key && !baseEdgeSignatures.has(edgeSignature(edge)))
+    ) {
+      addEdge(edge);
+    }
   }
 
+  // #region debug-point C:merge-output
+  if (typeof window !== "undefined" && typeof fetch !== "undefined") {
+    void fetch("http://127.0.0.1:7777/event", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "pipeline-nodes-missing",
+        runId: "post-fix",
+        hypothesisId: "C",
+        location: "frontend/lib/aigc/editor-store.ts:mergeAigcServerDefinition",
+        msg: "[DEBUG] Merge output definition",
+        data: {
+          nodeIds: nodes.map((node) => node.id),
+          edgeIds: edges.map((edge) => edge.id)
+        },
+        ts: Date.now()
+      })
+    }).catch(() => {});
+  }
+  // #endregion
   return {
     schemaVersion: 2,
     nodes,

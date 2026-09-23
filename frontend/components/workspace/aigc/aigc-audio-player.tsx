@@ -29,7 +29,7 @@ export function AigcAudioPlayer({
       <div
         className={cn(
           "grid place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300",
-          variant === "node" ? "nodrag min-h-0 flex-1" : "h-24",
+          variant === "node" ? "min-h-0 flex-1" : "h-24",
           className
         )}
       >
@@ -55,7 +55,7 @@ export function AigcAudioPlayer({
       className={cn(
         "flex flex-col justify-center gap-2 overflow-hidden bg-slate-950 p-3 text-white",
         variant === "node"
-          ? "nodrag nowheel min-h-0 flex-1"
+          ? "min-h-0 flex-1"
           : "rounded border border-slate-800",
         className
       )}
@@ -65,7 +65,10 @@ export function AigcAudioPlayer({
       </p>
       <audio
         aria-label={`播放音频：${name}`}
-        className="h-8 w-full"
+        className={cn(
+          "h-8 w-full",
+          variant === "node" && "nodrag nowheel"
+        )}
         controls
         onLoadedMetadata={(event) => {
           const nextDuration = event.currentTarget.duration;

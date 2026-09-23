@@ -238,6 +238,7 @@ function AigcFlowNodeComponent({
   const resolvedDisplayName =
     data.node.custom_name?.trim() || managedSource?.itemLabel || displayName;
   const renaming = renamingNodeId === id;
+  const showsCanvasTitle = registration?.category !== "modality";
   const videoProjection =
     modality === "video" && modalityProjection && runDetail
       ? projectAigcVideoResult(
@@ -308,6 +309,8 @@ function AigcFlowNodeComponent({
     : modality
       ? modalityTitle
       : multiTrackProjection?.title ?? "";
+  const hasNodeActions = Boolean(outputDownload);
+  const showsTitleRow = showsCanvasTitle || renaming;
   const displayAsset = modalityProjection?.asset;
   const preciseEditAssetId =
     data.node.type !== "image"
@@ -423,12 +426,15 @@ function AigcFlowNodeComponent({
   // #endregion
 
   return (
-    <div
-      className={cn(
-        "flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card shadow-md",
-        selected && "ring-2 ring-primary/20"
-      )}
-    >
+    <>
+      <div
+        aria-label={resolvedDisplayName}
+        className={cn(
+          "flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card shadow-md",
+          selected && "ring-2 ring-primary/20"
+        )}
+        role="group"
+      >
       <NodeResizer
         color="hsl(var(--primary))"
         isVisible={selected}
@@ -522,54 +528,46 @@ function AigcFlowNodeComponent({
         );
       })}
 
-      <div
-        className="group/title flex h-7 shrink-0 items-center justify-between px-2.5"
-        data-testid="aigc-node-title-row"
-      >
-        {renaming ? (
-          <InlineNodeNameInput
-            initialValue={resolvedDisplayName}
-            onCancel={() => setRenamingNodeId(null)}
-            onSave={(value) => {
-              setNodeCustomName(id, value);
-              setRenamingNodeId(null);
-            }}
-          />
-        ) : (
-          <span
-            className="min-w-0 truncate text-[11px] font-medium text-foreground"
-            data-testid="aigc-node-title"
-          >
-            {resolvedDisplayName}
-          </span>
-        )}
-        <div className="nodrag flex shrink-0 items-center gap-0.5">
-          {outputDownload ? (
-            <div className="opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100">
-              <a
-                aria-label={`下载${downloadKindLabel(data.node)}：${outputTitle}`}
-                className="nodrag grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-card hover:text-foreground"
-                download={outputDownload.filename}
-                href={outputDownload.url}
-                onClick={(event) => event.stopPropagation()}
-                title={`下载${downloadKindLabel(data.node)}`}
-              >
-                <Download className="h-3.5 w-3.5" />
-              </a>
-            </div>
-          ) : null}
-          {data.node.type === "image" ? (
-            <AigcPreciseEditDialog
-              assetId={preciseEditAssetId}
-              assetName={preciseEditName}
-              bboxState={imageBboxBinding?.state ?? "none"}
-              node={data.node}
-              sourceMode={currentModalityMode}
-              url={preciseEditUrl}
+      {showsTitleRow ? (
+        <div
+          className="group/title flex h-7 shrink-0 items-center justify-between px-2.5"
+          data-testid="aigc-node-title-row"
+        >
+          {renaming ? (
+            <InlineNodeNameInput
+              initialValue={resolvedDisplayName}
+              onCancel={() => setRenamingNodeId(null)}
+              onSave={(value) => {
+                setNodeCustomName(id, value);
+                setRenamingNodeId(null);
+              }}
+            />
+          ) : (
+            <span
+              className="min-w-0 truncate text-[11px] font-medium text-foreground"
+              data-testid="aigc-node-title"
+            >
+              {resolvedDisplayName}
+            </span>
+          )}
+          {hasNodeActions ? (
+            <NodeActions
+              outputDownload={outputDownload}
+              outputTitle={outputTitle}
+              type={data.node}
+              visible={renaming && !showsCanvasTitle}
             />
           ) : null}
         </div>
-      </div>
+      ) : hasNodeActions ? (
+        <NodeActions
+          compact
+          outputDownload={outputDownload}
+          outputTitle={outputTitle}
+          type={data.node}
+          visible
+        />
+      ) : null}
       {modality === "text" ? (
         <ModalityTextBody
           displayName={modalityTitle}
@@ -685,7 +683,26 @@ function AigcFlowNodeComponent({
           </p>
         </div>
       )}
-    </div>
+      </div>
+      {data.node.type === "image" ? (
+        <div
+          className="nodrag absolute right-0 top-0 z-10 grid h-[12px] w-[12px] -translate-y-[calc(100%+0.375rem)] place-items-center rounded-full border border-border bg-card shadow-md"
+          data-testid="aigc-image-node-actions"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <AigcPreciseEditDialog
+            assetId={preciseEditAssetId}
+            assetName={preciseEditName}
+            bboxState={imageBboxBinding?.state ?? "none"}
+            compactTrigger
+            node={data.node}
+            sourceMode={currentModalityMode}
+            url={preciseEditUrl}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -714,6 +731,46 @@ function LlmImageInputSummary({
   );
 }
 
+function NodeActions({
+  compact = false,
+  outputDownload,
+  outputTitle,
+  type,
+  visible
+}: {
+  compact?: boolean;
+  outputDownload: { filename: string; url: string } | null;
+  outputTitle: string;
+  type: AigcV2Node;
+  visible: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "nodrag flex shrink-0 items-center gap-0.5",
+        compact && "justify-end px-1 py-0.5",
+        !visible &&
+          "opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100"
+      )}
+      data-testid="aigc-node-actions"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      {outputDownload ? (
+        <a
+          aria-label={`下载${downloadKindLabel(type)}：${outputTitle}`}
+          className="nodrag grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-card hover:text-foreground"
+          download={outputDownload.filename}
+          href={outputDownload.url}
+          title={`下载${downloadKindLabel(type)}`}
+        >
+          <Download className="h-3.5 w-3.5" />
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 function ModalityTextBody({
   displayName,
   managedSource,
@@ -734,7 +791,7 @@ function ModalityTextBody({
       ? modalityStateText(projection, "text")
       : "配置输入文本";
   return (
-    <div className="nodrag flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
       {managedSource ? (
         <div className="flex min-w-0 flex-wrap gap-1 text-[9px]">
           <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400">
@@ -754,7 +811,7 @@ function ModalityTextBody({
       {mode === "upstream" && visibleText ? (
         <button
           aria-label={`复制文本：${displayName}`}
-          className="mt-auto inline-flex h-7 items-center justify-center gap-1.5 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground"
+          className="nodrag mt-auto inline-flex h-7 items-center justify-center gap-1.5 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground"
           onClick={(event) => {
             event.stopPropagation();
             void navigator.clipboard.writeText(visibleText);
@@ -1338,11 +1395,14 @@ function NodeImageMedia({
 
   return (
     <>
-      <div className="nodrag min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950 p-1.5">
+      <div
+        className="min-h-0 min-w-0 flex-1 overflow-hidden bg-card p-1.5"
+        data-testid="aigc-image-preview"
+      >
         {url ? (
           <button
             aria-label={`查看原图：${alt}`}
-            className="group relative block h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden"
+            className="nodrag group relative block h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden"
             onClick={(event) => {
               event.stopPropagation();
               setPreviewOpen(true);
@@ -1423,7 +1483,7 @@ function NodeImageMedia({
             ) : null}
           </button>
         ) : (
-          <div className="grid h-full min-h-0 w-full place-items-center px-3 text-center text-[10px] text-slate-300">
+          <div className="grid h-full min-h-0 w-full place-items-center px-3 text-center text-[10px] text-muted-foreground">
             {emptyText}
           </div>
         )}
@@ -1504,7 +1564,7 @@ function NodeInputMedia({
 
   if (!url) {
     return (
-      <div className="nodrag grid min-h-0 flex-1 place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300">
+      <div className="grid min-h-0 flex-1 place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300">
         <div>
           <p>{emptyText}</p>
           {referenced && !loading ? (
@@ -1519,11 +1579,11 @@ function NodeInputMedia({
 
   if (kind === "audio") {
     return (
-      <div className="nodrag nowheel flex min-h-0 flex-1 flex-col justify-center gap-2 overflow-hidden bg-slate-950 p-2 text-white">
+      <div className="flex min-h-0 flex-1 flex-col justify-center gap-2 overflow-hidden bg-slate-950 p-2 text-white">
         <p className="truncate text-[10px] font-medium" title={name}>{name}</p>
         <audio
           aria-label={`播放音频：${name}`}
-          className="h-8 w-full"
+          className="nodrag nowheel h-8 w-full"
           controls
           onLoadedMetadata={(event) => readMediaMetadata(event.currentTarget)}
           preload="metadata"

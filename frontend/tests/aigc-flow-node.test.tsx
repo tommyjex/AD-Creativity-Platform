@@ -304,7 +304,7 @@ describe("AIGC image nodes", () => {
     );
   });
 
-  it("uses neutral borders on modality cards without tinting the title row", () => {
+  it("hides canvas titles for every modality without an empty title row", () => {
     const cases: Array<{
       label: string;
       node: AigcV2Node;
@@ -359,23 +359,46 @@ describe("AIGC image nodes", () => {
     for (const { label, node } of cases) {
       const { container, unmount } = renderNode(node);
       const card = container.firstElementChild as HTMLElement;
-      const header = screen.getByTestId("aigc-node-title-row");
 
       expect(card).toHaveClass("border-border");
       expect(card.style.borderColor).toBe("");
-      expect(screen.getByText(label)).toBeInTheDocument();
-      expect(header.style.backgroundColor).toBe("");
-      expect(header.style.borderBottomColor).toBe("");
+      expect(card).toHaveAttribute("aria-label", label);
+      expect(screen.queryByTestId("aigc-node-title")).toBeNull();
+      expect(screen.queryByTestId("aigc-node-title-row")).toBeNull();
       expect(screen.queryByTestId("aigc-node-type-icon")).toBeNull();
       expect(
         screen.queryByRole("button", { name: `删除节点：${label}` })
       ).toBeNull();
+      if (node.type === "text") {
+        expect(screen.getByText("产品描述").parentElement).not.toHaveClass(
+          "nodrag"
+        );
+      } else if (node.type === "image") {
+        expect(screen.queryByTestId("aigc-node-actions")).toBeNull();
+        expect(
+          screen.getByTestId("aigc-image-node-actions")
+        ).toBeInTheDocument();
+        expect(screen.getByTestId("aigc-image-preview")).not.toHaveClass(
+          "nodrag"
+        );
+      } else if (node.type === "video") {
+        expect(
+          screen.getByText("选择或上传视频").parentElement?.parentElement
+        ).not.toHaveClass("nodrag");
+      } else if (node.type === "audio") {
+        expect(
+          screen.getByText("选择或上传音频").parentElement?.parentElement
+        ).not.toHaveClass("nodrag");
+      } else {
+        expect(screen.queryByTestId("aigc-node-actions")).toBeNull();
+        expect(screen.queryByTestId("aigc-image-node-actions")).toBeNull();
+      }
 
       unmount();
     }
   });
 
-  it("uses neutral borders on model and modality cards", () => {
+  it("keeps representative model and control titles visible", () => {
     const cases: Array<{
       label: string;
       node: AigcV2Node;
@@ -396,17 +419,13 @@ describe("AIGC image nodes", () => {
         }
       },
       {
-        label: "文本节点",
+        label: "JSON 解析器",
         node: {
-          id: "text-output",
-          type: "text",
+          id: "json-parser",
+          type: "json_parser",
           position: { x: 0, y: 0 },
           size: { width: 240, height: 160 },
-          config: {
-            text: "",
-            bbox_references: [],
-            title: "文案结果"
-          }
+          config: { json_path: "$.items" }
         }
       }
     ];
@@ -428,7 +447,7 @@ describe("AIGC image nodes", () => {
     }
   });
 
-  it("derives duplicate canvas titles from definition order and operation", () => {
+  it("keeps modality numbering semantic while only model titles stay visible", () => {
     const firstImage: AigcV2Node = {
       id: "image-first",
       type: "image",
@@ -491,11 +510,17 @@ describe("AIGC image nodes", () => {
     });
 
     const firstImageView = renderNode(firstImage);
-    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点1");
+    expect(
+      screen.getByRole("group", { name: "图片节点1" })
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("aigc-node-title")).toBeNull();
     firstImageView.unmount();
 
     const secondImageView = renderNode(secondImage);
-    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点2");
+    expect(
+      screen.getByRole("group", { name: "图片节点2" })
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("aigc-node-title")).toBeNull();
     secondImageView.unmount();
 
     const secondModelView = renderNode(secondModel);
@@ -506,7 +531,7 @@ describe("AIGC image nodes", () => {
     expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片编辑");
   });
 
-  it("keeps a canvas title stable after dragging and renumbers it after deletion", () => {
+  it("keeps an accessible modality name stable after dragging and renumbers it after deletion", () => {
     const firstImage: AigcV2Node = {
       id: "image-first",
       type: "image",
@@ -539,13 +564,14 @@ describe("AIGC image nodes", () => {
     });
     renderNode(secondImage);
 
-    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点2");
+    expect(screen.getByRole("group", { name: "图片节点2" })).toBeInTheDocument();
+    expect(screen.queryByTestId("aigc-node-title")).toBeNull();
 
     act(() => store.getState().moveNode(secondImage.id, { x: -400, y: -300 }));
-    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点2");
+    expect(screen.getByRole("group", { name: "图片节点2" })).toBeInTheDocument();
 
     act(() => store.getState().removeNode(firstImage.id));
-    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("图片节点");
+    expect(screen.getByRole("group", { name: "图片节点" })).toBeInTheDocument();
     expect(
       store.getState().definition.nodes.find((node) => node.id === secondImage.id)
     ).toMatchObject({
@@ -554,7 +580,7 @@ describe("AIGC image nodes", () => {
     });
   });
 
-  it("renames the node title inline and cancels with Escape", () => {
+  it("temporarily shows modality rename input and hides it after save or cancel", () => {
     const node: AigcV2Node = {
       id: "rename-text",
       type: "text",
@@ -586,9 +612,12 @@ describe("AIGC image nodes", () => {
     expect(store.getState().definition.nodes[0]?.custom_name).toBe(
       "商品文案输入"
     );
-    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent(
-      "商品文案输入"
-    );
+    expect(screen.queryByRole("textbox", { name: "节点名称" })).toBeNull();
+    expect(screen.queryByTestId("aigc-node-title-row")).toBeNull();
+    expect(screen.queryByTestId("aigc-node-title")).toBeNull();
+    expect(
+      screen.getByRole("group", { name: "商品文案输入" })
+    ).toBeInTheDocument();
 
     act(() => store.getState().setRenamingNodeId(node.id));
     const renamedInput = screen.getByRole("textbox", { name: "节点名称" });
@@ -597,9 +626,50 @@ describe("AIGC image nodes", () => {
     expect(store.getState().definition.nodes[0]?.custom_name).toBe(
       "商品文案输入"
     );
+    expect(screen.queryByRole("textbox", { name: "节点名称" })).toBeNull();
+    expect(screen.queryByTestId("aigc-node-title-row")).toBeNull();
   });
 
-  it("preserves the neutral border, primary selection ring, and dimensions", () => {
+  it("keeps model titles visible after inline rename persistence", () => {
+    const node: AigcV2Node = {
+      id: "rename-llm",
+      type: "llm",
+      custom_name: null,
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        model: "doubao-seed-evolving",
+        system_prompt: "",
+        temperature: 0.7
+      }
+    };
+    store.getState().initialize({
+      definition: {
+        schemaVersion: 2,
+        nodes: [node],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      },
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "模型重命名",
+      revision: 1
+    });
+    renderNode(node);
+
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("LLM");
+    act(() => store.getState().setRenamingNodeId(node.id));
+    const input = screen.getByRole("textbox", { name: "节点名称" });
+    fireEvent.change(input, { target: { value: "文案模型" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(store.getState().definition.nodes[0]?.custom_name).toBe("文案模型");
+    expect(screen.getByTestId("aigc-node-title-row")).toBeInTheDocument();
+    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("文案模型");
+  });
+
+  it("preserves the neutral border, primary selection ring, dimensions, and accessible name", () => {
     const node: AigcV2Node = {
       id: "selected-text",
       type: "text",
@@ -609,8 +679,6 @@ describe("AIGC image nodes", () => {
     };
     const { container } = renderNode(node, null, true);
     const card = container.firstElementChild as HTMLElement;
-    const header = screen.getByTestId("aigc-node-title-row");
-    const title = screen.getByTestId("aigc-node-title");
 
     expect(card).toHaveClass(
       "h-full",
@@ -623,16 +691,15 @@ describe("AIGC image nodes", () => {
     );
     expect(card).not.toHaveClass("border-primary");
     expect(card.style.borderColor).toBe("");
-    expect(header).toHaveClass("h-7", "shrink-0", "px-2.5");
-    expect(header).not.toHaveClass("border-b");
-    expect(title).toHaveClass("text-[11px]", "font-medium");
-    expect(title).not.toHaveClass("text-xs", "font-semibold");
+    expect(card).toHaveAttribute("aria-label", "文本节点");
+    expect(screen.queryByTestId("aigc-node-title-row")).toBeNull();
+    expect(screen.queryByTestId("aigc-node-title")).toBeNull();
     expect(screen.queryByText("INPUT")).toBeNull();
     expect(screen.queryByText("selected-text")).toBeNull();
   });
 
   it("keeps precise editing visible and disabled before an image is selected", () => {
-    renderNode({
+    const { container } = renderNode({
       id: "input-image",
       type: "image",
       position: { x: 0, y: 0 },
@@ -645,10 +712,33 @@ describe("AIGC image nodes", () => {
       }
     });
 
+    const card = screen.getByRole("group", { name: "图片节点" });
+    const externalActions = screen.getByTestId("aigc-image-node-actions");
     const preciseEdit = screen.getByRole("button", {
       name: "精准编辑：图片输入"
     });
+    expect(container).toContainElement(externalActions);
+    expect(card).not.toContainElement(externalActions);
+    expect(externalActions).toContainElement(preciseEdit);
+    expect(externalActions).toHaveClass(
+      "absolute",
+      "right-0",
+      "top-0",
+      "h-[12px]",
+      "w-[12px]"
+    );
+    expect(screen.queryByTestId("aigc-node-actions")).toBeNull();
+    expect(preciseEdit).toHaveClass(
+      "nodrag",
+      "h-[10px]",
+      "w-[10px]"
+    );
+    expect(preciseEdit.querySelector("svg")).toHaveClass(
+      "h-[6px]",
+      "w-[6px]"
+    );
     expect(preciseEdit).toBeDisabled();
+    expect(preciseEdit).toHaveAttribute("title", "选择图片后可精准编辑");
     expect(preciseEdit.parentElement).not.toHaveClass("opacity-0");
   });
 
@@ -661,20 +751,43 @@ describe("AIGC image nodes", () => {
       type: "uploaded_image",
       url: "https://example.com/input.png"
     } as unknown as Asset);
-    renderNode({
+    const node: AigcV2Node = {
       id: "input-image",
       type: "image",
       position: { x: 0, y: 0 },
       size: { width: 240, height: 160 },
       config: {
         asset_id: "asset-1",
-        bbox: null,
-        bbox_asset_id: null,
+        bbox: {
+          type: "bbox",
+          x1: 100,
+          y1: 120,
+          x2: 900,
+          y2: 780
+        },
+        bbox_asset_id: "asset-1",
         title: null
       }
+    };
+    store.getState().initialize({
+      definition: {
+        schemaVersion: 2,
+        nodes: [node],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      },
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "图片预览",
+      revision: 1
     });
+    renderNode(node);
 
     const image = await screen.findByAltText("产品横图.png");
+    const preview = screen.getByTestId("aigc-image-preview");
+    expect(preview).toHaveClass("bg-card");
+    expect(preview).not.toHaveClass("bg-slate-950");
     expect(image).toHaveClass(
       "absolute",
       "inset-0",
@@ -682,11 +795,16 @@ describe("AIGC image nodes", () => {
       "w-full",
       "object-contain"
     );
+    expect(preview).not.toHaveClass("nodrag");
+    expect(
+      screen.getByRole("button", { name: "查看原图：产品横图.png" })
+    ).toHaveClass("nodrag");
     Object.defineProperty(image, "naturalWidth", { value: 1920 });
     Object.defineProperty(image, "naturalHeight", { value: 1080 });
     fireEvent.load(image);
 
     expect(screen.getByText("1920 × 1080")).toBeInTheDocument();
+    expect(screen.getByText("已框选")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "查看原图：产品横图.png" }));
     expect(screen.getByRole("heading", { name: "查看原图" })).toBeInTheDocument();
     expect(screen.getByAltText("产品横图.png 原图预览")).toHaveClass(
@@ -1012,8 +1130,15 @@ describe("AIGC image nodes", () => {
     const video = screen.getByLabelText("播放视频：最终/成片");
     expect(video).toHaveAttribute("controls");
     expect(video).toHaveAttribute("playsinline");
-    expect(video).toHaveClass("h-full", "w-full", "object-contain");
-    expect(video.parentElement).toHaveClass("nodrag", "nopan", "nowheel");
+    expect(video).toHaveClass(
+      "nodrag",
+      "nopan",
+      "nowheel",
+      "h-full",
+      "w-full",
+      "object-contain"
+    );
+    expect(video.parentElement).not.toHaveClass("nodrag");
     expect(screen.getByText(/720p · 8s · 无音频 · video\/mp4 · 可用/)).toBeInTheDocument();
 
     Object.defineProperty(video, "videoWidth", { value: 1280 });
@@ -1426,8 +1551,15 @@ describe("AIGC image nodes", () => {
     const video = await screen.findByLabelText("播放视频：产品演示.mp4");
     expect(video).toHaveAttribute("controls");
     expect(video).toHaveAttribute("playsinline");
-    expect(video).toHaveClass("h-full", "w-full", "object-contain");
-    expect(video.parentElement).toHaveClass("nodrag", "nopan", "nowheel");
+    expect(video).toHaveClass(
+      "nodrag",
+      "nopan",
+      "nowheel",
+      "h-full",
+      "w-full",
+      "object-contain"
+    );
+    expect(video.parentElement).not.toHaveClass("nodrag");
     Object.defineProperty(video, "videoWidth", { value: 1920 });
     Object.defineProperty(video, "videoHeight", { value: 1080 });
     Object.defineProperty(video, "duration", { value: 12.5 });
@@ -1458,6 +1590,8 @@ describe("AIGC image nodes", () => {
     });
 
     const audio = await screen.findByLabelText("播放音频：旁白.mp3");
+    expect(audio).toHaveClass("nodrag", "nowheel");
+    expect(audio.parentElement).not.toHaveClass("nodrag");
     Object.defineProperty(audio, "duration", { value: 65.2 });
     fireEvent.loadedMetadata(audio);
 

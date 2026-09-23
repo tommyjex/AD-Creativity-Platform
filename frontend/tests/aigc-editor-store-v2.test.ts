@@ -654,6 +654,56 @@ describe("AIGC v2 editor store", () => {
     });
   });
 
+  it("keeps server-added ordinary nodes when rebasing a viewport-only draft", () => {
+    const first = modalityNode("first", "text");
+    const second = modalityNode("second", "image");
+    const third = modalityNode("third", "video");
+    const remoteAdded = modalityNode("remote-added", "image");
+    const baseDefinition = definition([first, second, third]);
+    const localDefinition = {
+      ...structuredClone(baseDefinition),
+      viewport: { x: 120, y: 80, zoom: 0.9 }
+    };
+    const remoteEdge: AigcEdge = {
+      id: "server-added-edge",
+      sourceNodeId: "third",
+      sourceHandle: "video",
+      targetNodeId: "remote-added",
+      targetHandle: "image"
+    };
+    const serverDefinition = definition(
+      [first, second, third, remoteAdded],
+      [remoteEdge]
+    );
+
+    const merged = mergeAigcServerRevision(
+      {
+        definition: baseDefinition,
+        description: "",
+        name: "Pipeline"
+      },
+      {
+        definition: localDefinition,
+        description: "",
+        name: "Pipeline"
+      },
+      {
+        definition: serverDefinition,
+        description: "",
+        name: "Pipeline"
+      }
+    );
+
+    expect(merged.definition.nodes.map((node) => node.id)).toEqual([
+      "first",
+      "second",
+      "third",
+      "remote-added"
+    ]);
+    expect(merged.definition.edges).toEqual([remoteEdge]);
+    expect(merged.definition.viewport).toEqual(localDefinition.viewport);
+  });
+
   it("rebases a dirty draft onto server-managed nodes and system edges", () => {
     const parser: AigcV2Node = {
       id: "parser",

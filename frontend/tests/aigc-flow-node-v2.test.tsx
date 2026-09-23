@@ -530,7 +530,14 @@ describe("AIGC v2 modality node card", () => {
     expect(screen.queryByTestId("aigc-modality-mode")).toBeNull();
     expect(screen.getByText("Run 上游文案")).toBeInTheDocument();
     expect(screen.queryByText("本地备用文案")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "复制文本：投放文案" }));
+    expect(screen.getByText("Run 上游文案").parentElement).not.toHaveClass(
+      "nodrag"
+    );
+    const copyButton = screen.getByRole("button", {
+      name: "复制文本：投放文案"
+    });
+    expect(copyButton).toHaveClass("nodrag");
+    fireEvent.click(copyButton);
     expect(writeText).toHaveBeenCalledWith("Run 上游文案");
 
     act(() => store.getState().removeEdge("upstream-text"));
@@ -633,19 +640,55 @@ describe("AIGC v2 modality node card", () => {
       const download = screen.queryByRole("link", { name: testCase.label });
       if (testCase.node.type === "audio") {
         expect(download).toHaveAttribute("download", testCase.expectedFilename);
+        expect(screen.getByTestId("aigc-node-actions")).toContainElement(
+          download
+        );
       } else {
         expect(download).toBeNull();
       }
+      expect(screen.queryByTestId("aigc-node-title")).toBeNull();
+      expect(screen.queryByTestId("aigc-node-title-row")).toBeNull();
       if (testCase.node.type === "image") {
+        const preciseEdit = screen.getByRole("button", {
+          name: "精准编辑：海报成片"
+        });
         expect(screen.getByAltText("海报成片")).toHaveClass("object-contain");
-      }
-      if (testCase.node.type === "video") {
-        expect(screen.getByLabelText("播放视频：视频成片")).toHaveClass(
-          "object-contain"
+        expect(screen.queryByTestId("aigc-node-actions")).toBeNull();
+        expect(screen.getByTestId("aigc-image-node-actions")).toHaveClass(
+          "h-[12px]",
+          "w-[12px]"
+        );
+        expect(screen.getByTestId("aigc-image-node-actions")).toContainElement(
+          preciseEdit
+        );
+        expect(preciseEdit).toHaveClass(
+          "nodrag",
+          "h-[10px]",
+          "w-[10px]"
+        );
+        expect(preciseEdit.querySelector("svg")).toHaveClass(
+          "h-[6px]",
+          "w-[6px]"
+        );
+        expect(screen.getByTestId("aigc-image-preview")).toHaveClass("bg-card");
+        expect(screen.getByTestId("aigc-image-preview")).not.toHaveClass(
+          "nodrag"
         );
       }
+      if (testCase.node.type === "video") {
+        const video = screen.getByLabelText("播放视频：视频成片");
+        expect(video).toHaveClass(
+          "nodrag",
+          "nopan",
+          "nowheel",
+          "object-contain"
+        );
+        expect(video.parentElement).not.toHaveClass("nodrag");
+      }
       if (testCase.node.type === "audio") {
-        expect(screen.getByLabelText("播放音频：旁白成片")).toBeInTheDocument();
+        const audio = screen.getByLabelText("播放音频：旁白成片");
+        expect(audio).toHaveClass("nodrag", "nowheel");
+        expect(audio.parentElement).not.toHaveClass("nodrag");
         expect(screen.getByLabelText("音频信息：旁白成片")).toHaveTextContent(
           "8s · audio/wav"
         );
@@ -971,7 +1014,11 @@ describe("AIGC v2 modality node card", () => {
 
     renderNode(node, definition);
 
-    expect(screen.getByTestId("aigc-node-title")).toHaveTextContent("JSON 项 1");
+    expect(screen.queryByTestId("aigc-node-title")).toBeNull();
+    expect(screen.queryByTestId("aigc-node-title-row")).toBeNull();
+    expect(
+      screen.getByRole("group", { name: "JSON 项 1" })
+    ).toBeInTheDocument();
     expect(screen.getByText("来源：JSON 解析器")).toBeInTheDocument();
     expect(screen.getByText(longText)).toHaveClass("break-words");
     expect(screen.getByText("只读上游内容")).toBeInTheDocument();

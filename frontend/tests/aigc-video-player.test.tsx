@@ -33,7 +33,8 @@ describe("AigcVideoPlayer", () => {
     const video = screen.getByLabelText("播放视频：测试视频.mp4");
     expect(video).toHaveAttribute("controls");
     expect(video).toHaveAttribute("playsinline");
-    expect(video.parentElement).toHaveClass("nodrag", "nopan", "nowheel");
+    expect(video).toHaveClass("nodrag", "nopan", "nowheel");
+    expect(video.parentElement).not.toHaveClass("nodrag", "nopan", "nowheel");
     expect(
       screen.queryByRole("button", { name: /^(全屏播放|放大预览)：/ })
     ).toBeNull();
