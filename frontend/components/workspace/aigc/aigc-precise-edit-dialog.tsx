@@ -30,6 +30,7 @@ export function AigcPreciseEditDialog({
   assetId,
   assetName,
   bboxState,
+  compactTrigger = false,
   sourceMode,
   node,
   url
@@ -37,6 +38,7 @@ export function AigcPreciseEditDialog({
   assetId: string | null;
   assetName: string;
   bboxState: "none" | "stale" | "valid";
+  compactTrigger?: boolean;
   sourceMode: "local" | "upstream";
   node: Extract<AigcV2Node, { type: "image" }>;
   url: string | null;
@@ -132,7 +134,10 @@ export function AigcPreciseEditDialog({
     <>
       <button
         aria-label={`精准编辑：${assetName}`}
-        className="nodrag grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-card hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+        className={cn(
+          "nodrag grid shrink-0 place-items-center rounded text-muted-foreground hover:bg-card hover:text-primary disabled:cursor-not-allowed disabled:opacity-40",
+          compactTrigger ? "h-[10px] w-[10px]" : "h-6 w-6"
+        )}
         disabled={!canOpen}
         onClick={(event) => {
           event.stopPropagation();
@@ -147,7 +152,11 @@ export function AigcPreciseEditDialog({
         }
         type="button"
       >
-        <ScanSearch className="h-3.5 w-3.5" />
+        <ScanSearch
+          className={
+            compactTrigger ? "h-[6px] w-[6px]" : "h-3.5 w-3.5"
+          }
+        />
       </button>
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent className="grid h-[92dvh] w-[96vw] max-w-[96vw] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:rounded-lg">

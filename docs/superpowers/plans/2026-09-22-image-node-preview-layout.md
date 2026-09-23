@@ -23,7 +23,7 @@
 - Modify: `frontend/tests/aigc-flow-node.test.tsx:680-840`
 - Modify: `frontend/tests/aigc-flow-node-v2.test.tsx:630-655`
 
-- [ ] **Step 1: Assert that precise edit is outside the card**
+- [x] **Step 1: Assert that precise edit is outside the card**
 
 Update the disabled precise-edit test to capture the rendered card and assert the external action relationship:
 
@@ -54,7 +54,7 @@ expect(externalActions).toHaveClass("absolute", "right-0", "top-0");
 expect(screen.queryByTestId("aigc-node-actions")).toBeNull();
 ```
 
-- [ ] **Step 2: Assert gray preview and preserved status badges**
+- [x] **Step 2: Assert gray preview and preserved status badges**
 
 Add a test id to the expected preview contract and extend the image load test:
 
@@ -76,7 +76,7 @@ For an image node with a valid BBox, retain:
 expect(screen.getByText("已框选")).toBeInTheDocument();
 ```
 
-- [ ] **Step 3: Protect V2 projected-image behavior**
+- [x] **Step 3: Protect V2 projected-image behavior**
 
 Replace the V2 expectation that the precise-edit button is inside shared node actions:
 
@@ -88,7 +88,7 @@ expect(screen.getByTestId("aigc-image-node-actions")).toContainElement(
 expect(screen.getByTestId("aigc-image-preview")).toHaveClass("bg-card");
 ```
 
-- [ ] **Step 4: Run focused tests and verify the new assertions fail**
+- [x] **Step 4: Run focused tests and verify the new assertions fail**
 
 Run:
 
@@ -105,7 +105,7 @@ Expected: failures for the missing `aigc-image-node-actions` and `aigc-image-pre
 - Modify: `frontend/components/workspace/aigc/aigc-flow-node.tsx:309-720`
 - Modify: `frontend/components/workspace/aigc/aigc-flow-node.tsx:1390-1495`
 
-- [ ] **Step 1: Restrict shared in-card actions to actual downloads**
+- [x] **Step 1: Restrict shared in-card actions to actual downloads**
 
 Replace the image-inclusive action condition:
 
@@ -115,7 +115,7 @@ const hasNodeActions = Boolean(outputDownload);
 
 Do not pass `AigcPreciseEditDialog` through `NodeActions`; use `imageAction={null}` in title-row and compact shared-action calls. This keeps downloads unchanged for model, audio, and control nodes.
 
-- [ ] **Step 2: Render precise edit as a card sibling**
+- [x] **Step 2: Render precise edit as a card sibling**
 
 Wrap the existing return value in a fragment and append the external action after the card:
 
@@ -155,7 +155,7 @@ return (
 
 Use a top-right offset that leaves the right-side output port and NodeResizer handles unobstructed. Preserve the current dialog props and event isolation.
 
-- [ ] **Step 3: Make the preview surface match the text node**
+- [x] **Step 3: Make the preview surface match the text node**
 
 Update `NodeImageMedia`:
 
@@ -182,7 +182,7 @@ className="absolute inset-0 block h-full w-full select-none object-contain"
 
 Keep the resolution and `已框选` overlays unchanged.
 
-- [ ] **Step 4: Run focused tests and verify they pass**
+- [x] **Step 4: Run focused tests and verify they pass**
 
 Run:
 
@@ -198,7 +198,7 @@ Expected: both files pass with no failed tests.
 **Files:**
 - Modify: `frontend/scripts/verify-aigc-modality-node-titles.py:300-460`
 
-- [ ] **Step 1: Add browser assertions for the external action**
+- [x] **Step 1: Add browser assertions for the external action**
 
 For the image node in each viewport, evaluate bounding boxes:
 
@@ -222,7 +222,7 @@ assert preview.evaluate(
 
 Also assert that the button remains enabled when an image is available and opens the precise-edit dialog.
 
-- [ ] **Step 2: Run component and static checks**
+- [x] **Step 2: Run component and static checks**
 
 Run:
 
@@ -235,13 +235,13 @@ npm run lint
 
 Expected: all commands exit with status 0.
 
-- [ ] **Step 3: Run the existing three-viewport Playwright acceptance**
+- [x] **Step 3: Run the existing three-viewport Playwright acceptance**
 
 Run the repository’s established command for:
 
 ```bash
 cd frontend
-python3 scripts/verify-aigc-modality-node-titles.py
+../.venv/bin/python scripts/verify-aigc-modality-node-titles.py
 ```
 
 Expected:
@@ -253,7 +253,7 @@ Expected:
 - Image and empty states use the same gray surface as the text node.
 - Browser console errors and page errors are both zero.
 
-- [ ] **Step 4: Inspect screenshots**
+- [x] **Step 4: Inspect screenshots**
 
 Open the generated desktop, tablet, and mobile screenshots and confirm:
 
@@ -263,7 +263,7 @@ Open the generated desktop, tablet, and mobile screenshots and confirm:
 - the preview surface is gray rather than navy;
 - the resolution and BBox badges remain legible.
 
-- [ ] **Step 5: Check the final diff**
+- [x] **Step 5: Check the final diff**
 
 Run:
 

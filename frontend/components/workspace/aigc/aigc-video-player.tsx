@@ -66,7 +66,7 @@ export function AigcVideoPlayer({
       <div
         className={cn(
           "grid place-items-center bg-slate-950 px-3 text-center text-[10px] text-slate-300",
-          variant === "node" ? "nodrag min-h-0 flex-1" : "h-44",
+          variant === "node" ? "min-h-0 flex-1" : "h-44",
           className
         )}
       >
@@ -85,14 +85,16 @@ export function AigcVideoPlayer({
       <div
         className={cn(
           "relative overflow-hidden bg-slate-950 p-1.5",
-          variant === "node" && "nodrag nopan nowheel",
           variant === "node" ? "min-h-0 flex-1" : "h-44",
           className
         )}
       >
         <video
           aria-label={`播放视频：${name}`}
-          className="block h-full w-full object-contain"
+          className={cn(
+            "block h-full w-full object-contain",
+            variant === "node" && "nodrag nopan nowheel"
+          )}
           controls
           onLoadedMetadata={(event) => readMetadata(event.currentTarget)}
           playsInline

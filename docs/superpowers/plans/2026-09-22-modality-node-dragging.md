@@ -26,7 +26,7 @@
 - Modify: `frontend/tests/aigc-flow-node.test.tsx`
 - Modify: `frontend/tests/aigc-flow-node-v2.test.tsx`
 
-- [ ] **Step 1: Add failing tests for local modality nodes**
+- [x] **Step 1: Add failing tests for local modality nodes**
 
 In `frontend/tests/aigc-flow-node.test.tsx`, extend the representative modality coverage to assert:
 
@@ -43,7 +43,7 @@ expect(screen.getByLabelText("播放音频：旁白.mp3"))
 
 Add stable test IDs only to modality body surfaces that cannot otherwise be selected unambiguously. Assert that rename inputs, copy buttons, and the external precise-edit action still have `nodrag`.
 
-- [ ] **Step 2: Add failing tests for projected modality nodes and compact action sizing**
+- [x] **Step 2: Add failing tests for projected modality nodes and compact action sizing**
 
 In `frontend/tests/aigc-flow-node-v2.test.tsx`, assert that projected text/image/video/audio containers are draggable, while their real controls retain `nodrag`. In the image case, assert:
 
@@ -57,7 +57,7 @@ expect(
 ).toHaveClass("h-3", "w-3");
 ```
 
-- [ ] **Step 3: Run focused tests and verify the new assertions fail**
+- [x] **Step 3: Run focused tests and verify the new assertions fail**
 
 Run:
 
@@ -76,7 +76,7 @@ Expected: FAIL because modality body wrappers still carry `nodrag`, interactive 
 - Modify: `frontend/components/workspace/aigc/aigc-video-player.tsx`
 - Modify: `frontend/components/workspace/aigc/aigc-audio-player.tsx`
 
-- [ ] **Step 1: Add the explicit compact precise-edit trigger option**
+- [x] **Step 1: Add the explicit compact precise-edit trigger option**
 
 Add `compactTrigger?: boolean` to `AigcPreciseEditDialog`. Keep the default unchanged and derive classes with `cn`:
 
@@ -93,11 +93,11 @@ Render the icon with:
 <ScanSearch className={compactTrigger ? "h-3 w-3" : "h-3.5 w-3.5"} />
 ```
 
-- [ ] **Step 2: Shrink only the image node's external action**
+- [x] **Step 2: Shrink only the image node's external action**
 
 In `aigc-flow-node.tsx`, change the external action container from `h-7 w-7` to `h-6 w-6` and pass `compactTrigger` to `AigcPreciseEditDialog`. Preserve `nodrag`, click/pointer propagation blocking, tooltip, disabled state, absolute positioning, and right-edge alignment.
 
-- [ ] **Step 3: Make text and image body surfaces draggable**
+- [x] **Step 3: Make text and image body surfaces draggable**
 
 Remove `nodrag` from the `ModalityTextBody` outer container and `NodeImageMedia` preview container. Add `nodrag` to the text copy button and image original-preview button:
 
@@ -107,7 +107,7 @@ className="nodrag ..."
 
 Keep the rename input, external precise-edit action, and node action links isolated as they are.
 
-- [ ] **Step 4: Isolate only native video controls**
+- [x] **Step 4: Isolate only native video controls**
 
 In `AigcVideoPlayer`, remove `nodrag nopan nowheel` from the node wrapper so its padding and overlay remain valid drag surfaces. Put those classes on the native video element:
 
@@ -117,7 +117,7 @@ In `AigcVideoPlayer`, remove `nodrag nopan nowheel` from the node wrapper so its
 
 For unavailable media, leave the non-interactive empty-state wrapper without `nodrag`.
 
-- [ ] **Step 5: Isolate only native audio controls**
+- [x] **Step 5: Isolate only native audio controls**
 
 In `AigcAudioPlayer`, remove `nodrag nowheel` from the node wrapper and put those classes on the native audio element:
 
@@ -127,7 +127,7 @@ In `AigcAudioPlayer`, remove `nodrag nowheel` from the node wrapper and put thos
 
 Apply the same boundary to the local audio branch in `NodeInputMedia`: its wrapper, name, metadata, and empty state remain draggable; only the native audio element receives `nodrag nowheel`.
 
-- [ ] **Step 6: Run focused tests and verify they pass**
+- [x] **Step 6: Run focused tests and verify they pass**
 
 Run:
 
@@ -143,7 +143,7 @@ Expected: both files PASS with no new warnings.
 **Files:**
 - Modify: `frontend/scripts/verify-aigc-modality-node-titles.py`
 
-- [ ] **Step 1: Add helpers for node position and safe drag points**
+- [x] **Step 1: Add helpers for node position and safe drag points**
 
 Add helpers that read the React Flow node transform or bounding box before and after a drag, and choose a visible non-interactive point from each modality card:
 
@@ -164,7 +164,7 @@ def drag_from_point(page, point: dict[str, float], dx: int = 36, dy: int = 24) -
 
 Use body padding, text content, player wrapper padding, or metadata areas. Never start from a button, link, image preview button, native media element, handle, resizer, or node action.
 
-- [ ] **Step 2: Verify all four modalities move**
+- [x] **Step 2: Verify all four modalities move**
 
 For each viewport and each of `text`, `image`, `video`, and `audio`:
 
@@ -175,7 +175,7 @@ For each viewport and each of `text`, `image`, `video`, and `audio`:
 
 Expected: all four node coordinates change at desktop, tablet, and mobile sizes.
 
-- [ ] **Step 3: Verify interactive controls do not drag**
+- [x] **Step 3: Verify interactive controls do not drag**
 
 Capture the owning node position, then click or perform a short pointer interaction on:
 
@@ -187,7 +187,7 @@ Capture the owning node position, then click or perform a short pointer interact
 
 Close opened dialogs with Escape and assert each node's position is unchanged. Retain the existing download, rename, overflow, console-error, and screenshot checks.
 
-- [ ] **Step 4: Run the three-viewport acceptance test**
+- [x] **Step 4: Run the three-viewport acceptance test**
 
 Run:
 
@@ -198,7 +198,7 @@ cd frontend
 
 Expected: desktop, tablet, and mobile scenarios PASS; each reports four draggable modalities, no control-induced movement, no overflow, and zero console/page errors.
 
-- [ ] **Step 5: Inspect all generated screenshots**
+- [x] **Step 5: Inspect all generated screenshots**
 
 Open every PNG under:
 
@@ -213,7 +213,7 @@ Confirm the 24px action remains above and right-aligned with the image card, doe
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-22-modality-node-dragging.md`
 
-- [ ] **Step 1: Run the complete Vitest suite**
+- [x] **Step 1: Run the complete Vitest suite**
 
 Run:
 
@@ -224,7 +224,7 @@ npm test
 
 Expected: all existing tests PASS, including the current 887-test baseline plus the new assertions.
 
-- [ ] **Step 2: Run TypeScript and ESLint**
+- [x] **Step 2: Run TypeScript and ESLint**
 
 Run:
 
@@ -236,7 +236,7 @@ npm run lint
 
 Expected: both commands exit 0 with no warnings.
 
-- [ ] **Step 3: Re-run the acceptance script after static checks**
+- [x] **Step 3: Re-run the acceptance script after static checks**
 
 Run:
 
@@ -247,6 +247,6 @@ cd frontend
 
 Expected: all three viewports PASS again with zero browser errors.
 
-- [ ] **Step 4: Record completion without committing product code**
+- [x] **Step 4: Record completion without committing product code**
 
 Mark completed checkboxes in this plan and summarize the exact test counts, viewport results, screenshots inspected, and any residual risk. Do not commit product code unless the user explicitly requests it.
