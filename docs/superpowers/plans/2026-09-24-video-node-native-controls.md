@@ -24,7 +24,7 @@
 **Files:**
 - Modify: `frontend/tests/aigc-video-player.test.tsx`
 
-- [ ] **Step 1: 将透明层边界断言改为“只覆盖上半区”**
+- [x] **Step 1: 将透明层边界断言改为“只覆盖上半区”**
 
 在 `keeps native controls available while marking React Flow gesture boundaries` 测试中，将旧的 `bottom-12` 断言替换为：
 
@@ -39,7 +39,7 @@ expect(surface).not.toHaveClass("bottom-12");
 
 这条测试明确禁止再次使用固定 48px 预留区。
 
-- [ ] **Step 2: 运行聚焦测试并确认先失败**
+- [x] **Step 2: 运行聚焦测试并确认先失败**
 
 Run:
 
@@ -50,7 +50,7 @@ npm test -- --run tests/aigc-video-player.test.tsx
 
 Expected: FAIL，报告透明层仍包含 `bottom-12`，缺少 `bottom-1/2`。
 
-- [ ] **Step 3: 保留原生事件隔离回归覆盖**
+- [x] **Step 3: 保留原生事件隔离回归覆盖**
 
 确认现有 `isolates native controls from node and canvas gesture handlers` 测试继续覆盖：
 
@@ -75,7 +75,7 @@ Object.values(events).forEach((handler) => {
 - Modify: `frontend/components/workspace/aigc/aigc-video-player.tsx`
 - Test: `frontend/tests/aigc-video-player.test.tsx`
 
-- [ ] **Step 1: 修改节点模式透明层的 Tailwind 边界**
+- [x] **Step 1: 修改节点模式透明层的 Tailwind 边界**
 
 将：
 
@@ -95,7 +95,7 @@ className="pointer-events-none absolute inset-x-1.5 bottom-1/2 top-1.5 z-10 curs
 - 下半区没有覆盖元素，事件直接进入 `<video controls>`。
 - 触摸设备仍由 `pointer-events-none` 直接使用原生播放器。
 
-- [ ] **Step 2: 运行视频播放器测试**
+- [x] **Step 2: 运行视频播放器测试**
 
 Run:
 
@@ -106,7 +106,7 @@ npm test -- --run tests/aigc-video-player.test.tsx
 
 Expected: PASS；透明层边界、双击播放、拖拽阈值、Promise rejection 和面板模式测试全部通过。
 
-- [ ] **Step 3: 运行相关画布节点回归测试**
+- [x] **Step 3: 运行相关画布节点回归测试**
 
 Run:
 
@@ -117,7 +117,7 @@ npm test -- --run tests/aigc-video-player.test.tsx tests/aigc-flow-node.test.tsx
 
 Expected: PASS；视频节点拖拽、节点选择和画布事件隔离无回归。
 
-- [ ] **Step 4: 提交实现和组件测试**
+- [x] **Step 4: 提交实现和组件测试**
 
 ```bash
 git add frontend/components/workspace/aigc/aigc-video-player.tsx \
@@ -131,7 +131,7 @@ git commit -m "fix: preserve video node native controls"
 - Create temporarily: `/tmp/verify-aigc-video-native-controls.py`
 - Do not modify repository files unless a product defect is found.
 
-- [ ] **Step 1: 确认前后端健康**
+- [x] **Step 1: 确认前后端健康**
 
 Run:
 
@@ -142,7 +142,7 @@ curl --max-time 10 --fail http://127.0.0.1:8000/health
 
 Expected: 两个请求均成功，后端返回 `"status":"ok"`。
 
-- [ ] **Step 2: 使用现有 acceptance fixture 准备视频节点**
+- [x] **Step 2: 使用现有 acceptance fixture 准备视频节点**
 
 Run:
 
@@ -153,7 +153,7 @@ npm run acceptance:aigc
 
 Expected: 输出可访问的 AIGC acceptance 页面或 Pipeline 标识，页面中包含可用视频节点。
 
-- [ ] **Step 3: 编写临时 Playwright 命中测试**
+- [x] **Step 3: 编写临时 Playwright 命中测试**
 
 `/tmp/verify-aigc-video-native-controls.py` 使用 `sync_playwright()`，在精确指针 Chromium 中：
 
@@ -192,7 +192,7 @@ assert lower_tag == "VIDEO"
 
 下半区命中 `<video>` 即证明播放、音量、全屏、更多菜单和进度条没有被应用层覆盖。测试不得查询原生 controls 的 Shadow DOM。
 
-- [ ] **Step 4: 验证上半区行为**
+- [x] **Step 4: 验证上半区行为**
 
 在同一脚本中：
 
@@ -206,7 +206,7 @@ assert after >= before
 
 随后从上半区拖动节点，断言 React Flow 节点位置发生变化且未抛出页面错误。
 
-- [ ] **Step 5: 验证多视口无溢出**
+- [x] **Step 5: 验证多视口无溢出**
 
 分别使用 `1024x768` 和 `390x844` 视口，断言：
 
@@ -223,7 +223,7 @@ assert page.evaluate(
 **Files:**
 - Verify only.
 
-- [ ] **Step 1: 运行完整前端测试**
+- [x] **Step 1: 运行完整前端测试**
 
 Run:
 
@@ -234,7 +234,7 @@ npm test
 
 Expected: 所有 Vitest 测试通过。
 
-- [ ] **Step 2: 运行 TypeScript 和 ESLint**
+- [x] **Step 2: 运行 TypeScript 和 ESLint**
 
 Run:
 
@@ -246,7 +246,7 @@ npm run lint
 
 Expected: 两个命令退出码均为 0，无 warning。
 
-- [ ] **Step 3: 运行生产构建**
+- [x] **Step 3: 运行生产构建**
 
 Run:
 
@@ -257,7 +257,7 @@ npm run build
 
 Expected: Next.js 构建成功，所有页面生成完成。
 
-- [ ] **Step 4: 检查最终差异**
+- [x] **Step 4: 检查最终差异**
 
 Run:
 

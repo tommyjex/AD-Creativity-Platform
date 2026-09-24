@@ -1,6 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import {
+  stopAigcNodeControlEvent,
+  useAigcNodeSurfaceActivation
+} from "@/components/workspace/aigc/aigc-node-gesture";
 import { cn } from "@/lib/utils";
 
 export interface AigcVideoMetadata {
@@ -61,6 +65,16 @@ export function AigcVideoPlayer({
     });
   }
 
+  function playFromVideoSurface() {
+    const playback = videoRef.current?.play();
+    if (playback) {
+      void playback.catch(() => undefined);
+    }
+  }
+  const surfaceActivation = useAigcNodeSurfaceActivation(
+    playFromVideoSurface
+  );
+
   if (!url) {
     return (
       <div
@@ -96,12 +110,38 @@ export function AigcVideoPlayer({
             variant === "node" && "nodrag nopan nowheel"
           )}
           controls
+          onClick={
+            variant === "node" ? stopAigcNodeControlEvent : undefined
+          }
+          onDoubleClick={
+            variant === "node" ? stopAigcNodeControlEvent : undefined
+          }
           onLoadedMetadata={(event) => readMetadata(event.currentTarget)}
+          onMouseDown={
+            variant === "node" ? stopAigcNodeControlEvent : undefined
+          }
+          onPointerDown={
+            variant === "node" ? stopAigcNodeControlEvent : undefined
+          }
           playsInline
           preload="metadata"
           ref={videoRef}
           src={url}
+          onTouchStart={
+            variant === "node" ? stopAigcNodeControlEvent : undefined
+          }
+          onWheel={
+            variant === "node" ? stopAigcNodeControlEvent : undefined
+          }
         />
+        {variant === "node" ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-1.5 bottom-1/2 top-1.5 z-10 cursor-grab [@media(pointer:fine)]:pointer-events-auto active:cursor-grabbing"
+            data-testid="aigc-video-surface"
+            {...surfaceActivation}
+          />
+        ) : null}
         <div className="pointer-events-none absolute inset-x-1.5 top-1.5 bg-gradient-to-b from-slate-950/95 to-transparent px-1.5 pb-5 pt-1 text-white">
           <p className="truncate text-[9px] font-medium">{name}</p>
           <p className="truncate font-mono text-[8px] text-slate-300">
