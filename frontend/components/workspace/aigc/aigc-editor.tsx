@@ -60,7 +60,12 @@ import {
 } from "@/components/workspace/aigc/aigc-canvas-context-menu";
 import { AigcImageDimensionsField } from "@/components/workspace/aigc/aigc-image-dimensions-field";
 import { AigcMediaAssetDialog } from "@/components/workspace/aigc/aigc-media-asset-dialog";
-import { AigcPromptEditor } from "@/components/workspace/aigc/aigc-prompt-editor";
+import { AIGC_NODE_DRAG_THRESHOLD } from "@/components/workspace/aigc/aigc-node-gesture";
+import {
+  AigcPromptEditor,
+  AigcPromptEditorDialogHost
+} from "@/components/workspace/aigc/aigc-prompt-editor";
+import { AigcNodeInteractionProvider } from "@/components/workspace/aigc/aigc-node-interaction-context";
 import {
   AigcRunActionsProvider,
   AigcRunProvider
@@ -1130,10 +1135,11 @@ function AigcEditorContent({
   );
 
   return (
-    <main
-      className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#101318] text-[#e8eaed] [--accent-foreground:210_17%_92%] [--accent:218_11%_18%] [--background:220_20%_8%] [--border:218_12%_20%] [--card:220_13%_11%] [--foreground:210_17%_92%] [--input:218_12%_24%] [--muted-foreground:218_9%_60%] [--muted:220_11%_16%] [--secondary-foreground:210_17%_88%] [--secondary:218_11%_16%]"
-      data-testid="aigc-editor-shell"
-    >
+    <AigcNodeInteractionProvider>
+      <main
+        className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-[#101318] text-[#e8eaed] [--accent-foreground:210_17%_92%] [--accent:218_11%_18%] [--background:220_20%_8%] [--border:218_12%_20%] [--card:220_13%_11%] [--foreground:210_17%_92%] [--input:218_12%_24%] [--muted-foreground:218_9%_60%] [--muted:220_11%_16%] [--secondary-foreground:210_17%_88%] [--secondary:218_11%_16%]"
+        data-testid="aigc-editor-shell"
+      >
       <header
         className="relative flex h-14 shrink-0 flex-row items-center gap-1 overflow-hidden border-b border-[#30353d] bg-[#171a1f] px-2 shadow-[0_3px_12px_rgba(0,0,0,0.22)] sm:px-3"
         data-testid="aigc-editor-header"
@@ -1377,6 +1383,8 @@ function AigcEditorContent({
                     deleteKeyCode: ["Backspace", "Delete"],
                     edgesReconnectable: false,
                     isValidConnection: validateConnection,
+                    nodeClickDistance: AIGC_NODE_DRAG_THRESHOLD,
+                    nodeDragThreshold: AIGC_NODE_DRAG_THRESHOLD,
                     onConnect,
                     onEdgesChange,
                     onMoveEnd: (_, viewport: Viewport) => setViewport(viewport),
@@ -1388,7 +1396,8 @@ function AigcEditorContent({
                     onPaneClick: dismissInspectorFromPane,
                     onPaneContextMenu: openNodePicker,
                     snapGrid: [16, 16],
-                    snapToGrid: true
+                    snapToGrid: true,
+                    zoomOnDoubleClick: false
                   }}
               />
             </AigcRunProvider>
@@ -1546,7 +1555,9 @@ function AigcEditorContent({
           </form>
         </DialogContent>
       </Dialog>
-    </main>
+      </main>
+      <AigcPromptEditorDialogHost />
+    </AigcNodeInteractionProvider>
   );
 }
 

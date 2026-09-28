@@ -6,6 +6,8 @@ import {
   AigcFlowNodeCard,
   type AigcFlowNode
 } from "@/components/workspace/aigc/aigc-flow-node";
+import { AigcNodeInteractionProvider } from "@/components/workspace/aigc/aigc-node-interaction-context";
+import { AigcPromptEditorDialogHost } from "@/components/workspace/aigc/aigc-prompt-editor";
 import {
   AigcRunActionsProvider,
   AigcRunProvider
@@ -144,23 +146,26 @@ function nodeView(
   return (
     <AigcQueryProvider>
       <AigcEditorStoreProvider store={store}>
-        <AigcRunActionsProvider
-          value={
-            runActions
-              ? {
-                  continueFromNode: runActions.continueFromNode,
-                  openLayerEditor: runActions.openLayerEditor,
-                  pendingForNode: () => runActions.pending
-                }
-              : null
-          }
-        >
-          <AigcRunProvider
-            value={singleRunProjection(runDetail, layerPreviewRun)}
+        <AigcNodeInteractionProvider>
+          <AigcRunActionsProvider
+            value={
+              runActions
+                ? {
+                    continueFromNode: runActions.continueFromNode,
+                    openLayerEditor: runActions.openLayerEditor,
+                    pendingForNode: () => runActions.pending
+                  }
+                : null
+            }
           >
-            <AigcFlowNodeCard {...nodeProps(node, selected)} />
-          </AigcRunProvider>
-        </AigcRunActionsProvider>
+            <AigcRunProvider
+              value={singleRunProjection(runDetail, layerPreviewRun)}
+            >
+              <AigcFlowNodeCard {...nodeProps(node, selected)} />
+              <AigcPromptEditorDialogHost />
+            </AigcRunProvider>
+          </AigcRunActionsProvider>
+        </AigcNodeInteractionProvider>
       </AigcEditorStoreProvider>
     </AigcQueryProvider>
   );
@@ -698,6 +703,215 @@ describe("AIGC image nodes", () => {
     expect(screen.queryByText("selected-text")).toBeNull();
   });
 
+  it("opens local text on double click or Enter, selects it, and restores focus", async () => {
+    const node: AigcV2Node = {
+      id: "editable-text",
+      type: "text",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        text: "本地有效文本",
+        bbox_references: [],
+        title: "本地文案"
+      }
+    };
+    store.getState().initialize({
+      definition: {
+        schemaVersion: 2,
+        nodes: [node],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      },
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "测试画布",
+      revision: 1
+    });
+    renderNode(node);
+
+    const content = screen.getByRole("button", {
+      name: "编辑文本：本地文案"
+    });
+    expect(content).not.toHaveClass("nodrag");
+    const canvasPointerDown = vi.fn();
+    content.parentElement?.addEventListener("pointerdown", canvasPointerDown);
+    fireEvent.pointerDown(content, {
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    fireEvent.pointerUp(content, {
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    expect(canvasPointerDown).toHaveBeenCalledOnce();
+    fireEvent.click(content);
+    expect(
+      screen.queryByTestId("aigc-fullscreen-prompt-editor")
+    ).not.toBeInTheDocument();
+
+    const canvasDoubleClick = vi.fn();
+    content.parentElement?.addEventListener("dblclick", canvasDoubleClick);
+    fireEvent.doubleClick(content);
+    expect(store.getState().selectedNodeId).toBe(node.id);
+    expect(canvasDoubleClick).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "完整基础文本" })).toHaveValue(
+      "本地有效文本"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(content).toHaveFocus());
+
+    fireEvent.keyDown(content, { key: "Enter" });
+    expect(screen.getByRole("textbox", { name: "完整基础文本" })).toHaveValue(
+      "本地有效文本"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    fireEvent.pointerDown(content, {
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    fireEvent.pointerMove(content, {
+      clientX: 20,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    fireEvent.pointerUp(content, {
+      clientX: 20,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    fireEvent.doubleClick(content);
+    expect(
+      screen.queryByTestId("aigc-fullscreen-prompt-editor")
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the current upstream text as an override and keeps managed text read-only", () => {
+    const source: AigcV2Node = {
+      id: "source",
+      type: "text",
+      position: { x: -320, y: 0 },
+      size: { width: 240, height: 160 },
+      config: { text: "源文本", bbox_references: [], title: null }
+    };
+    const target: AigcV2Node = {
+      id: "target",
+      type: "text",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        text: "本地备用文本",
+        bbox_references: [],
+        title: "上游文案"
+      }
+    };
+    const definition = {
+      schemaVersion: 2,
+      nodes: [source, target],
+      edges: [
+        {
+          id: "source-target",
+          sourceNodeId: source.id,
+          sourceHandle: "text",
+          targetNodeId: target.id,
+          targetHandle: "text"
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    } satisfies AigcPipelineRunDetail["run"]["definition_snapshot"];
+    const runDetail = {
+      run: {
+        id: "run-current",
+        status: "succeeded",
+        definition_snapshot: definition
+      },
+      nodes: [
+        {
+          node_id: source.id,
+          result: {
+            kind: "text",
+            text: "当前 Run 上游文本",
+            text_digest: "a".repeat(64),
+            assets: []
+          },
+          status: "succeeded"
+        }
+      ]
+    } as unknown as AigcPipelineRunDetail;
+
+    const upstreamView = renderNode(target, runDetail);
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: "编辑文本：上游文案" })
+    );
+    const editor = screen.getByRole("textbox", { name: "完整基础文本" });
+    expect(editor).toHaveValue("当前 Run 上游文本");
+    fireEvent.change(editor, { target: { value: "节点覆盖文本" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用" }));
+    expect(
+      store.getState().definition.nodes.find((node) => node.id === target.id)
+        ?.config
+    ).toMatchObject({ upstream_text_override: "节点覆盖文本" });
+    upstreamView.unmount();
+
+    const parser: AigcV2Node = {
+      id: "parser",
+      type: "json_parser",
+      position: { x: -320, y: 0 },
+      size: { width: 240, height: 160 },
+      config: { json_path: "$.items" }
+    };
+    const managed: AigcV2Node = {
+      ...target,
+      id: "managed",
+      config: {
+        ...target.config,
+        generated_by_parser_node_id: parser.id,
+        generated_item_index: 0,
+        generated_from_run_id: "run-current"
+      }
+    };
+    store.getState().initialize({
+      definition: {
+        ...definition,
+        nodes: [parser, managed],
+        edges: [
+          {
+            id: "source-managed",
+            sourceNodeId: parser.id,
+            sourceHandle: "items",
+            targetNodeId: managed.id,
+            targetHandle: "text"
+          }
+        ]
+      },
+      description: "",
+      entityId: "pipeline-1",
+      mode: "pipeline",
+      name: "测试画布",
+      revision: 2
+    });
+    const managedView = renderNode(managed);
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: "编辑文本：上游文案" })
+    );
+    expect(screen.getByRole("textbox", { name: "完整基础文本" })).toHaveAttribute(
+      "readonly"
+    );
+    expect(screen.queryByRole("button", { name: "应用" })).toBeNull();
+    managedView.unmount();
+  });
+
   it("keeps precise editing visible and disabled before an image is selected", () => {
     const { container } = renderNode({
       id: "input-image",
@@ -742,7 +956,7 @@ describe("AIGC image nodes", () => {
     expect(preciseEdit.parentElement).not.toHaveClass("opacity-0");
   });
 
-  it("shows an input image without cropping and opens the original preview", async () => {
+  it("keeps the image draggable and opens the original preview only on double click or Enter", async () => {
     apiMocks.getAsset.mockResolvedValue({
       id: "asset-1",
       metadata: { name: "产品横图.png" },
@@ -796,20 +1010,120 @@ describe("AIGC image nodes", () => {
       "object-contain"
     );
     expect(preview).not.toHaveClass("nodrag");
-    expect(
-      screen.getByRole("button", { name: "查看原图：产品横图.png" })
-    ).toHaveClass("nodrag");
+    const previewEntry = screen.getByRole("button", {
+      name: "查看原图：产品横图.png"
+    });
+    expect(previewEntry).not.toHaveClass("nodrag");
+    const canvasPointerDown = vi.fn();
+    preview.parentElement?.addEventListener("pointerdown", canvasPointerDown);
+    fireEvent.pointerDown(previewEntry, {
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    fireEvent.pointerUp(previewEntry, {
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    expect(canvasPointerDown).toHaveBeenCalledOnce();
     Object.defineProperty(image, "naturalWidth", { value: 1920 });
     Object.defineProperty(image, "naturalHeight", { value: 1080 });
     fireEvent.load(image);
 
     expect(screen.getByText("1920 × 1080")).toBeInTheDocument();
     expect(screen.getByText("已框选")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "查看原图：产品横图.png" }));
+    fireEvent.click(previewEntry);
+    expect(
+      screen.queryByRole("heading", { name: "查看原图" })
+    ).not.toBeInTheDocument();
+
+    const canvasDoubleClick = vi.fn();
+    preview.parentElement?.addEventListener("dblclick", canvasDoubleClick);
+    fireEvent.doubleClick(previewEntry);
     expect(screen.getByRole("heading", { name: "查看原图" })).toBeInTheDocument();
+    expect(canvasDoubleClick).not.toHaveBeenCalled();
     expect(screen.getByAltText("产品横图.png 原图预览")).toHaveClass(
       "object-contain"
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    fireEvent.pointerDown(previewEntry, {
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    fireEvent.pointerMove(previewEntry, {
+      clientX: 20,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    fireEvent.pointerUp(previewEntry, {
+      clientX: 20,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: "mouse"
+    });
+    fireEvent.doubleClick(previewEntry);
+    expect(
+      screen.queryByRole("heading", { name: "查看原图" })
+    ).not.toBeInTheDocument();
+
+    previewEntry.focus();
+    fireEvent.keyDown(previewEntry, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "查看原图" })).toBeInTheDocument();
+  });
+
+  it("keeps unavailable and failed image placeholders draggable without opening an empty dialog", async () => {
+    const node: AigcV2Node = {
+      id: "input-image",
+      type: "image",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        asset_id: null,
+        bbox: null,
+        bbox_asset_id: null,
+        title: null
+      }
+    };
+    renderNode(node);
+
+    const preview = screen.getByTestId("aigc-image-preview");
+    expect(preview).not.toHaveClass("nodrag");
+    expect(screen.getByText("选择或上传图片")).toBeInTheDocument();
+    fireEvent.doubleClick(preview);
+    expect(
+      screen.queryByRole("heading", { name: "查看原图" })
+    ).not.toBeInTheDocument();
+
+    apiMocks.getAsset.mockResolvedValue({
+      id: "asset-1",
+      metadata: { name: "加载失败.png" },
+      mime_type: "image/png",
+      status: "succeeded",
+      type: "uploaded_image",
+      url: "https://example.com/broken.png"
+    } as unknown as Asset);
+    const failedNode: AigcV2Node = {
+      ...node,
+      config: { ...node.config, asset_id: "asset-1" }
+    };
+    const view = renderNode(failedNode);
+    fireEvent.error(await screen.findByAltText("加载失败.png"));
+
+    expect(screen.getByText("图片暂不可预览")).toBeInTheDocument();
+    fireEvent.doubleClick(screen.getAllByTestId("aigc-image-preview")[1]);
+    expect(
+      screen.queryByRole("heading", { name: "查看原图" })
+    ).not.toBeInTheDocument();
+    view.unmount();
   });
 
   it("opens precise editing and only enables strictly related text targets", async () => {

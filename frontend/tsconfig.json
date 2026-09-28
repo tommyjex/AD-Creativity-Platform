@@ -40,7 +40,11 @@
     ".next-acceptance/types/**/*.ts",
     ".next-acceptance/dev/types/**/*.ts",
     ".next-home-gallery-acceptance/types/**/*.ts",
-    ".next-home-gallery-acceptance/dev/types/**/*.ts"
+    ".next-home-gallery-acceptance/dev/types/**/*.ts",
+    "/tmp/task8-next/types/**/*.ts",
+    "/tmp/task8-next/dev/types/**/*.ts",
+    "/tmp/task8-next-final/types/**/*.ts",
+    "/tmp/task8-next-final/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

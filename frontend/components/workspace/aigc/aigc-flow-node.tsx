@@ -24,6 +24,11 @@ import {
   useAigcRunActions,
   useAigcRunProjection
 } from "@/components/workspace/aigc/aigc-run-context";
+import { useAigcNodeInteraction } from "@/components/workspace/aigc/aigc-node-interaction-context";
+import {
+  stopAigcNodeControlEvent,
+  useAigcNodeSurfaceActivation
+} from "@/components/workspace/aigc/aigc-node-gesture";
 import { AigcVideoPlayer } from "@/components/workspace/aigc/aigc-video-player";
 import {
   Dialog,
@@ -128,6 +133,8 @@ function AigcFlowNodeComponent({
   const setNodeCustomName = useAigcEditorStore(
     (state) => state.setNodeCustomName
   );
+  const selectNode = useAigcEditorStore((state) => state.selectNode);
+  const nodeInteraction = useAigcNodeInteraction();
   const definition = useAigcEditorStore((state) => state.definition);
   const edges = definition.edges;
   const runDetail = useAigcRunProjection(id);
@@ -473,7 +480,7 @@ function AigcFlowNodeComponent({
         return (
           <Handle
             aria-label={`${port.label}输入${stateText}`}
-            className="!h-2.5 !w-2.5 !border-2 !border-card"
+            className="nowheel !h-2.5 !w-2.5 !border-2 !border-card"
             id={port.id}
             isConnectable={!inactive && !full}
             key={port.id}
@@ -506,7 +513,7 @@ function AigcFlowNodeComponent({
         return (
           <Handle
             aria-label={`${port.label}输出${port.system_only ? "，仅系统可连接" : stateText}`}
-            className="!h-2.5 !w-2.5 !border-2 !border-card"
+            className="nowheel !h-2.5 !w-2.5 !border-2 !border-card"
             id={port.id}
             isConnectable={!inactive && !port.system_only}
             key={port.id}
@@ -573,6 +580,14 @@ function AigcFlowNodeComponent({
           displayName={modalityTitle}
           managedSource={managedSource}
           mode={modalityMode}
+          onOpen={(focusTarget) => {
+            selectNode(id);
+            nodeInteraction?.openTextEditor({
+              focusTarget,
+              nodeId: id,
+              runDetail
+            });
+          }}
           projection={modalityProjection}
           text={(data.node.config as { text?: string }).text ?? ""}
         />
@@ -686,10 +701,14 @@ function AigcFlowNodeComponent({
       </div>
       {data.node.type === "image" ? (
         <div
-          className="nodrag absolute right-0 top-0 z-10 grid h-[12px] w-[12px] -translate-y-[calc(100%+0.375rem)] place-items-center rounded-full border border-border bg-card shadow-md"
+          className="nodrag nopan nowheel absolute right-0 top-0 z-10 grid h-[12px] w-[12px] -translate-y-[calc(100%+0.375rem)] place-items-center rounded-full border border-border bg-card shadow-md"
           data-testid="aigc-image-node-actions"
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
+          onClick={stopAigcNodeControlEvent}
+          onDoubleClick={stopAigcNodeControlEvent}
+          onMouseDown={stopAigcNodeControlEvent}
+          onPointerDown={stopAigcNodeControlEvent}
+          onTouchStart={stopAigcNodeControlEvent}
+          onWheel={stopAigcNodeControlEvent}
         >
           <AigcPreciseEditDialog
             assetId={preciseEditAssetId}
@@ -747,19 +766,23 @@ function NodeActions({
   return (
     <div
       className={cn(
-        "nodrag flex shrink-0 items-center gap-0.5",
+        "nodrag nopan nowheel flex shrink-0 items-center gap-0.5",
         compact && "justify-end px-1 py-0.5",
         !visible &&
           "opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100"
       )}
       data-testid="aigc-node-actions"
-      onClick={(event) => event.stopPropagation()}
-      onPointerDown={(event) => event.stopPropagation()}
+      onClick={stopAigcNodeControlEvent}
+      onDoubleClick={stopAigcNodeControlEvent}
+      onMouseDown={stopAigcNodeControlEvent}
+      onPointerDown={stopAigcNodeControlEvent}
+      onTouchStart={stopAigcNodeControlEvent}
+      onWheel={stopAigcNodeControlEvent}
     >
       {outputDownload ? (
         <a
           aria-label={`下载${downloadKindLabel(type)}：${outputTitle}`}
-          className="nodrag grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-card hover:text-foreground"
+          className="nodrag nopan nowheel grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-card hover:text-foreground"
           download={outputDownload.filename}
           href={outputDownload.url}
           title={`下载${downloadKindLabel(type)}`}
@@ -775,12 +798,14 @@ function ModalityTextBody({
   displayName,
   managedSource,
   mode,
+  onOpen,
   projection,
   text
 }: {
   displayName: string;
   managedSource: ReturnType<typeof managedTextSource>;
   mode: "local" | "upstream";
+  onOpen: (focusTarget: HTMLElement) => void;
   projection: ReturnType<typeof projectAigcModalityRunResult>;
   text: string;
 }) {
@@ -790,28 +815,44 @@ function ModalityTextBody({
     projection || mode === "upstream"
       ? modalityStateText(projection, "text")
       : "配置输入文本";
+  const surfaceActivation = useAigcNodeSurfaceActivation(onOpen);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
-      {managedSource ? (
-        <div className="flex min-w-0 flex-wrap gap-1 text-[9px]">
-          <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400">
-            只读上游内容
-          </span>
-          <span
-            className="max-w-full truncate rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
-            title={`来源：${managedSource.parserName}`}
-          >
-            来源：{managedSource.parserName}
-          </span>
-        </div>
-      ) : null}
-      <p className="line-clamp-5 break-words whitespace-pre-wrap text-xs leading-5 text-foreground">
-        {visibleText || stateText}
-      </p>
+      <div
+        aria-label={`编辑文本：${displayName}`}
+        className="min-h-0 flex-1 cursor-grab outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-primary/35"
+        {...surfaceActivation}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onOpen(event.currentTarget);
+        }}
+        role="button"
+        tabIndex={0}
+        title="双击编辑文本"
+      >
+        {managedSource ? (
+          <div className="flex min-w-0 flex-wrap gap-1 text-[9px]">
+            <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400">
+              只读上游内容
+            </span>
+            <span
+              className="max-w-full truncate rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
+              title={`来源：${managedSource.parserName}`}
+            >
+              来源：{managedSource.parserName}
+            </span>
+          </div>
+        ) : null}
+        <p className="line-clamp-5 break-words whitespace-pre-wrap text-xs leading-5 text-foreground">
+          {visibleText || stateText}
+        </p>
+      </div>
       {mode === "upstream" && visibleText ? (
         <button
           aria-label={`复制文本：${displayName}`}
-          className="nodrag mt-auto inline-flex h-7 items-center justify-center gap-1.5 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground"
+          className="nodrag nopan nowheel mt-auto inline-flex h-7 items-center justify-center gap-1.5 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground"
           onClick={(event) => {
             event.stopPropagation();
             void navigator.clipboard.writeText(visibleText);
@@ -1151,7 +1192,7 @@ function LayerCanvasNodeBody({
       >
         {href ? (
           <Link
-            className="inline-flex h-7 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-input bg-background px-2 text-[11px] font-medium hover:bg-accent hover:text-accent-foreground"
+            className="nodrag nopan nowheel inline-flex h-7 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-input bg-background px-2 text-[11px] font-medium hover:bg-accent hover:text-accent-foreground"
             href={href}
             onClick={(event) => {
               event.stopPropagation();
@@ -1159,7 +1200,11 @@ function LayerCanvasNodeBody({
               event.preventDefault();
               runActions.openLayerEditor(href);
             }}
-            onPointerDown={(event) => event.stopPropagation()}
+            onDoubleClick={stopAigcNodeControlEvent}
+            onMouseDown={stopAigcNodeControlEvent}
+            onPointerDown={stopAigcNodeControlEvent}
+            onTouchStart={stopAigcNodeControlEvent}
+            onWheel={stopAigcNodeControlEvent}
           >
             <Pencil className="h-3 w-3 shrink-0" />
             打开图层编辑器
@@ -1265,7 +1310,7 @@ function MultiTrackEditNodeBody({
       </div>
       {href ? (
         <Link
-          className="mt-auto inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2 text-[11px] font-medium hover:bg-accent hover:text-accent-foreground"
+          className="nodrag nopan nowheel mt-auto inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2 text-[11px] font-medium hover:bg-accent hover:text-accent-foreground"
           href={href}
           onClick={(event) => {
             event.stopPropagation();
@@ -1273,7 +1318,11 @@ function MultiTrackEditNodeBody({
             event.preventDefault();
             runActions.openLayerEditor(href);
           }}
-          onPointerDown={(event) => event.stopPropagation()}
+          onDoubleClick={stopAigcNodeControlEvent}
+          onMouseDown={stopAigcNodeControlEvent}
+          onPointerDown={stopAigcNodeControlEvent}
+          onTouchStart={stopAigcNodeControlEvent}
+          onWheel={stopAigcNodeControlEvent}
         >
           <Pencil className="h-3 w-3" />
           编辑时间线
@@ -1329,13 +1378,17 @@ function ContinueFromLayerNodeButton({
   return (
     <button
       aria-label="从此节点继续"
-      className="inline-flex h-7 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+      className="nodrag nopan nowheel inline-flex h-7 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
       disabled={pending}
       onClick={(event) => {
         event.stopPropagation();
         runActions.continueFromNode(nodeId);
       }}
-      onPointerDown={(event) => event.stopPropagation()}
+      onDoubleClick={stopAigcNodeControlEvent}
+      onMouseDown={stopAigcNodeControlEvent}
+      onPointerDown={stopAigcNodeControlEvent}
+      onTouchStart={stopAigcNodeControlEvent}
+      onWheel={stopAigcNodeControlEvent}
       title={`复用可用的上游结果，从${nodeLabel}节点重新执行当前节点及下游`}
       type="button"
     >
@@ -1388,8 +1441,13 @@ function NodeImageMedia({
     height: number;
   } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const availableUrl = url && failedUrl !== url ? url : null;
+  const surfaceActivation = useAigcNodeSurfaceActivation(() =>
+    setPreviewOpen(true)
+  );
 
-  const resolution = dimensions?.url === url
+  const resolution = dimensions?.url === availableUrl
     ? `${dimensions.width} × ${dimensions.height}`
     : null;
 
@@ -1399,16 +1457,20 @@ function NodeImageMedia({
         className="min-h-0 min-w-0 flex-1 overflow-hidden bg-card p-1.5"
         data-testid="aigc-image-preview"
       >
-        {url ? (
-          <button
+        {availableUrl ? (
+          <div
             aria-label={`查看原图：${alt}`}
-            className="nodrag group relative block h-full min-h-0 w-full min-w-0 cursor-zoom-in overflow-hidden"
-            onClick={(event) => {
+            className="group relative block h-full min-h-0 w-full min-w-0 cursor-grab overflow-hidden active:cursor-grabbing"
+            {...surfaceActivation}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
               event.stopPropagation();
               setPreviewOpen(true);
             }}
-            title="查看原图"
-            type="button"
+            role="button"
+            tabIndex={0}
+            title="双击查看原图"
           >
             {/* Signed asset URLs must be passed through without image optimization. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1426,7 +1488,7 @@ function NodeImageMedia({
                       currentSrc: image.currentSrc,
                       naturalHeight: image.naturalHeight,
                       naturalWidth: image.naturalWidth,
-                      url
+                      url: availableUrl
                     },
                     hypothesisId: "B-C",
                     location: "aigc-flow-node.tsx:NodeImageMedia:onLoad",
@@ -1442,7 +1504,7 @@ function NodeImageMedia({
                 if (image.naturalWidth > 0 && image.naturalHeight > 0) {
                   setDimensions({
                     height: image.naturalHeight,
-                    url,
+                    url: availableUrl,
                     width: image.naturalWidth
                   });
                 }
@@ -1455,7 +1517,7 @@ function NodeImageMedia({
                     data: {
                       alt,
                       currentSrc: image.currentSrc,
-                      url
+                      url: availableUrl
                     },
                     hypothesisId: "A-D",
                     location: "aigc-flow-node.tsx:NodeImageMedia:onError",
@@ -1468,8 +1530,10 @@ function NodeImageMedia({
                   method: "POST"
                 }).catch(() => {});
                 // #endregion
+                setFailedUrl(availableUrl);
+                setPreviewOpen(false);
               }}
-              src={url}
+              src={availableUrl}
             />
             {resolution ? (
               <span className="pointer-events-none absolute bottom-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 font-mono text-[9px] text-white shadow-sm">
@@ -1481,7 +1545,7 @@ function NodeImageMedia({
                 已框选
               </span>
             ) : null}
-          </button>
+          </div>
         ) : (
           <div className="grid h-full min-h-0 w-full place-items-center px-3 text-center text-[10px] text-muted-foreground">
             {emptyText}
@@ -1498,14 +1562,14 @@ function NodeImageMedia({
             </DialogDescription>
           </DialogHeader>
           <div className="grid h-full min-h-0 w-full place-items-center overflow-hidden p-4">
-            {url ? (
+            {availableUrl ? (
               /* Signed asset URLs must be passed through without image optimization. */
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 alt={`${alt} 原图预览`}
                 className="block h-auto max-h-[calc(92dvh-7rem)] w-auto max-w-[calc(96vw-2rem)] object-contain"
                 draggable={false}
-                src={url}
+                src={availableUrl}
               />
             ) : null}
           </div>
@@ -1833,7 +1897,7 @@ function InlineNodeNameInput({
   return (
     <input
       aria-label="节点名称"
-      className="nodrag nowheel min-w-0 flex-1 border border-blue-500 bg-[#101318] px-1.5 py-0.5 text-[11px] font-medium text-foreground outline-none"
+      className="nodrag nopan nowheel min-w-0 flex-1 border border-blue-500 bg-[#101318] px-1.5 py-0.5 text-[11px] font-medium text-foreground outline-none"
       data-testid="aigc-node-name-input"
       maxLength={120}
       onBlur={() => {
@@ -1842,6 +1906,11 @@ function InlineNodeNameInput({
       }}
       onChange={(event) => setDraft(event.target.value)}
       onClick={(event) => event.stopPropagation()}
+      onDoubleClick={stopAigcNodeControlEvent}
+      onMouseDown={stopAigcNodeControlEvent}
+      onPointerDown={stopAigcNodeControlEvent}
+      onTouchStart={stopAigcNodeControlEvent}
+      onWheel={stopAigcNodeControlEvent}
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === "Enter") {

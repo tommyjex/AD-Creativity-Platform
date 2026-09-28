@@ -11,7 +11,8 @@ const eslintConfig = [
       ".next-home-gallery-acceptance-3004/**",
       "coverage/**",
       "next-env.d.ts",
-      "node_modules/**"
+      "node_modules/**",
+      "tmp/**"
     ]
   },
   ...nextCoreWebVitals,

@@ -26,7 +26,9 @@ import {
   useAigcEditorStore,
   useAigcEditorStoreApi
 } from "@/components/workspace/aigc/providers/aigc-editor-store-provider";
+import { useAigcNodeInteraction } from "@/components/workspace/aigc/aigc-node-interaction-context";
 import { useAigcRunProjection } from "@/components/workspace/aigc/aigc-run-context";
+import { managedTextSource } from "@/lib/aigc/json-parser-ui";
 import {
   projectAigcEffectiveText,
   projectAigcImageBboxBinding,
@@ -46,12 +48,21 @@ const MAX_INSTRUCTION_CODE_POINTS = 4000;
 const MAX_DIRECTION_CODE_POINTS = 2000;
 
 export function AigcPromptEditor({
+  dialogOnly = false,
+  fullscreenOpen,
   node,
+  onFullscreenClose,
+  readOnly = false,
   runDetail: runDetailProp
 }: {
+  dialogOnly?: boolean;
+  fullscreenOpen?: boolean;
   node: Extract<AigcV2Node, { type: "text" }>;
+  onFullscreenClose?: () => void;
+  readOnly?: boolean;
   runDetail?: AigcPipelineRunDetail | null;
 }) {
+  const nodeInteraction = useAigcNodeInteraction();
   const definition = useAigcEditorStore((state) => state.definition);
   const store = useAigcEditorStoreApi();
   const runContext = useAigcRunProjection(node.id);
@@ -85,9 +96,6 @@ export function AigcPromptEditor({
   } | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [fullscreenEditorOpen, setFullscreenEditorOpen] = useState(false);
-  const [fullscreenDraft, setFullscreenDraft] = useState("");
-  const [fullscreenOpeningValue, setFullscreenOpeningValue] = useState("");
   const [optimizationOrigin, setOptimizationOrigin] = useState<
     "inspector" | "fullscreen"
   >("inspector");
@@ -97,7 +105,6 @@ export function AigcPromptEditor({
   const runDetailRef = useRef(runDetail);
   const optimizationAbortRef = useRef<AbortController | null>(null);
   const fullscreenEditorTriggerRef = useRef<HTMLElement | null>(null);
-  const fullscreenOpeningValueRef = useRef("");
   useEffect(() => {
     runDetailRef.current = runDetail;
   }, [runDetail]);
@@ -204,6 +211,11 @@ export function AigcPromptEditor({
   const effectiveText = upstream
     ? (effectiveProjection?.text ?? "")
     : activeNode.config.text;
+  const [fullscreenEditorOpen, setFullscreenEditorOpen] = useState(false);
+  const [fullscreenDraft, setFullscreenDraft] = useState(effectiveText);
+  const [fullscreenOpeningValue, setFullscreenOpeningValue] =
+    useState(effectiveText);
+  const fullscreenOpeningValueRef = useRef(effectiveText);
   const targets = promptOptimizationTargets(graphDefinition, activeNode.id);
   const selectedOptimizationTarget = targets.find(
     (target) => target.id === targetNodeId
@@ -211,12 +223,13 @@ export function AigcPromptEditor({
   const showsVideoReferenceMarkerHint =
     selectedOptimizationTarget?.node.type === "video_generation";
   const canEditText =
-    !upstream ||
-    Boolean(
-      effectiveProjection &&
-        ["reused", "succeeded"].includes(effectiveProjection.status) &&
-        effectiveProjection.text !== null
-    );
+    !readOnly &&
+    (!upstream ||
+      Boolean(
+        effectiveProjection &&
+          ["reused", "succeeded"].includes(effectiveProjection.status) &&
+          effectiveProjection.text !== null
+      ));
   const canOptimize =
     targets.length > 0 &&
     Boolean(
@@ -241,6 +254,14 @@ export function AigcPromptEditor({
   }
 
   function openFullscreenEditor(trigger: HTMLElement) {
+    if (nodeInteraction) {
+      nodeInteraction.openTextEditor({
+        focusTarget: trigger,
+        nodeId: activeNode.id,
+        runDetail
+      });
+      return;
+    }
     fullscreenEditorTriggerRef.current = trigger;
     fullscreenOpeningValueRef.current = effectiveText;
     setFullscreenOpeningValue(effectiveText);
@@ -249,6 +270,10 @@ export function AigcPromptEditor({
   }
 
   function closeFullscreenEditor() {
+    if (onFullscreenClose) {
+      onFullscreenClose();
+      return;
+    }
     setFullscreenEditorOpen(false);
     window.setTimeout(() => {
       fullscreenEditorTriggerRef.current?.focus();
@@ -474,69 +499,71 @@ export function AigcPromptEditor({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <Label>基础文本</Label>
-        <div className="flex items-center gap-2">
-          {references.length > 0 ? (
-            <span className="font-mono text-[10px] text-muted-foreground">
-              {references.length}/10
-            </span>
-          ) : null}
-          <Button
-            aria-label="优化提示词"
-            disabled={!canOptimize || isOptimizing}
-            onClick={() => openOptimizationDialog()}
-            size="sm"
-            title={
-              targets.length === 0
-                ? "请先连接 LLM、生图或生视频目标节点"
-                : "根据目标模型优化提示词"
-            }
-            type="button"
-            variant="outline"
+    <>
+      {!dialogOnly ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <Label>基础文本</Label>
+            <div className="flex items-center gap-2">
+              {references.length > 0 ? (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {references.length}/10
+                </span>
+              ) : null}
+              <Button
+                aria-label="优化提示词"
+                disabled={!canOptimize || isOptimizing}
+                onClick={() => openOptimizationDialog()}
+                size="sm"
+                title={
+                  targets.length === 0
+                    ? "请先连接 LLM、生图或生视频目标节点"
+                    : "根据目标模型优化提示词"
+                }
+                type="button"
+                variant="outline"
+              >
+                {isOptimizing ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <WandSparkles className="h-3.5 w-3.5" />
+                )}
+                {isOptimizing ? "优化中" : "优化提示词"}
+              </Button>
+            </div>
+          </div>
+          <div
+            aria-label="提示词编辑面"
+            className="max-h-96 overflow-y-auto rounded-lg border border-input bg-card shadow-sm transition focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15"
+            role="group"
           >
-            {isOptimizing ? (
-              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <WandSparkles className="h-3.5 w-3.5" />
-            )}
-            {isOptimizing ? "优化中" : "优化提示词"}
-          </Button>
-        </div>
-      </div>
-      <div
-        aria-label="提示词编辑面"
-        className="max-h-96 overflow-y-auto rounded-lg border border-input bg-card shadow-sm transition focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15"
-        role="group"
-      >
-        <div className="relative border-b border-border/70">
-          <button
-            aria-label="展开编辑基础文本"
-            className="min-h-24 max-h-40 w-full overflow-y-auto whitespace-pre-wrap px-3 py-2 pr-12 text-left font-mono text-sm leading-6 text-foreground outline-none transition hover:bg-secondary/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-60"
-            data-testid="aigc-prompt-preview"
-            disabled={isOptimizing}
-            onClick={(event) => openFullscreenEditor(event.currentTarget)}
-            type="button"
-          >
-            {effectiveText || "（空）"}
-          </button>
-          <Button
-            aria-label="展开编辑基础文本"
-            className="absolute right-2 top-2 border-border/70 bg-card/90"
-            disabled={isOptimizing}
-            onClick={(event) => openFullscreenEditor(event.currentTarget)}
-            size="icon"
-            title="展开编辑基础文本"
-            type="button"
-            variant="ghost"
-          >
-            <Expand aria-hidden="true" className="h-4 w-4" />
-          </Button>
-          <span className="absolute bottom-2 right-3 rounded bg-card/90 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-            {Array.from(effectiveText).length} 字符
-          </span>
-        </div>
+            <div className="relative border-b border-border/70">
+              <button
+                aria-label="展开编辑基础文本"
+                className="min-h-24 max-h-40 w-full overflow-y-auto whitespace-pre-wrap px-3 py-2 pr-12 text-left font-mono text-sm leading-6 text-foreground outline-none transition hover:bg-secondary/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="aigc-prompt-preview"
+                disabled={isOptimizing}
+                onClick={(event) => openFullscreenEditor(event.currentTarget)}
+                type="button"
+              >
+                {effectiveText || "（空）"}
+              </button>
+              <Button
+                aria-label="展开编辑基础文本"
+                className="absolute right-2 top-2 border-border/70 bg-card/90"
+                disabled={isOptimizing}
+                onClick={(event) => openFullscreenEditor(event.currentTarget)}
+                size="icon"
+                title="展开编辑基础文本"
+                type="button"
+                variant="ghost"
+              >
+                <Expand aria-hidden="true" className="h-4 w-4" />
+              </Button>
+              <span className="absolute bottom-2 right-3 rounded bg-card/90 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                {Array.from(effectiveText).length} 字符
+              </span>
+            </div>
         {references.length > 0 ? (
           <div className="space-y-2 border-t border-border/70 p-2">
             {references.map((reference, index) => {
@@ -639,6 +666,8 @@ export function AigcPromptEditor({
           {optimizationMessage.text}
         </p>
       ) : null}
+          </div>
+      ) : null}
       <PromptFullscreenEditor
         editable={canEditText && !isOptimizing}
         canOptimize={
@@ -660,7 +689,7 @@ export function AigcPromptEditor({
         onClose={closeFullscreenEditor}
         onDraftChange={setFullscreenDraft}
         onOptimize={() => openOptimizationDialog("fullscreen")}
-        open={fullscreenEditorOpen}
+        open={fullscreenOpen ?? fullscreenEditorOpen}
         validationMessage={validationMessage}
         valueAtOpen={fullscreenOpeningValue}
       />
@@ -785,7 +814,35 @@ export function AigcPromptEditor({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
+  );
+}
+
+export function AigcPromptEditorDialogHost() {
+  const interaction = useAigcNodeInteraction();
+  const definition = useAigcEditorStore((state) => state.definition);
+  const request = interaction?.textEditorRequest ?? null;
+  const node = request
+    ? definition.nodes.find(
+        (
+          candidate
+        ): candidate is Extract<AigcV2Node, { type: "text" }> =>
+          candidate.id === request.nodeId && candidate.type === "text"
+      )
+    : null;
+
+  if (!interaction || !request || !node) return null;
+
+  return (
+    <AigcPromptEditor
+      dialogOnly
+      fullscreenOpen
+      key={node.id}
+      node={node}
+      onFullscreenClose={interaction.closeTextEditor}
+      readOnly={Boolean(managedTextSource(node, definition.nodes))}
+      runDetail={request.runDetail}
+    />
   );
 }
 

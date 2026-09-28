@@ -69,12 +69,16 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
   const { useAigcRunActions } = await import(
     "@/components/workspace/aigc/aigc-run-context"
   );
+  const { useAigcNodeInteraction } = await import(
+    "@/components/workspace/aigc/aigc-node-interaction-context"
+  );
   return {
     NodeCanvas: ({
       backgroundProps,
       className,
       controlsProps,
       nodes,
+      onNodeDragStop,
       reactFlowProps
     }: {
       backgroundProps?: {
@@ -90,12 +94,22 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
       };
       nodes: Array<{
         id: string;
+        position: { x: number; y: number };
         style?: { height?: number; width?: number };
         type?: string;
       }>;
+      onNodeDragStop?: (
+        event: unknown,
+        node: {
+          id: string;
+          position: { x: number; y: number };
+        }
+      ) => void;
       reactFlowProps?: {
         fitViewOptions?: { minZoom?: number };
         minZoom?: number;
+        nodeClickDistance?: number;
+        nodeDragThreshold?: number;
         onMoveEnd?: (
           event: unknown,
           viewport: { x: number; y: number; zoom: number }
@@ -119,9 +133,11 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
         }) => void;
         onPaneClick?: () => void;
         translateExtent?: unknown;
+        zoomOnDoubleClick?: boolean;
       };
     }) => {
       const runActions = useAigcRunActions();
+      const nodeInteraction = useAigcNodeInteraction();
       useEffect(() => {
         reactFlowProps?.onInit?.({
           screenToFlowPosition: ({ x, y }) => ({ x: x - 100, y: y - 50 })
@@ -152,8 +168,17 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
               : "none"
           }
           data-min-zoom={reactFlowProps?.minZoom ?? "default"}
+          data-node-click-distance={
+            reactFlowProps?.nodeClickDistance ?? "default"
+          }
+          data-node-drag-threshold={
+            reactFlowProps?.nodeDragThreshold ?? "default"
+          }
           data-testid="node-canvas"
           data-translate-extent={String("translateExtent" in (reactFlowProps ?? {}))}
+          data-zoom-on-double-click={String(
+            reactFlowProps?.zoomOnDoubleClick ?? true
+          )}
         >
           {nodes.length} nodes
           {runActions && layerCanvas ? (
@@ -195,17 +220,47 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
             选择画布节点
           </button>
           {nodes.map((node) => (
-            <button
-              aria-label={`选择节点 ${node.id}`}
-              key={node.id}
-              onClick={() => reactFlowProps?.onNodeClick?.(null, node)}
-              onContextMenu={(event) =>
-                reactFlowProps?.onNodeContextMenu?.(event, node)
-              }
-              type="button"
-            >
-              {node.id}
-            </button>
+            <span key={node.id}>
+              <button
+                aria-label={`选择节点 ${node.id}`}
+                onClick={() => reactFlowProps?.onNodeClick?.(null, node)}
+                onContextMenu={(event) =>
+                  reactFlowProps?.onNodeContextMenu?.(event, node)
+                }
+                type="button"
+              >
+                {node.id}
+              </button>
+              <button
+                aria-label={`拖拽节点 ${node.id}`}
+                onClick={() =>
+                  onNodeDragStop?.(null, {
+                    id: node.id,
+                    position: {
+                      x: node.position.x + 96,
+                      y: node.position.y + 48
+                    }
+                  })
+                }
+                type="button"
+              >
+                拖拽 {node.id}
+              </button>
+              {node.type === "text" ? (
+                <button
+                  aria-label={`编辑文本节点 ${node.id}`}
+                  onClick={(event) =>
+                    nodeInteraction?.openTextEditor({
+                      focusTarget: event.currentTarget,
+                      nodeId: node.id
+                    })
+                  }
+                  type="button"
+                >
+                  编辑 {node.id}
+                </button>
+              ) : null}
+            </span>
           ))}
           <button onClick={() => reactFlowProps?.onPaneClick?.()} type="button">
             点击画布空白
@@ -322,6 +377,82 @@ function modalityPipeline(): AigcPipeline {
         targetHandle: "text"
       }
     ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  return {
+    ...pipeline,
+    definition: definitionV2 as unknown as AigcPipelineDefinition
+  };
+}
+
+function textEditorPipeline(): AigcPipeline {
+  const definitionV2: AigcPipelineDefinitionV2 = {
+    schemaVersion: 2,
+    nodes: [
+      {
+        id: "first-text",
+        type: "text",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 160 },
+        config: {
+          text: "第一个节点文本",
+          bbox_references: [],
+          title: "第一段文案"
+        }
+      },
+      {
+        id: "second-text",
+        type: "text",
+        position: { x: 320, y: 0 },
+        size: { width: 240, height: 160 },
+        config: {
+          text: "第二个节点文本",
+          bbox_references: [],
+          title: "第二段文案"
+        }
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  return {
+    ...pipeline,
+    definition: definitionV2 as unknown as AigcPipelineDefinition
+  };
+}
+
+function modalityInteractionPipeline(): AigcPipeline {
+  const definitionV2: AigcPipelineDefinitionV2 = {
+    schemaVersion: 2,
+    nodes: [
+      {
+        id: "text-node",
+        type: "text",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 160 },
+        config: { text: "本地文本", bbox_references: [], title: null }
+      },
+      {
+        id: "image-node",
+        type: "image",
+        position: { x: 320, y: 0 },
+        size: { width: 240, height: 160 },
+        config: {
+          asset_id: null,
+          bbox: null,
+          bbox_asset_id: null,
+          title: null
+        }
+      },
+      {
+        id: "video-node",
+        type: "video",
+        position: { x: 640, y: 0 },
+        size: { width: 240, height: 180 },
+        config: { asset_id: null, title: null }
+      }
+    ],
+    edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
   };
   return {
@@ -2536,6 +2667,153 @@ describe("AIGC editor modes", () => {
     ).toBeDisabled();
   });
 
+  it("uses one canvas prompt dialog without resetting a repeated target request", () => {
+    const entity = textEditorPipeline();
+    const { store } = renderEditor(entity, "pipeline", undefined, {
+      openInspector: false
+    });
+    const firstTrigger = screen.getByRole("button", {
+      name: "编辑文本节点 first-text"
+    });
+    const secondTrigger = screen.getByRole("button", {
+      name: "编辑文本节点 second-text"
+    });
+
+    firstTrigger.focus();
+    fireEvent.click(firstTrigger);
+    const firstDraft = screen.getByRole("textbox", {
+      name: "完整基础文本"
+    });
+    fireEvent.change(firstDraft, { target: { value: "第一个节点未应用草稿" } });
+
+    fireEvent.click(firstTrigger);
+    expect(screen.getAllByTestId("aigc-fullscreen-prompt-editor")).toHaveLength(
+      1
+    );
+    expect(
+      screen.getByRole("textbox", { name: "完整基础文本" })
+    ).toHaveValue("第一个节点未应用草稿");
+
+    fireEvent.click(secondTrigger);
+    expect(screen.getAllByTestId("aigc-fullscreen-prompt-editor")).toHaveLength(
+      1
+    );
+    const secondDraft = screen.getByRole("textbox", {
+      name: "完整基础文本"
+    });
+    expect(secondDraft).toHaveValue("第二个节点文本");
+    fireEvent.change(secondDraft, { target: { value: "只更新第二个节点" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用" }));
+
+    const definition =
+      store.getState().definition as AigcPipelineDefinitionV2;
+    expect(
+      definition.nodes.find((node) => node.id === "first-text")?.config
+    ).toMatchObject({ text: "第一个节点文本" });
+    expect(
+      definition.nodes.find((node) => node.id === "second-text")?.config
+    ).toMatchObject({ text: "只更新第二个节点" });
+  });
+
+  it("discards the canvas prompt draft, restores focus, and closes on deletion", async () => {
+    const entity = textEditorPipeline();
+    const { store } = renderEditor(entity, "pipeline", undefined, {
+      openInspector: false
+    });
+    const trigger = screen.getByRole("button", {
+      name: "编辑文本节点 first-text"
+    });
+
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "完整基础文本" }),
+      { target: { value: "取消后丢弃" } }
+    );
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(
+      (
+        store.getState().definition as AigcPipelineDefinitionV2
+      ).nodes.find((node) => node.id === "first-text")?.config
+    ).toMatchObject({ text: "第一个节点文本" });
+
+    fireEvent.click(trigger);
+    act(() => store.getState().removeNode("first-text"));
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("aigc-fullscreen-prompt-editor")
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      (
+        store.getState().definition as AigcPipelineDefinitionV2
+      ).nodes.find((node) => node.id === "second-text")?.config
+    ).toMatchObject({ text: "第二个节点文本" });
+  });
+
+  it("opens managed canvas text through the shared dialog as read-only", () => {
+    renderEditor(managedJsonTextPipeline(), "pipeline", undefined, {
+      openInspector: false
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "编辑文本节点 managed-text"
+      })
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "完整基础文本" })
+    ).toHaveAttribute("readonly");
+    expect(screen.queryByRole("button", { name: "应用" })).toBeNull();
+  });
+
+  it("selects modality nodes on click and autosaves all three dragged positions", async () => {
+    const entity = modalityInteractionPipeline();
+    const { store } = renderEditor(entity, "pipeline", undefined, {
+      openInspector: false
+    });
+
+    for (const nodeId of ["text-node", "image-node", "video-node"]) {
+      fireEvent.click(
+        screen.getByRole("button", { name: `选择节点 ${nodeId}` })
+      );
+      expect(store.getState().selectedNodeId).toBe(nodeId);
+      expect(screen.getByTestId("aigc-inspector")).toBeInTheDocument();
+    }
+
+    for (const nodeId of ["text-node", "image-node", "video-node"]) {
+      fireEvent.click(
+        screen.getByRole("button", { name: `拖拽节点 ${nodeId}` })
+      );
+    }
+
+    await waitFor(() => {
+      expect(apiMocks.updateAigcPipeline).toHaveBeenCalledWith(
+        entity.id,
+        expect.objectContaining({
+          definition: expect.objectContaining({
+            nodes: expect.arrayContaining([
+              expect.objectContaining({
+                id: "text-node",
+                position: { x: 96, y: 48 }
+              }),
+              expect.objectContaining({
+                id: "image-node",
+                position: { x: 416, y: 48 }
+              }),
+              expect.objectContaining({
+                id: "video-node",
+                position: { x: 736, y: 48 }
+              })
+            ])
+          })
+        })
+      );
+    }, { timeout: 2_000 });
+  });
+
   it("renders all four modality results with title-based media downloads", async () => {
     const definitionV2: AigcPipelineDefinitionV2 = {
       schemaVersion: 2,
@@ -2755,7 +3033,7 @@ describe("AIGC editor modes", () => {
       "false"
     );
     expect(screen.getByTestId("aigc-editor-shell")).toHaveClass(
-      "h-[100dvh]",
+      "h-[calc(100dvh-4rem)]",
       "bg-[#101318]",
       "[--card:220_13%_11%]"
     );
@@ -2833,6 +3111,18 @@ describe("AIGC editor modes", () => {
       );
     }
     expect(screen.getByTestId("node-canvas")).toHaveClass("bg-[#101318]");
+    expect(screen.getByTestId("node-canvas")).toHaveAttribute(
+      "data-node-click-distance",
+      "4"
+    );
+    expect(screen.getByTestId("node-canvas")).toHaveAttribute(
+      "data-node-drag-threshold",
+      "4"
+    );
+    expect(screen.getByTestId("node-canvas")).toHaveAttribute(
+      "data-zoom-on-double-click",
+      "false"
+    );
     expect(screen.getByTestId("node-canvas")).toHaveAttribute(
       "data-background-color",
       "#39404a"
