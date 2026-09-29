@@ -19,6 +19,7 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("@/lib/api-client", () => ({
   apiClient: apiMocks,
   getBackendBaseUrl: () => "http://api.test",
+  getPublicBackendBaseUrl: () => "http://api.test",
   getUserFacingErrorMessage: () => "请求未完成，请检查网络连接后重试。"
 }));
 

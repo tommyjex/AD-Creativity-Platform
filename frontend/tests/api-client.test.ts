@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   createApiClient,
@@ -1534,21 +1534,58 @@ describe("AIGC API client", () => {
 });
 
 describe("getBackendBaseUrl", () => {
-  it("falls back to localhost when NEXT_PUBLIC_BACKEND_BASE_URL is blank", () => {
-    const originalBaseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
-    process.env.NEXT_PUBLIC_BACKEND_BASE_URL = "   ";
+  const originalInternalBaseUrl = process.env.BACKEND_INTERNAL_BASE_URL;
+  const originalPublicBaseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
 
-    try {
-      expect(getBackendBaseUrl()).toBe("http://localhost:8000");
-    } finally {
-      if (originalBaseUrl === undefined) {
-        delete process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
-      } else {
-        process.env.NEXT_PUBLIC_BACKEND_BASE_URL = originalBaseUrl;
-      }
-    }
+  afterEach(() => {
+    restoreEnvironmentVariable(
+      "BACKEND_INTERNAL_BASE_URL",
+      originalInternalBaseUrl
+    );
+    restoreEnvironmentVariable(
+      "NEXT_PUBLIC_BACKEND_BASE_URL",
+      originalPublicBaseUrl
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("uses a same-origin base in the browser when the public base is blank", () => {
+    delete process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
+
+    expect(getBackendBaseUrl()).toBe("");
+  });
+
+  it("uses the explicit public base in the browser", () => {
+    process.env.NEXT_PUBLIC_BACKEND_BASE_URL = "https://app.example.com/";
+
+    expect(getBackendBaseUrl()).toBe("https://app.example.com/");
+  });
+
+  it("uses the internal backend base on the server", () => {
+    vi.stubGlobal("window", undefined);
+    process.env.BACKEND_INTERNAL_BASE_URL = "http://127.0.0.1:8100";
+
+    expect(getBackendBaseUrl()).toBe("http://127.0.0.1:8100");
+  });
+
+  it("defaults the server backend base to localhost", () => {
+    vi.stubGlobal("window", undefined);
+    delete process.env.BACKEND_INTERNAL_BASE_URL;
+
+    expect(getBackendBaseUrl()).toBe("http://localhost:8000");
   });
 });
+
+function restoreEnvironmentVariable(
+  name: "BACKEND_INTERNAL_BASE_URL" | "NEXT_PUBLIC_BACKEND_BASE_URL",
+  value: string | undefined
+) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
 
 describe("getUserFacingErrorMessage", () => {
   it("does not expose internal details from server errors", () => {

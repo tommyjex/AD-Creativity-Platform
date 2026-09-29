@@ -110,7 +110,7 @@ describe("HomeGeneratedMediaGallery", () => {
     expect(image).toHaveClass("object-contain");
     expect(within(dialog).getByRole("link", { name: "下载资产" })).toHaveAttribute(
       "href",
-      "http://localhost:8000/api/assets/image-1/content?download=1&filename=%E6%99%A8%E5%85%89%E6%B5%B7%E6%8A%A5"
+      "/api/assets/image-1/content?download=1&filename=%E6%99%A8%E5%85%89%E6%B5%B7%E6%8A%A5"
     );
   });
 

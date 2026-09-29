@@ -57,6 +57,7 @@ const navigationMocks = vi.hoisted(() => ({
 vi.mock("@/lib/api-client", () => ({
   apiClient: apiMocks,
   getBackendBaseUrl: () => "http://localhost:8000",
+  getPublicBackendBaseUrl: () => "http://localhost:8000",
   getUserFacingErrorMessage: () => "请求失败",
   isApiError: apiMocks.isApiError
 }));

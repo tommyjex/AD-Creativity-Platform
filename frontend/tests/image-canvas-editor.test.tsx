@@ -171,7 +171,7 @@ describe("ImageCanvasEditor", () => {
     const download = screen.getByRole("link", { name: "下载目标图" });
     expect(download).toHaveAttribute(
       "href",
-      "http://localhost:8000/api/assets/target-1/content?download=1"
+      "/api/assets/target-1/content?download=1"
     );
     expect(download).toHaveAttribute("download", "目标图");
   });

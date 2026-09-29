@@ -281,7 +281,7 @@ describe("AIGC v2 modality node card", () => {
 
     expect(await screen.findByAltText("图片节点")).toHaveAttribute(
       "src",
-      "http://localhost:8000/api/assets/asset-image/content"
+      "/api/assets/asset-image/content"
     );
   });
 
@@ -770,7 +770,7 @@ describe("AIGC v2 modality node card", () => {
     ).toBeInTheDocument();
     expect(screen.getByAltText("精准编辑：上游海报.png")).toHaveAttribute(
       "src",
-      "http://localhost:8000/api/assets/upstream-image/content"
+      "/api/assets/upstream-image/content"
     );
     expect(
       screen.getByText("上游图片已更新，请重新框选")

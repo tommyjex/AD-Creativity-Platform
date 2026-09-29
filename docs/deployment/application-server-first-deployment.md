@@ -275,18 +275,22 @@ sudo -u adcreative .venv/bin/python -m compileall -q backend
 
 ### 10.1 构建前端
 
-`NEXT_PUBLIC_BACKEND_BASE_URL` 会在构建时写入前端产物。使用同域部署时设置为站点根地址，
-不要在末尾添加 `/api`：
+同域部署时不要设置 `NEXT_PUBLIC_BACKEND_BASE_URL`。浏览器会使用 `/api/...`
+同源请求，由 Nginx 转发至 FastAPI；Next.js 服务端默认通过
+`http://localhost:8000` 直连 FastAPI：
 
 ```bash
 cd /opt/ad-creativity/app/frontend
-
-sudo -u adcreative env \
-  NEXT_PUBLIC_BACKEND_BASE_URL=https://ad.example.com \
-  npm run build
+sudo -u adcreative npm run build
 ```
 
-修改该变量后必须重新执行 `npm run build`。
+只有本地前后端分别使用 3000 和 8000 端口，或正式环境明确采用前后端分域时，
+才设置 `NEXT_PUBLIC_BACKEND_BASE_URL`。该变量会在构建时写入前端产物，地址末尾
+不要添加 `/api`，修改后必须重新构建。
+
+Next.js 服务端连接 FastAPI 的地址可通过 `BACKEND_INTERNAL_BASE_URL` 覆盖。
+同机部署通常无需设置；若 FastAPI 不监听默认的 `localhost:8000`，应在前端
+systemd 服务中设置该变量。
 
 ## 11. 配置 systemd
 
@@ -338,6 +342,8 @@ User=adcreative
 Group=adcreative
 WorkingDirectory=/opt/ad-creativity/app/frontend
 Environment=NODE_ENV=production
+# Optional; defaults to http://localhost:8000
+Environment=BACKEND_INTERNAL_BASE_URL=http://127.0.0.1:8000
 ExecStart=/usr/bin/npm run start -- -H 127.0.0.1 -p 3000
 Restart=always
 RestartSec=5
@@ -526,7 +532,8 @@ sudo tail -f /var/log/nginx/access.log /var/log/nginx/error.log
 | 现象 | 优先检查 |
 | --- | --- |
 | 后端启动失败 | `.env`、MySQL 私网连通性、表结构版本 |
-| 页面请求 localhost:8000 | 构建时未设置 `NEXT_PUBLIC_BACKEND_BASE_URL` |
+| 浏览器请求 localhost:8000 | 构建环境错误设置了 `NEXT_PUBLIC_BACKEND_BASE_URL`，同域部署应移除后重新构建 |
+| 首页显示“产物加载失败” | FastAPI 健康状态、前端服务的 `BACKEND_INTERNAL_BASE_URL` |
 | 上传返回 413 | Nginx `client_max_body_size` |
 | 请求约 60 秒后断开 | Nginx 或上游负载均衡超时 |
 | 图片或视频不可访问 | TOS 配置、对象权限、签名地址 |
@@ -564,9 +571,7 @@ sudo -u adcreative .venv/bin/pip install -r requirements.txt
 
 cd frontend
 sudo -u adcreative npm ci
-sudo -u adcreative env \
-  NEXT_PUBLIC_BACKEND_BASE_URL=https://ad.example.com \
-  npm run build
+sudo -u adcreative npm run build
 
 sudo systemctl start ad-creativity-backend ad-creativity-frontend
 curl --fail --user '<ADMIN_USERNAME>:<PASSWORD>' \
@@ -591,9 +596,7 @@ sudo -u adcreative mv .venv.rollback .venv
 
 cd frontend
 sudo -u adcreative npm ci
-sudo -u adcreative env \
-  NEXT_PUBLIC_BACKEND_BASE_URL=https://ad.example.com \
-  npm run build
+sudo -u adcreative npm run build
 
 sudo systemctl start ad-creativity-backend ad-creativity-frontend
 
@@ -621,7 +624,8 @@ curl --fail --user '<ADMIN_USERNAME>:<PASSWORD>' \
 - [ ] 数据库结构与部署 commit 匹配。
 - [ ] 首次启动前已创建并验证云 MySQL 快照。
 - [ ] `.env` 权限为 `600`，密钥未进入 Git。
-- [ ] 前端使用正式 `NEXT_PUBLIC_BACKEND_BASE_URL` 构建。
+- [ ] 同域部署未设置 `NEXT_PUBLIC_BACKEND_BASE_URL`，浏览器 API 请求使用 `/api/`。
+- [ ] 前端服务的 `BACKEND_INTERNAL_BASE_URL` 可访问 FastAPI。
 - [ ] 后端和前端由 systemd 托管并设置自动启动。
 - [ ] Nginx 上传大小和长任务超时已配置。
 - [ ] `/health` 和数据库业务接口验证通过。

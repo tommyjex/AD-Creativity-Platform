@@ -507,7 +507,7 @@ describe("图层编辑器", () => {
     expect(await screen.findByText("成品已导出并设为当前图片。")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看成品" })).toHaveAttribute(
       "href",
-      "http://localhost:8000/api/assets/result-1/content"
+      "/api/assets/result-1/content"
     );
   });
 

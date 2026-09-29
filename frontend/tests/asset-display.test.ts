@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   getAssetContentUrlById,
@@ -30,20 +30,49 @@ const asset = {
 describe("asset display helpers", () => {
   it("builds a backend attachment download URL for asset content", () => {
     expect(getAssetDownloadUrl(asset)).toBe(
-      "http://localhost:8000/api/assets/asset%2Fwith%20space/content?download=1"
+      "/api/assets/asset%2Fwith%20space/content?download=1"
     );
   });
 
   it("resolves a relative result URL against the backend origin", () => {
     expect(
       getSafeAssetContentUrl("/api/assets/result-1/content")
-    ).toBe("http://localhost:8000/api/assets/result-1/content");
+    ).toBe("/api/assets/result-1/content");
+  });
+
+  it("keeps browser-facing media URLs public during server rendering", () => {
+    vi.stubGlobal("window", undefined);
+
+    try {
+      expect(
+        getSafeAssetContentUrl("/api/assets/result-1/content")
+      ).toBe("/api/assets/result-1/content");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("builds a backend content URL from a result asset ID", () => {
     expect(getAssetContentUrlById("asset/with space")).toBe(
-      "http://localhost:8000/api/assets/asset%2Fwith%20space/content"
+      "/api/assets/asset%2Fwith%20space/content"
     );
+  });
+
+  it("uses an explicit public backend base for split-origin assets", () => {
+    const originalBaseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
+    process.env.NEXT_PUBLIC_BACKEND_BASE_URL = "https://media.example.com/";
+
+    try {
+      expect(
+        getSafeAssetContentUrl("/api/assets/result-1/content")
+      ).toBe("https://media.example.com/api/assets/result-1/content");
+    } finally {
+      if (originalBaseUrl === undefined) {
+        delete process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
+      } else {
+        process.env.NEXT_PUBLIC_BACKEND_BASE_URL = originalBaseUrl;
+      }
+    }
   });
 
   it("shows the historical AIGC name while letting the backend resolve downloads", () => {
@@ -64,7 +93,7 @@ describe("asset display helpers", () => {
       "商品主图-图生图1-图片1.png"
     );
     expect(getAssetDownloadUrl(namedAsset)).toBe(
-      "http://localhost:8000/api/assets/aigc-output/content?download=1"
+      "/api/assets/aigc-output/content?download=1"
     );
   });
 
@@ -84,7 +113,7 @@ describe("asset display helpers", () => {
       "历史 Provider 描述"
     );
     expect(getAssetDownloadUrl(historicalAsset)).toBe(
-      "http://localhost:8000/api/assets/asset%2Fwith%20space/content?download=1"
+      "/api/assets/asset%2Fwith%20space/content?download=1"
     );
   });
 

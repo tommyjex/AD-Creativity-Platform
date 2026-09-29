@@ -22,13 +22,13 @@ describe("AIGC acceptance fixture", () => {
       screen.getByLabelText("播放视频：验收 Mock 成片.mp4")
     ).toHaveAttribute(
       "src",
-      "http://localhost:8000/api/assets/acceptance-video/content"
+      "/api/assets/acceptance-video/content"
     );
     expect(
       screen.getByRole("link", { name: "下载 Mock 视频" })
     ).toHaveAttribute(
       "href",
-      "http://localhost:8000/api/assets/acceptance-video/content?" +
+      "/api/assets/acceptance-video/content?" +
         "download=1&filename=%E9%AA%8C%E6%94%B6-Mock-%E6%88%90%E7%89%87.mp4"
     );
     expect(

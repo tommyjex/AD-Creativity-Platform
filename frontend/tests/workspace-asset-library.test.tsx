@@ -26,6 +26,7 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("@/lib/api-client", () => ({
   createApiClient: () => apiMocks,
   getBackendBaseUrl: () => "http://backend.local",
+  getPublicBackendBaseUrl: () => "http://backend.local",
   getUserFacingErrorMessage: () => "服务暂时不可用，请稍后重试。"
 }));
 

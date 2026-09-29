@@ -269,9 +269,16 @@ export function getUserFacingErrorMessage(error: unknown): string {
 }
 
 export function getBackendBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    return getPublicBackendBaseUrl();
+  }
   return (
-    process.env.NEXT_PUBLIC_BACKEND_BASE_URL?.trim() || DEFAULT_BACKEND_BASE_URL
+    process.env.BACKEND_INTERNAL_BASE_URL?.trim() || DEFAULT_BACKEND_BASE_URL
   );
+}
+
+export function getPublicBackendBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_BACKEND_BASE_URL?.trim() || "";
 }
 
 export function createApiClient(options: ApiClientOptions = {}) {

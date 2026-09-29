@@ -5,7 +5,7 @@ import type {
   AssetType,
   Status
 } from "@/lib/api-types";
-import { getBackendBaseUrl } from "@/lib/api-client";
+import { getPublicBackendBaseUrl } from "@/lib/api-client";
 
 const CATEGORY_LABELS = {
   character: "角色",
@@ -322,7 +322,7 @@ export function getSafePreviewUrl(asset: Asset): string | null {
 export function getAssetContentUrlById(assetId: string): string | null {
   const normalizedId = assetId.trim();
   if (!normalizedId) return null;
-  const baseUrl = getBackendBaseUrl().replace(/\/+$/, "");
+  const baseUrl = getPublicBackendBaseUrl().replace(/\/+$/, "");
   return `${baseUrl}/api/assets/${encodeURIComponent(normalizedId)}/content`;
 }
 
@@ -345,7 +345,7 @@ export function getAssetDownloadUrlById(
 ): string | null {
   const normalizedId = assetId.trim();
   if (!normalizedId) return null;
-  const baseUrl = getBackendBaseUrl().replace(/\/+$/, "");
+  const baseUrl = getPublicBackendBaseUrl().replace(/\/+$/, "");
   const params = new URLSearchParams({ download: "1" });
   if (filename?.trim()) params.set("filename", filename.trim());
   return `${baseUrl}/api/assets/${encodeURIComponent(normalizedId)}/content?${params.toString()}`;
@@ -371,7 +371,7 @@ function getSafeMediaUrl(
     value.startsWith("/api/assets/") &&
     value.endsWith(expectedApiSuffix)
   ) {
-    return `${getBackendBaseUrl().replace(/\/+$/, "")}${value}`;
+    return `${getPublicBackendBaseUrl().replace(/\/+$/, "")}${value}`;
   }
 
   try {

@@ -22,7 +22,7 @@ describe("AIGC image downloads", () => {
     expect(download).toEqual({
       filename: "商品-主图-2.jpg",
       url:
-        "http://localhost:8000/api/assets/asset%2Fone/content?" +
+        "/api/assets/asset%2Fone/content?" +
         "download=1&filename=%E5%95%86%E5%93%81-%E4%B8%BB%E5%9B%BE-2.jpg"
     });
   });
@@ -97,7 +97,7 @@ describe("AIGC image downloads", () => {
     ).toEqual({
       filename: "城市汽车广告.png",
       url:
-        "http://localhost:8000/api/assets/image-current/content?" +
+        "/api/assets/image-current/content?" +
         "download=1&filename=%E5%9F%8E%E5%B8%82%E6%B1%BD%E8%BD%A6%E5%B9%BF%E5%91%8A.png"
     });
   });
@@ -214,7 +214,7 @@ describe("AIGC video downloads", () => {
     ).toEqual({
       filename: "成片-预览-3.webm",
       url:
-        "http://localhost:8000/api/assets/video%2Fone/content?" +
+        "/api/assets/video%2Fone/content?" +
         "download=1&filename=%E6%88%90%E7%89%87-%E9%A2%84%E8%A7%88-3.webm"
     });
   });

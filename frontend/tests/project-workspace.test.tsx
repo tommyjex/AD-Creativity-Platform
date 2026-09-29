@@ -556,7 +556,7 @@ describe("ProjectWorkspace", () => {
     );
     expect(document.querySelector("video")).toHaveAttribute(
       "src",
-      "http://backend.local/api/assets/final-video-1/content"
+      "/api/assets/final-video-1/content"
     );
     expect(screen.getByTestId("compose-video-preview-frame")).toHaveStyle({
       aspectRatio: "9 / 16",
@@ -1964,7 +1964,7 @@ describe("ProjectWorkspace", () => {
       screen.getByRole("img", { name: "当前分镜视频尾帧" })
     ).toHaveAttribute(
       "src",
-      "http://backend.local/api/assets/video-shot-2/last-frame"
+      "/api/assets/video-shot-2/last-frame"
     );
     fireEvent.keyDown(carousel, { key: "ArrowLeft" });
     expect(
