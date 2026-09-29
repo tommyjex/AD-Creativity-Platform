@@ -173,7 +173,8 @@ curl http://127.0.0.1:8000/health
 
 ### 8. 启动前端
 
-本地开发时，前端默认请求 `http://localhost:8000`，无需额外配置：
+本地开发时，浏览器使用同源 `/api/...` 路径，Next.js 会将请求转发到默认的
+`http://127.0.0.1:8000`，无需额外配置：
 
 ```bash
 cd frontend
@@ -182,13 +183,16 @@ npm run dev
 
 打开 `http://localhost:3000`。
 
-前后端不在同一主机时，在 `frontend/.env.local` 中设置后端公开地址：
+若本地 FastAPI 使用其他地址，在 `frontend/.env.local` 中设置服务端内部地址：
 
 ```dotenv
-NEXT_PUBLIC_BACKEND_BASE_URL=https://api.example.com
+BACKEND_INTERNAL_BASE_URL=http://127.0.0.1:8100
 ```
 
-然后构建并启动生产前端：
+只有前后端明确采用分域部署时才设置
+`NEXT_PUBLIC_BACKEND_BASE_URL=https://api.example.com`，并同步配置后端 CORS。
+
+构建并启动生产前端：
 
 ```bash
 npm run build
