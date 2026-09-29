@@ -1,4 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
+import { createClientId } from "@/lib/client-id";
 import { isValidAigcConnection } from "@/lib/aigc/connection-validation";
 import {
   migrateAigcDefinitionV2,
@@ -1021,7 +1022,7 @@ function createNode(
   centerPosition?: AigcPoint
 ): AigcV2Node {
   const nodeType = type;
-  const id = `${nodeType}-${globalThis.crypto.randomUUID()}`;
+  const id = `${nodeType}-${createClientId()}`;
   const common = {
     id,
     custom_name: null,

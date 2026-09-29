@@ -1,6 +1,7 @@
 import type { createApiClient } from "@/lib/api-client";
 import { migrateAigcDefinitionV2 } from "@/lib/aigc/definition-migration";
 import { normalizeMultiTrackEditConfig } from "@/lib/aigc/multitrack";
+import { createClientId } from "@/lib/client-id";
 import type {
   AigcPipeline,
   AigcPipelineRunDetail,
@@ -47,7 +48,7 @@ export async function executeAigcTimelineDraft(
   pipeline: AigcPipeline,
   nodeId: string,
   draft: MultiTrackEditConfig,
-  idempotencyKey = globalThis.crypto.randomUUID()
+  idempotencyKey = createClientId()
 ): Promise<{ pipeline: AigcPipeline; run: AigcPipelineRunDetail }> {
   const savedPipeline = await saveAigcTimelineDraft(
     api,

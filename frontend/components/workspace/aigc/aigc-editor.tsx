@@ -99,6 +99,7 @@ import {
   getUserFacingErrorMessage,
   isApiError
 } from "@/lib/api-client";
+import { createClientId } from "@/lib/client-id";
 import {
   AutosaveCoordinator,
   type AutosaveState
@@ -4230,7 +4231,7 @@ export function toFlowEdge(
 
 function connectionToDomainEdge(connection: Connection): AigcEdge {
   return {
-    id: `edge-${globalThis.crypto.randomUUID()}`,
+    id: `edge-${createClientId()}`,
     sourceNodeId: connection.source,
     sourceHandle: connection.sourceHandle ?? "",
     targetNodeId: connection.target,

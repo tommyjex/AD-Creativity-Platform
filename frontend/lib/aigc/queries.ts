@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiClient } from "@/lib/api-client";
+import { createClientId } from "@/lib/client-id";
 import type {
   AigcPage,
   AigcPipelineRun,
@@ -158,7 +159,7 @@ export function useCreateAigcRun(pipelineId: string) {
       apiClient.createAigcRun(
         pipelineId,
         payload,
-        globalThis.crypto.randomUUID()
+        createClientId()
       ),
     onSuccess: (detail) => {
       queryClient.setQueryData(aigcQueryKeys.run(detail.run.id), detail);
@@ -176,7 +177,7 @@ export function useRetryAigcNode(pipelineId: string) {
       apiClient.retryAigcRunNode(
         runId,
         nodeId,
-        globalThis.crypto.randomUUID()
+        createClientId()
       ),
     onSuccess: (detail) => {
       queryClient.setQueryData(aigcQueryKeys.run(detail.run.id), detail);
