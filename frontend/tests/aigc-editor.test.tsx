@@ -3039,12 +3039,28 @@ describe("AIGC editor modes", () => {
       "[--card:220_13%_11%]"
     );
     expect(screen.getByTestId("aigc-editor-header")).toHaveClass(
-      "bg-[#171a1f]",
-      "border-[#30353d]",
+      "bg-[#b61519]",
+      "bg-[url('/images/navigation-national-day-red.webp')]",
+      "bg-cover",
+      "bg-center",
+      "bg-no-repeat",
+      "border-[#6f171b]",
       "h-14",
       "overflow-hidden",
       "shadow-[0_3px_12px_rgba(0,0,0,0.22)]"
     );
+    expect(
+      screen.getByTestId("aigc-toolbar-background-overlay")
+    ).toHaveClass(
+      "pointer-events-none",
+      "absolute",
+      "inset-0",
+      "z-0",
+      "bg-[linear-gradient(180deg,rgba(82,0,4,0.18)_0%,rgba(78,0,4,0.48)_100%)]"
+    );
+    expect(
+      screen.getByTestId("aigc-toolbar-background-overlay")
+    ).toHaveAttribute("aria-hidden", "true");
     expect(screen.getByTestId("aigc-editor-title-row")).toHaveClass(
       "min-w-0",
       "flex-1"

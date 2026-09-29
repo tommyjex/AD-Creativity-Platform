@@ -1142,9 +1142,14 @@ function AigcEditorContent({
         data-testid="aigc-editor-shell"
       >
       <header
-        className="relative flex h-14 shrink-0 flex-row items-center gap-1 overflow-hidden border-b border-[#30353d] bg-[#171a1f] px-2 shadow-[0_3px_12px_rgba(0,0,0,0.22)] sm:px-3"
+        className="relative flex h-14 shrink-0 flex-row items-center gap-1 overflow-hidden border-b border-[#6f171b] bg-[#b61519] bg-[url('/images/navigation-national-day-red.webp')] bg-cover bg-center bg-no-repeat px-2 shadow-[0_3px_12px_rgba(0,0,0,0.22)] sm:px-3"
         data-testid="aigc-editor-header"
       >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(180deg,rgba(82,0,4,0.18)_0%,rgba(78,0,4,0.48)_100%)]"
+          data-testid="aigc-toolbar-background-overlay"
+        />
         <div
           className="relative z-10 flex min-w-0 flex-1 items-center gap-2"
           data-testid="aigc-editor-title-row"

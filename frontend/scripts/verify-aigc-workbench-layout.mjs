@@ -28,9 +28,7 @@ try {
     });
     const page = await context.newPage();
     const browserErrors = [];
-    await page.route("http://127.0.0.1:7778/**", (route) =>
-      route.fulfill({ status: 204 })
-    );
+    await routeDebugTelemetry(page);
     page.on("console", (message) => {
       if (message.type() === "error") browserErrors.push(message.text());
     });
@@ -342,9 +340,7 @@ async function verifyTemplate(browserInstance) {
   });
   const page = await context.newPage();
   const browserErrors = [];
-  await page.route("http://127.0.0.1:7778/**", (route) =>
-    route.fulfill({ status: 204 })
-  );
+  await routeDebugTelemetry(page);
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());
   });
@@ -405,6 +401,7 @@ async function verifyImmersiveToolbar(page, viewport, mode) {
   const identity = page.getByTestId("aigc-editor-title-row");
   const autosave = page.getByTestId("aigc-autosave-status");
   const actions = page.getByTestId("aigc-editor-actions");
+  const toolbarOverlay = page.getByTestId("aigc-toolbar-background-overlay");
   const [shellBox, headerBox, identityBox, actionsBox, metrics] =
     await Promise.all([
       shell.boundingBox(),
@@ -422,6 +419,23 @@ async function verifyImmersiveToolbar(page, viewport, mode) {
         viewportWidth: window.innerWidth
       }))
     ]);
+  const toolbarTheme = await header.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      backgroundImage: style.backgroundImage,
+      backgroundPosition: style.backgroundPosition,
+      backgroundRepeat: style.backgroundRepeat,
+      backgroundSize: style.backgroundSize
+    };
+  });
+  const toolbarAssetLoaded = await page.evaluate(() =>
+    performance
+      .getEntriesByType("resource")
+      .some((entry) =>
+        entry.name.includes("/images/navigation-national-day-red.webp")
+      )
+  );
 
   assert(
     (await page.getByRole("banner").count()) === 0 &&
@@ -451,6 +465,28 @@ async function verifyImmersiveToolbar(page, viewport, mode) {
       headerBox.width <= viewport.width + 1,
     `${prefix}: 工具栏是顶部唯一且高度稳定的命令栏`,
     headerBox
+  );
+  assert(
+    toolbarTheme.backgroundColor === "rgb(182, 21, 25)" &&
+      toolbarTheme.backgroundImage.includes(
+        "/images/navigation-national-day-red.webp"
+      ) &&
+      toolbarTheme.backgroundPosition === "50% 50%" &&
+      toolbarTheme.backgroundRepeat === "no-repeat" &&
+      toolbarTheme.backgroundSize === "cover",
+    `${prefix}: 工具栏使用正红丝绸与暖金星光底图`,
+    toolbarTheme
+  );
+  assert(
+    toolbarAssetLoaded,
+    `${prefix}: 工具栏正红底图资源加载成功`
+  );
+  assert(
+    (await toolbarOverlay.getAttribute("aria-hidden")) === "true" &&
+      (await toolbarOverlay.evaluate(
+        (element) => getComputedStyle(element).pointerEvents
+      )) === "none",
+    `${prefix}: 工具栏对比度遮罩不拦截交互`
   );
   assert(
     boxesAreOrdered(identityBox, actionsBox) &&
@@ -655,8 +691,18 @@ function isDebugTelemetryRequest(rawUrl) {
   const url = new URL(rawUrl);
   return (
     url.hostname === "127.0.0.1" &&
-    url.port === "7778" &&
+    ["7777", "7778"].includes(url.port) &&
     url.pathname === "/event"
+  );
+}
+
+async function routeDebugTelemetry(page) {
+  await Promise.all(
+    ["7777", "7778"].map((port) =>
+      page.route(`http://127.0.0.1:${port}/**`, (route) =>
+        route.fulfill({ status: 204 })
+      )
+    )
   );
 }
 
