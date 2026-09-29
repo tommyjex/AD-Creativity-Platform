@@ -231,7 +231,7 @@ describe("AppShell top navigation", () => {
     ).toBeNull();
   });
 
-  it("renders the decorative dark navigation background", () => {
+  it("renders the decorative National Day navigation theme", () => {
     render(
       <AppShell>
         <div>首页内容</div>
@@ -243,13 +243,21 @@ describe("AppShell top navigation", () => {
     );
     expect(background).toHaveAttribute("aria-hidden", "true");
     expect(background.style.backgroundImage).toContain(
-      "/images/navigation-generative-constellation.webp"
+      "/images/navigation-national-day-red.webp"
     );
     expect(background.style.backgroundImage).not.toContain(
       "copilot-cn.bytedance.net"
     );
     expect(background).toHaveClass("bg-cover", "bg-center");
-    expect(screen.getByRole("banner")).toHaveClass("bg-[#14191f]");
+    expect(screen.getByRole("banner")).toHaveClass("bg-[#b61519]");
+    expect(screen.getByTestId("app-shell-brand-mark")).toHaveClass(
+      "border-[#ffc348]/60",
+      "bg-[#8c0000]/35"
+    );
+    expect(screen.getByRole("link", { name: "项目" })).toHaveClass(
+      "bg-[linear-gradient(180deg,#ffe0a3_0%,#f0b433_100%)]",
+      "text-[#6f110b]"
+    );
   });
 
   it("uses a wider navigation container on extra-wide screens", () => {

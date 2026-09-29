@@ -51,7 +51,7 @@ async function verifyViewport(browserInstance, viewport) {
   const navigationAssetRequests = [];
   const generationRequests = [];
   page.on("request", (request) => {
-    if (request.url().includes("navigation-generative-constellation.webp")) {
+    if (request.url().includes("navigation-national-day-red.webp")) {
       navigationAssetRequests.push(request.url());
     }
     if (request.url().includes("/api/ide/v1/text_to_image")) {
@@ -87,7 +87,7 @@ async function verifyViewport(browserInstance, viewport) {
     await expect.poll(() => navigationAssetRequests.length).toBe(1);
     assert.match(
       backgroundImage,
-      /navigation-generative-constellation\.webp/
+      /navigation-national-day-red\.webp/
     );
     assert.equal(generationRequests.length, 0);
     assert.notEqual(headerColor, "rgb(255, 255, 255)");
@@ -108,6 +108,15 @@ async function verifyViewport(browserInstance, viewport) {
       await expect(
         desktopNavigation.getByRole("link", { name: "AIGC工作台" })
       ).toHaveAttribute("aria-current", "page");
+      await expect(
+        desktopNavigation.getByRole("link", { name: "AIGC工作台" })
+      ).toHaveCSS("color", "rgb(111, 17, 11)");
+      await expect(
+        desktopNavigation.getByRole("link", { name: "AIGC工作台" })
+      ).toHaveCSS(
+        "background-image",
+        "linear-gradient(rgb(255, 224, 163) 0%, rgb(240, 180, 51) 100%)"
+      );
       await expect(
         page.getByRole("button", { name: "打开导航菜单" })
       ).toBeHidden();
@@ -184,7 +193,7 @@ async function verifyFallback(browserInstance) {
     viewport: { width: 390, height: 844 }
   });
   await context.route(
-    "**/images/navigation-generative-constellation.webp",
+    "**/images/navigation-national-day-red.webp",
     (route) => route.abort()
   );
   const page = await context.newPage();
@@ -194,7 +203,7 @@ async function verifyFallback(browserInstance) {
       waitUntil: "domcontentloaded"
     });
     const header = page.getByRole("banner");
-    await expect(header).toHaveCSS("background-color", "rgb(20, 25, 31)");
+    await expect(header).toHaveCSS("background-color", "rgb(182, 21, 25)");
     await expect(
       page.getByRole("button", { name: "打开导航菜单" })
     ).toBeVisible();

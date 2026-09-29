@@ -15,7 +15,7 @@ const navItems = [
 ] as const;
 
 const navigationBackgroundUrl =
-  "/images/navigation-generative-constellation.webp";
+  "/images/navigation-national-day-red.webp";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       data-testid="app-shell"
     >
       <AtmosphereLayer />
-      <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-white/10 bg-[#14191f] text-white">
+      <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-[#ffe0a3]/20 bg-[#b61519] text-white">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-cover bg-center"
@@ -54,19 +54,19 @@ export function AppShell({ children }: { children: ReactNode }) {
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(3,7,11,0.04)_0%,rgba(3,7,11,0.22)_100%),linear-gradient(90deg,rgba(11,15,20,0.92)_0%,rgba(12,17,23,0.56)_22%,rgba(10,15,21,0.34)_52%,rgba(9,14,20,0.48)_74%,rgba(8,12,17,0.82)_100%)]"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(84,0,0,0.06)_0%,rgba(91,0,0,0.24)_100%),linear-gradient(90deg,rgba(91,0,0,0.78)_0%,rgba(132,5,5,0.38)_22%,rgba(174,12,8,0.14)_52%,rgba(127,3,3,0.34)_74%,rgba(82,0,0,0.70)_100%)]"
         />
         <div
           className="container relative z-10 flex h-full items-center justify-between gap-6 2xl:max-w-[1600px]"
           data-testid="app-shell-navigation-layout"
         >
           <Link className="group flex items-center gap-3" href="/">
-            <BrandMark className="border-blue-400/40 bg-blue-500/15" />
+            <BrandMark />
             <div className="leading-none">
               <div className="text-sm font-semibold tracking-[0.18em] text-white">
                 AD CREATIVITY
               </div>
-              <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.24em] text-slate-400">
+              <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.24em] text-[#ffe0a3]/70">
                 Campaign generation deck
               </div>
             </div>
@@ -74,7 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <nav
             aria-label="主导航"
-            className="hidden items-center gap-1 rounded-full border border-white/10 bg-black/30 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-xl md:flex"
+            className="hidden items-center gap-1 rounded-full border border-[#ffe0a3]/25 bg-[#6b0000]/45 p-1 shadow-[0_8px_24px_rgba(74,0,0,0.24)] backdrop-blur-xl md:flex"
           >
             {navItems.map((item) => {
               const isActive =
@@ -86,8 +86,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className={cn(
                     "rounded-full px-4 py-2 text-xs font-medium transition",
                     isActive
-                      ? "bg-primary/90 text-white shadow-sm"
-                      : "text-slate-300 hover:bg-white/10 hover:text-white"
+                      ? "bg-[linear-gradient(180deg,#ffe0a3_0%,#f0b433_100%)] text-[#6f110b] shadow-sm"
+                      : "text-[#fff2dc]/85 hover:bg-[#ffe0a3]/10 hover:text-white"
                   )}
                   href={item.href as Route}
                   key={item.href}
@@ -102,7 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-controls="mobile-navigation-menu"
             aria-expanded={isMobileNavOpen}
             aria-label={isMobileNavOpen ? "关闭导航菜单" : "打开导航菜单"}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/15 bg-black/25 text-slate-100 transition hover:bg-white/10 md:hidden"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-[#ffe0a3]/35 bg-[#6b0000]/35 text-[#fff2dc] transition hover:bg-[#ffe0a3]/10 md:hidden"
             onClick={() =>
               setMobileNavPathname(isMobileNavOpen ? null : pathname)
             }
@@ -119,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {isMobileNavOpen ? (
           <nav
             aria-label="移动导航"
-            className="absolute inset-x-4 top-[calc(100%+0.5rem)] grid gap-1 rounded-md border border-white/10 bg-[#171c23]/95 p-2 shadow-2xl backdrop-blur-xl md:hidden"
+            className="absolute inset-x-4 top-[calc(100%+0.5rem)] grid gap-1 rounded-md border border-[#ffe0a3]/25 bg-[#7a0809]/95 p-2 shadow-2xl backdrop-blur-xl md:hidden"
             data-testid="mobile-navigation-menu"
             id="mobile-navigation-menu"
           >
@@ -133,8 +133,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className={cn(
                     "rounded px-3 py-2.5 text-sm transition",
                     isActive
-                      ? "bg-primary/90 text-white"
-                      : "text-slate-300 hover:bg-white/10 hover:text-white"
+                      ? "bg-[linear-gradient(180deg,#ffe0a3_0%,#f0b433_100%)] text-[#6f110b]"
+                      : "text-[#fff2dc]/85 hover:bg-[#ffe0a3]/10 hover:text-white"
                   )}
                   href={item.href as Route}
                   key={item.href}
@@ -167,16 +167,14 @@ function AtmosphereLayer() {
   );
 }
 
-function BrandMark({ className }: { className?: string }) {
+function BrandMark() {
   return (
     <div
-      className={cn(
-        "relative grid h-10 w-10 place-items-center rounded-xl border border-primary/20 bg-primary/[0.08]",
-        className
-      )}
+      className="relative grid h-10 w-10 place-items-center rounded-xl border border-[#ffc348]/60 bg-[#8c0000]/35"
+      data-testid="app-shell-brand-mark"
     >
-      <div className="absolute inset-1 rounded-lg border border-primary/10" />
-      <div className="h-3 w-3 rounded bg-primary" />
+      <div className="absolute inset-1 rounded-lg border border-[#ffc348]/25" />
+      <div className="h-3 w-3 rounded bg-[#ffc348] shadow-[0_0_16px_rgba(255,195,72,0.55)]" />
     </div>
   );
 }
