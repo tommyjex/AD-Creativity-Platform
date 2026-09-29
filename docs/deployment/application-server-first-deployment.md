@@ -107,7 +107,7 @@ sudo apt install -y \
   mysql-client
 ```
 
-从公司批准的软件源或 NodeSource 安装 Node.js 20 或更高版本，然后确认：
+从公司批准的软件源或 NodeSource 安装 Node.js 22 LTS 或更高版本，然后确认：
 
 ```bash
 python3 --version
@@ -558,27 +558,64 @@ cd /opt/ad-creativity/app
 sudo -u adcreative git rev-parse HEAD
 ```
 
-完成上述数据库门禁后执行：
+完成上述数据库门禁后，由部署用户手动拉取或检出已经确认的版本，再运行仓库内
+部署脚本：
 
 ```bash
-sudo systemctl stop ad-creativity-frontend ad-creativity-backend
-
 cd /opt/ad-creativity/app
-sudo -u adcreative git fetch --tags
-sudo -u adcreative git checkout <RELEASE_TAG_OR_COMMIT>
-
-sudo -u adcreative .venv/bin/pip install -r requirements.txt
-
-cd frontend
-sudo -u adcreative npm ci
-sudo -u adcreative npm run build
-
-sudo systemctl start ad-creativity-backend ad-creativity-frontend
-curl --fail --user '<ADMIN_USERNAME>:<PASSWORD>' \
-  https://ad.example.com/health
+sudo -u adcreative git pull --ff-only
+sudo -u adcreative ./scripts/deploy_server.sh
 ```
 
-首次阶段允许短暂停机发布。需要无停机发布时，再升级为反向代理下的双实例滚动发布。
+脚本依次安装 Python 依赖、编译检查后端、执行 `npm ci`、构建前端、重启两个
+systemd 服务，并检查 `127.0.0.1:8000/health` 和 `127.0.0.1:3000/`。安装或
+构建失败时不会重启当前服务；重启后失败时会输出两个服务的状态和最近 100 行日志。
+
+脚本不会执行以下操作：
+
+- 拉取、切换或回滚 Git 版本。
+- 停止服务后再构建。
+- 运行完整测试套件。
+- 重载 Nginx。
+- 自动回滚应用或数据库。
+
+需要覆盖默认配置时，在命令前设置环境变量：
+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `APP_ROOT` | 脚本推导的仓库根目录 | 应用目录 |
+| `BACKEND_SERVICE` | `ad-creativity-backend` | 后端 systemd unit |
+| `FRONTEND_SERVICE` | `ad-creativity-frontend` | 前端 systemd unit |
+| `BACKEND_HEALTH_URL` | `http://127.0.0.1:8000/health` | 后端健康检查 |
+| `FRONTEND_HEALTH_URL` | `http://127.0.0.1:3000/` | 前端健康检查 |
+| `HEALTH_CHECK_ATTEMPTS` | `30` | 每个地址的最大尝试次数 |
+| `HEALTH_CHECK_INTERVAL_SECONDS` | `2` | 尝试间隔秒数 |
+| `DEPLOY_LOCK_FILE` | `/tmp/ad-creativity-deploy.lock` | 并发部署锁文件 |
+
+例如，服务启动较慢时可增加重试次数：
+
+```bash
+sudo -u adcreative \
+  env \
+  HEALTH_CHECK_ATTEMPTS=60 \
+  HEALTH_CHECK_INTERVAL_SECONDS=3 \
+  ./scripts/deploy_server.sh
+```
+
+脚本要求 Node.js 22 或更高版本、已有 `.venv` 和 `.env`，并要求部署用户可以通过
+免交互 sudo 管理 systemd。部署失败后可继续检查：
+
+```bash
+sudo systemctl status \
+  ad-creativity-backend \
+  ad-creativity-frontend \
+  --no-pager
+sudo journalctl -u ad-creativity-backend -n 200 --no-pager
+sudo journalctl -u ad-creativity-frontend -n 200 --no-pager
+```
+
+该脚本属于原地部署，重启期间仍会有短暂不可用。需要无停机发布时，应升级为
+反向代理下的双实例滚动发布。
 
 ## 17. 回滚方案
 
