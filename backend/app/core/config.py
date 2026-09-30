@@ -1,11 +1,37 @@
 from functools import lru_cache
 from os import getenv
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 
 class ConfigurationError(ValueError):
     """Raised when environment configuration is invalid without exposing values."""
+
+
+def normalize_http_origin(value: str, *, name: str) -> str:
+    try:
+        parsed = urlsplit(value.strip())
+        port = parsed.port
+    except ValueError as exc:
+        raise ConfigurationError(f"{name} must be a valid HTTP(S) origin.") from exc
+    if (
+        parsed.scheme.casefold() not in {"http", "https"}
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ConfigurationError(f"{name} must be a valid HTTP(S) origin.")
+    host = parsed.hostname.casefold()
+    if ":" in host:
+        host = f"[{host}]"
+    scheme = parsed.scheme.casefold()
+    default_port = 80 if scheme == "http" else 443
+    authority = host if port in {None, default_port} else f"{host}:{port}"
+    return f"{scheme}://{authority}"
 
 
 def _parse_positive_int_env(name: str, default: int) -> int:
@@ -73,6 +99,12 @@ class Settings(BaseModel):
     environment: str = "local"
     api_prefix: str = "/api"
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    site_origin: str = "http://localhost:3000"
+    auth_cookie_secure: bool = False
+    auth_session_idle_seconds: int = Field(default=12 * 60 * 60, gt=0)
+    auth_session_absolute_seconds: int = Field(default=7 * 24 * 60 * 60, gt=0)
+    auth_login_window_seconds: int = Field(default=15 * 60, gt=0)
+    auth_login_max_failures: int = Field(default=5, gt=0)
 
     ark_text_model: str = "doubao-seed-evolving"
     ark_image_model: str = "doubao-seedream-5-0-pro-260628"
@@ -151,9 +183,49 @@ class Settings(BaseModel):
     tls_retry_initial_seconds: int = Field(default=1, gt=0)
     tls_timeout_seconds: int = Field(default=5, gt=0)
 
+    @model_validator(mode="after")
+    def validate_auth_security(self) -> "Settings":
+        self.site_origin = normalize_http_origin(
+            self.site_origin,
+            name="SITE_ORIGIN",
+        )
+        self.cors_origins = list(
+            dict.fromkeys(
+                origin
+                if origin == "*"
+                else normalize_http_origin(origin, name="CORS_ORIGINS")
+                for origin in self.cors_origins
+            )
+        )
+        if self.auth_session_idle_seconds > self.auth_session_absolute_seconds:
+            raise ConfigurationError(
+                "AUTH_SESSION_IDLE_SECONDS must not exceed "
+                "AUTH_SESSION_ABSOLUTE_SECONDS."
+            )
+        if self.environment.casefold() in {"production", "prod"}:
+            if "*" in self.cors_origins:
+                raise ConfigurationError(
+                    "CORS_ORIGINS must not contain '*' in production."
+                )
+            if not self.auth_cookie_secure:
+                raise ConfigurationError(
+                    "AUTH_COOKIE_SECURE must be enabled in production."
+                )
+            if not self.site_origin.startswith("https://"):
+                raise ConfigurationError(
+                    "SITE_ORIGIN must use HTTPS in production."
+                )
+            if self.site_origin not in self.cors_origins:
+                raise ConfigurationError(
+                    "CORS_ORIGINS must include SITE_ORIGIN in production."
+                )
+        return self
+
     @classmethod
     def from_env(cls) -> "Settings":
         cors_origins = getenv("CORS_ORIGINS")
+        environment = getenv("APP_ENV", cls.model_fields["environment"].default)
+        cookie_secure_default = environment.casefold() in {"production", "prod"}
         ark_image_timeout_seconds = _parse_positive_int_env(
             "ARK_IMAGE_TIMEOUT_SECONDS",
             cls.model_fields["ark_image_timeout_seconds"].default,
@@ -161,12 +233,36 @@ class Settings(BaseModel):
         return cls(
             app_name=getenv("APP_NAME", cls.model_fields["app_name"].default),
             app_version=getenv("APP_VERSION", cls.model_fields["app_version"].default),
-            environment=getenv("APP_ENV", cls.model_fields["environment"].default),
+            environment=environment,
             api_prefix=getenv("API_PREFIX", cls.model_fields["api_prefix"].default),
             cors_origins=(
                 [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
                 if cors_origins
                 else ["*"]
+            ),
+            site_origin=getenv(
+                "SITE_ORIGIN",
+                cls.model_fields["site_origin"].default,
+            ).rstrip("/"),
+            auth_cookie_secure=_parse_bool_env(
+                "AUTH_COOKIE_SECURE",
+                cookie_secure_default,
+            ),
+            auth_session_idle_seconds=_parse_positive_int_env(
+                "AUTH_SESSION_IDLE_SECONDS",
+                cls.model_fields["auth_session_idle_seconds"].default,
+            ),
+            auth_session_absolute_seconds=_parse_positive_int_env(
+                "AUTH_SESSION_ABSOLUTE_SECONDS",
+                cls.model_fields["auth_session_absolute_seconds"].default,
+            ),
+            auth_login_window_seconds=_parse_positive_int_env(
+                "AUTH_LOGIN_WINDOW_SECONDS",
+                cls.model_fields["auth_login_window_seconds"].default,
+            ),
+            auth_login_max_failures=_parse_positive_int_env(
+                "AUTH_LOGIN_MAX_FAILURES",
+                cls.model_fields["auth_login_max_failures"].default,
             ),
             ark_text_model=getenv(
                 "ARK_TEXT_MODEL",

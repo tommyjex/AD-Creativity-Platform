@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { AssetLibrary } from "@/components/asset-library";
 import {
-  createApiClient,
   getUserFacingErrorMessage,
   isApiError
 } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 import type { Asset, Project } from "@/lib/api-types";
 
 interface ProjectAssetsPageProps {
@@ -17,7 +17,7 @@ export default async function ProjectAssetsPage({
   params
 }: ProjectAssetsPageProps) {
   const { projectId } = await params;
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let result: [Project, Asset[]] | undefined;
   let loadError: unknown;
 

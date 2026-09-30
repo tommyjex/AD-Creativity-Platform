@@ -23,6 +23,7 @@ import type {
   AigcV2Node,
   MultiTrackEditConfig
 } from "@/lib/aigc/types";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 type MultiTrackEditNode = Extract<
   AigcV2Node,
@@ -38,6 +39,7 @@ export function AigcTimelineEditorShell({
   pipeline: AigcPipeline;
   sources?: AigcTimelineSource[];
 }) {
+  const canWrite = useCanWrite();
   const router = useRouter();
   const [currentPipeline, setCurrentPipeline] = useState(pipeline);
   const pipelineRoute =
@@ -47,6 +49,9 @@ export function AigcTimelineEditorShell({
   async function save(
     config: MultiTrackEditConfig
   ): Promise<AigcMultitrackSaveResult> {
+    if (!canWrite) {
+      return { config, revision: currentPipeline.revision };
+    }
     try {
       const saved = await saveAigcTimelineDraft(
         apiClient,
@@ -62,6 +67,7 @@ export function AigcTimelineEditorShell({
   }
 
   async function execute(config: MultiTrackEditConfig) {
+    if (!canWrite) return;
     try {
       const result = await executeAigcTimelineDraft(
         apiClient,
@@ -79,11 +85,15 @@ export function AigcTimelineEditorShell({
   return (
     <AigcMultitrackEditor
       config={node.config}
+      readOnly={!canWrite}
       onBack={() => router.push(pipelineRoute)}
       onExecute={execute}
       onReload={() => router.refresh()}
       onSave={save}
       onUploadSubtitle={async (file) => {
+        if (!canWrite) {
+          throw new Error("当前账号仅支持查看，不能上传字幕。");
+        }
         const asset = await apiClient.uploadAigcSubtitle(file, {
           filename: file.name,
           mimeType: file.type || "application/x-subrip"

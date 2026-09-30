@@ -53,6 +53,11 @@ const apiMocks = vi.hoisted(() => ({
 const navigationMocks = vi.hoisted(() => ({
   push: vi.fn()
 }));
+const permissionMocks = vi.hoisted(() => ({ canWrite: true }));
+
+vi.mock("@/lib/auth/auth-provider", () => ({
+  useCanWrite: () => permissionMocks.canWrite
+}));
 
 vi.mock("@/lib/api-client", () => ({
   apiClient: apiMocks,
@@ -111,6 +116,8 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
         minZoom?: number;
         nodeClickDistance?: number;
         nodeDragThreshold?: number;
+        nodesConnectable?: boolean;
+        nodesDraggable?: boolean;
         onMoveEnd?: (
           event: unknown,
           viewport: { x: number; y: number; zoom: number }
@@ -175,6 +182,8 @@ vi.mock("@/components/workspace/canvas/node-canvas", async () => {
           data-node-drag-threshold={
             reactFlowProps?.nodeDragThreshold ?? "default"
           }
+          data-nodes-connectable={String(reactFlowProps?.nodesConnectable)}
+          data-nodes-draggable={String(reactFlowProps?.nodesDraggable)}
           data-testid="node-canvas"
           data-translate-extent={String("translateExtent" in (reactFlowProps ?? {}))}
           data-zoom-on-double-click={String(
@@ -1802,6 +1811,7 @@ describe("AIGC editor store", () => {
 
 describe("AIGC editor modes", () => {
   beforeEach(() => {
+    permissionMocks.canWrite = true;
     vi.clearAllMocks();
     navigationMocks.push.mockReset();
     window.localStorage.clear();
@@ -1834,6 +1844,31 @@ describe("AIGC editor modes", () => {
       ...template,
       revision: 4
     });
+  });
+
+  it("renders a viewer pipeline without editor commands, dragging, or autosave writes", async () => {
+    permissionMocks.canWrite = false;
+    const { store } = renderEditor(pipeline, "pipeline", undefined, {
+      openInspector: false
+    });
+
+    expect(screen.getByTestId("node-canvas")).toHaveAttribute(
+      "data-nodes-draggable",
+      "false"
+    );
+    expect(screen.getByTestId("node-canvas")).toHaveAttribute(
+      "data-nodes-connectable",
+      "false"
+    );
+    expect(screen.queryByTestId("aigc-command-save-template")).toBeNull();
+    expect(screen.queryByTestId("aigc-command-execute")).toBeNull();
+    expect(screen.queryByRole("button", { name: "打开节点库" })).toBeNull();
+
+    act(() => {
+      store.getState().setName("viewer cannot persist");
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
+    expect(apiMocks.updateAigcPipeline).not.toHaveBeenCalled();
   });
 
   it("isolates active controls, results, cancellation, and top-level execution by flow", async () => {

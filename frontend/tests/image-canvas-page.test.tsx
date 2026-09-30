@@ -34,6 +34,11 @@ const routerMocks = vi.hoisted(() => ({
   back: vi.fn(),
   push: vi.fn()
 }));
+const permissionMocks = vi.hoisted(() => ({ canWrite: true }));
+
+vi.mock("@/lib/auth/auth-provider", () => ({
+  useCanWrite: () => permissionMocks.canWrite
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => routerMocks
@@ -420,6 +425,7 @@ function drawBbox(image: HTMLElement) {
 
 describe("ImageCanvasPage", () => {
   beforeEach(() => {
+    permissionMocks.canWrite = true;
     Object.values(apiMocks).forEach((mock) => mock.mockReset());
     Object.values(routerMocks).forEach((mock) => mock.mockReset());
     apiMocks.listImageLayerSets.mockResolvedValue([]);
@@ -427,6 +433,19 @@ describe("ImageCanvasPage", () => {
       ...emptyLayout,
       revision: emptyLayout.revision + 1
     });
+  });
+
+  it("keeps the viewer canvas visible while blocking controls and autosave", async () => {
+    permissionMocks.canWrite = false;
+    renderPage(project, referenceLayout);
+
+    expect(screen.getByTestId("node-canvas")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "添加参考图" })).toBeNull();
+    expect(screen.getByRole("button", { name: "生成图片" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "测试节点位置变化" }));
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
+    expect(apiMocks.saveCanvasLayout).not.toHaveBeenCalled();
   });
 
   it("navigates back when the canvas closes", () => {

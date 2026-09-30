@@ -17,6 +17,7 @@ from backend.app.api.dependencies import (
     get_modelark_generation_service,
     get_repository,
     get_video_normalizer_service,
+    require_business_access,
 )
 from backend.app.core.config import ConfigurationError
 from backend.app.core.logging import log_event
@@ -77,7 +78,11 @@ from backend.app.services.video_normalizer import (
     VideoNormalizer,
 )
 
-router = APIRouter(prefix="/aigc", tags=["aigc"])
+router = APIRouter(
+    prefix="/aigc",
+    tags=["aigc"],
+    dependencies=[Depends(require_business_access)],
+)
 logger = logging.getLogger(__name__)
 
 

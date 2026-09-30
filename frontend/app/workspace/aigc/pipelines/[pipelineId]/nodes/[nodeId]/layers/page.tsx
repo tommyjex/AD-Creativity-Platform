@@ -1,6 +1,7 @@
 import { AigcLayerEditor, LayerEditorError } from "@/components/workspace/aigc/aigc-layer-editor";
-import { createApiClient, getUserFacingErrorMessage } from "@/lib/api-client";
+import { getUserFacingErrorMessage } from "@/lib/api-client";
 import { loadAigcLayerEditorData } from "@/lib/aigc/layer-editor-loader";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 
 export default async function AigcLayerEditorPage({
   params
@@ -8,7 +9,7 @@ export default async function AigcLayerEditorPage({
   params: Promise<{ nodeId: string; pipelineId: string }>;
 }) {
   const { nodeId, pipelineId } = await params;
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let data;
   let loadError: unknown;
 

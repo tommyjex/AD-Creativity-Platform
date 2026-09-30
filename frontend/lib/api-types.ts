@@ -6,6 +6,58 @@ import type {
 
 export type DateTimeString = string;
 
+export const USER_ROLES = ["admin", "creator", "viewer"] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  display_name: string;
+  role: UserRole;
+  is_enabled: boolean;
+  must_change_password: boolean;
+  created_at: DateTimeString;
+  updated_at: DateTimeString;
+  last_login_at: DateTimeString | null;
+}
+
+export interface SetupStatusResponse {
+  initialized: boolean;
+}
+
+export interface SetupRequest {
+  username: string;
+  display_name: string;
+  password: string;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface CreateUserRequest extends SetupRequest {
+  role: UserRole;
+}
+
+export interface UpdateUserRoleRequest {
+  role: UserRole;
+}
+
+export interface UpdateUserStatusRequest {
+  is_enabled: boolean;
+}
+
+export interface ResetPasswordRequest {
+  password: string;
+}
+
 export const STATUSES = [
   "draft",
   "queued",
@@ -73,6 +125,18 @@ export type CharacterAssetIterationOperation =
   (typeof CHARACTER_ASSET_ITERATION_OPERATIONS)[number];
 
 export const ERROR_CODES = [
+  "authentication_failed",
+  "authentication_required",
+  "current_password_invalid",
+  "last_admin_required",
+  "login_rate_limited",
+  "origin_forbidden",
+  "password_change_required",
+  "password_policy_failed",
+  "permission_denied",
+  "setup_completed",
+  "user_not_found",
+  "username_conflict",
   "validation_error",
   "not_found",
   "dependency_missing",

@@ -28,6 +28,7 @@ import {
   useState
 } from "react";
 import { Badge } from "@/components/ui/badge";
+import { ReadOnlyNotice } from "@/components/auth/read-only-notice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -58,6 +59,7 @@ import type {
 } from "@/lib/aigc/types";
 import { formatDate } from "@/lib/project-display";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 const PAGE_SIZE = 20;
 const EMPTY_DEFINITION: AigcPipelineDefinitionV2 = {
@@ -92,6 +94,7 @@ export function AigcWorkspace({
   initialTemplates,
   initialView = "templates"
 }: AigcWorkspaceProps) {
+  const canWrite = useCanWrite();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [view, setView] = useState<AigcView>(initialView);
@@ -203,6 +206,7 @@ export function AigcWorkspace({
 
   function submitNewPipeline(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canWrite) return;
     const name = newPipelineName.trim();
     if (name) createMutation.mutate(name);
   }
@@ -215,6 +219,7 @@ export function AigcWorkspace({
   }
 
   function requestDelete(target: DeleteTarget) {
+    if (!canWrite) return;
     setDeleteError(null);
     setDeleteTarget(target);
   }
@@ -236,19 +241,22 @@ export function AigcWorkspace({
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
               从模板快速建立生成流程，或维护可重复执行的节点画布。
             </p>
+            {!canWrite ? (
+              <ReadOnlyNotice className="mt-3 max-w-xl border-slate-700 bg-slate-900/80 text-slate-400" />
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="border border-slate-700 bg-slate-900/80 px-3 py-1.5 font-mono text-xs text-slate-300">
               {activeData?.total ?? 0} 个{view === "templates" ? "模板" : "画布"}
             </span>
-            <Button
+            {canWrite ? <Button
               className="bg-sky-500 text-slate-950 hover:bg-sky-400"
               onClick={() => setIsCreateOpen(true)}
               type="button"
             >
               <Plus className="h-4 w-4" />
               新建空白画布
-            </Button>
+            </Button> : null}
           </div>
         </div>
       </header>
@@ -345,6 +353,7 @@ export function AigcWorkspace({
                   instantiateMutation.variables?.id === item.id
                 }
                 item={item}
+                canWrite={canWrite}
                 key={item.id}
                 kind={view === "templates" ? "template" : "pipeline"}
                 onDelete={requestDelete}
@@ -352,7 +361,11 @@ export function AigcWorkspace({
                 onOpen={() => {
                   setFeedback(null);
                   if (view === "templates") {
-                    instantiateMutation.mutate(item as AigcPipelineTemplate);
+                    if (canWrite) {
+                      instantiateMutation.mutate(item as AigcPipelineTemplate);
+                    } else {
+                      router.push(`/workspace/aigc/templates/${item.id}` as Route);
+                    }
                   } else {
                     router.push(pipelineRoute(item.id));
                   }
@@ -372,6 +385,7 @@ export function AigcWorkspace({
           hasQuery={query.length > 0}
           onCreate={() => setIsCreateOpen(true)}
           onReset={clearSearch}
+          canWrite={canWrite}
           view={view}
         />
       )}
@@ -473,14 +487,14 @@ export function AigcWorkspace({
         </DialogContent>
       </Dialog>
 
-      <AigcThumbnailDialog
+      {canWrite ? <AigcThumbnailDialog
         onOpenChange={(open) => {
           if (!open) setThumbnailPipeline(null);
         }}
         onUpdated={() => undefined}
         open={thumbnailPipeline !== null}
         pipeline={thumbnailPipeline}
-      />
+      /> : null}
     </main>
   );
 }
@@ -517,6 +531,7 @@ function ViewButton({
 
 function AigcCard({
   busy,
+  canWrite,
   item,
   kind,
   onDelete,
@@ -524,6 +539,7 @@ function AigcCard({
   onOpen
 }: {
   busy: boolean;
+  canWrite: boolean;
   item: AigcListItem;
   kind: "pipeline" | "template";
   onDelete: (target: DeleteTarget) => void;
@@ -591,7 +607,7 @@ function AigcCard({
             </span>
           </button>
           <div className="flex shrink-0 items-center gap-1">
-            {kind === "template" ? (
+            {kind === "template" && canWrite ? (
               <Button
                 asChild
                 aria-label={`编辑模板：${item.name}`}
@@ -603,10 +619,10 @@ function AigcCard({
                   <Pencil className="h-4 w-4" />
                 </a>
               </Button>
-            ) : (
+            ) : kind === "pipeline" ? (
               <>
                 <StatusBadge status={pipeline?.latest_run_status ?? null} />
-                <Button
+                {canWrite ? <Button
                   aria-label={`选择缩略图：${item.name}`}
                   disabled={busy}
                   onClick={handleThumbnail}
@@ -616,10 +632,10 @@ function AigcCard({
                   variant="ghost"
                 >
                   <ImageIcon className="h-4 w-4" />
-                </Button>
+                </Button> : null}
               </>
-            )}
-            <Button
+            ) : null}
+            {canWrite ? <Button
               aria-label={`删除${typeLabel}：${item.name}`}
               className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               disabled={busy}
@@ -630,7 +646,7 @@ function AigcCard({
               variant="ghost"
             >
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </Button> : null}
           </div>
         </div>
         <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-slate-400">
@@ -663,7 +679,7 @@ function AigcCard({
           variant={kind === "template" ? "signal" : "outline"}
         >
           {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-          {kind === "template" ? "使用模板" : "打开画布"}
+          {kind === "template" ? (canWrite ? "使用模板" : "查看模板") : "打开画布"}
           {!busy ? <ArrowRight className="h-4 w-4" /> : null}
         </Button>
       </div>
@@ -830,11 +846,13 @@ function LoadingState() {
 }
 
 function EmptyState({
+  canWrite,
   hasQuery,
   onCreate,
   onReset,
   view
 }: {
+  canWrite: boolean;
   hasQuery: boolean;
   onCreate: () => void;
   onReset: () => void;
@@ -854,7 +872,7 @@ function EmptyState({
         <p className="mt-2 text-sm text-slate-400">
           {hasQuery ? "调整名称关键词后重新筛选。" : "从空白画布开始建立生成流程。"}
         </p>
-        <Button
+        {hasQuery || canWrite ? <Button
           className="mt-5 border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
           onClick={hasQuery ? onReset : onCreate}
           type="button"
@@ -862,7 +880,7 @@ function EmptyState({
         >
           {hasQuery ? <Eraser className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           {hasQuery ? "清空筛选" : "新建空白画布"}
-        </Button>
+        </Button> : null}
       </div>
     </div>
   );

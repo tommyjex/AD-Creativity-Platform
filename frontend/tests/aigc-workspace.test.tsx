@@ -23,6 +23,11 @@ const apiMocks = vi.hoisted(() => ({
 const navigationMocks = vi.hoisted(() => ({
   push: vi.fn()
 }));
+const permissionMocks = vi.hoisted(() => ({ canWrite: true }));
+
+vi.mock("@/lib/auth/auth-provider", () => ({
+  useCanWrite: () => permissionMocks.canWrite
+}));
 
 vi.mock("@/lib/api-client", () => ({
   apiClient: apiMocks,
@@ -124,6 +129,7 @@ function renderWorkspace({
 
 describe("AIGC workspace list", () => {
   beforeEach(() => {
+    permissionMocks.canWrite = true;
     vi.clearAllMocks();
     apiMocks.listAigcTemplates.mockResolvedValue(page([template]));
     apiMocks.listAigcPipelines.mockResolvedValue(page([pipeline]));
@@ -155,6 +161,21 @@ describe("AIGC workspace list", () => {
         url: "https://example.test/image.png"
       }
     });
+  });
+
+  it("opens templates read-only for viewers without exposing mutations", () => {
+    permissionMocks.canWrite = false;
+    renderWorkspace();
+
+    expect(screen.queryByRole("button", { name: "新建空白画布" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /删除模板/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /查看模板/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看模板/ }));
+    expect(apiMocks.instantiateAigcTemplate).not.toHaveBeenCalled();
+    expect(navigationMocks.push).toHaveBeenCalledWith(
+      "/workspace/aigc/templates/template-1"
+    );
   });
 
   it("defaults to templates and uses a five-column wide layout", () => {

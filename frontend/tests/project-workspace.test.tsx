@@ -52,6 +52,11 @@ const apiMocks = vi.hoisted(() => ({
   updateProject: vi.fn(),
   uploadStoryboardShotReference: vi.fn()
 }));
+const permissionMocks = vi.hoisted(() => ({ canWrite: true }));
+
+vi.mock("@/lib/auth/auth-provider", () => ({
+  useCanWrite: () => permissionMocks.canWrite
+}));
 
 vi.mock("@/lib/api-client", async (importOriginal) => {
   const original =
@@ -153,6 +158,7 @@ const imageProjectListItem: ProjectListItem = {
 
 describe("ProjectWorkspace", () => {
   beforeEach(() => {
+    permissionMocks.canWrite = true;
     Object.values(apiMocks).forEach((mock) => mock.mockReset());
     apiMocks.getProject.mockResolvedValue(project);
     apiMocks.getStoryboardShotVideoConfig.mockImplementation(
@@ -184,6 +190,20 @@ describe("ProjectWorkspace", () => {
         });
       }
     );
+  });
+
+  it("keeps project details readable while hiding viewer write actions", async () => {
+    permissionMocks.canWrite = false;
+    render(<ProjectWorkspace initialProjects={[projectListItem]} />);
+
+    expect(screen.queryByRole("button", { name: "新建项目" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "删除项目" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /便携咖啡机投放/ }));
+    expect(await screen.findByText("项目与 Brief")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "编辑 Brief" })).toBeNull();
+    expect(apiMocks.createProject).not.toHaveBeenCalled();
+    expect(apiMocks.deleteProject).not.toHaveBeenCalled();
   });
 
   it("shows an actionable empty state and creates a project", async () => {

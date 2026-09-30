@@ -1,12 +1,12 @@
 import { HomeGeneratedMediaGallery } from "@/components/home-generated-media-gallery";
 import {
-  createApiClient,
   getUserFacingErrorMessage
 } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 import type { Asset } from "@/lib/api-types";
 
 export default async function Home() {
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let assets: Asset[] = [];
   let error: string | undefined;
 

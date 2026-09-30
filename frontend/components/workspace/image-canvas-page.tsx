@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 import { apiClient, getUserFacingErrorMessage } from "@/lib/api-client";
 import { getAssetDownloadUrl, getSafePreviewUrl } from "@/lib/asset-display";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 import type {
   Asset,
   Brief,
@@ -214,6 +215,7 @@ export function ImageCanvasPage({
   initialLayout: CanvasLayout;
   initialProject: Project;
 }) {
+  const canWrite = useCanWrite();
   const router = useRouter();
   const [project, setProject] = useState<Project>(initialProject);
   const assetsById = useMemo(
@@ -223,7 +225,11 @@ export function ImageCanvasPage({
   const referenceInputRef = useRef<HTMLInputElement>(null);
 
   const initialNodes = useMemo(
-    () => buildInitialNodes(initialLayout, project),
+    () =>
+      buildInitialNodes(initialLayout, project).map((node) => ({
+        ...node,
+        data: { ...node.data, disabled: !canWrite }
+      })),
     // Snapshot from the server payload; recomputed intentionally only once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
@@ -334,7 +340,7 @@ export function ImageCanvasPage({
     : "请输入图片提示词后生成。";
 
   const persistLayout = useCallback(async () => {
-    if (!dirtyRef.current || conflictRef.current) return;
+    if (!canWrite || !dirtyRef.current || conflictRef.current) return;
     const payloadNodes = serializeNodes(nodesRef.current);
     try {
       const saved = await apiClient.saveCanvasLayout(project.id, {
@@ -351,9 +357,10 @@ export function ImageCanvasPage({
       }
       setFeedback(getUserFacingErrorMessage(error));
     }
-  }, [project.id]);
+  }, [canWrite, project.id]);
 
   const scheduleSave = useCallback(() => {
+    if (!canWrite) return;
     dirtyRef.current = true;
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
@@ -362,7 +369,7 @@ export function ImageCanvasPage({
       saveTimerRef.current = null;
       void persistLayout();
     }, SAVE_DEBOUNCE_MS);
-  }, [persistLayout]);
+  }, [canWrite, persistLayout]);
 
   useEffect(() => {
     let didCommitMigration = false;
@@ -421,6 +428,10 @@ export function ImageCanvasPage({
 
   const onNodesChange = useCallback(
     (changes: NodeChange<CanvasFlowNode>[]) => {
+      if (!canWrite) {
+        onNodesChangeBase(changes.filter((change) => change.type === "select"));
+        return;
+      }
       const normalizedChanges = changes.map((change) => {
         if (change.type !== "dimensions" || !change.dimensions) return change;
         const node = nodesRef.current.find((item) => item.id === change.id);
@@ -448,12 +459,13 @@ export function ImageCanvasPage({
       );
       if (structural) scheduleSave();
     },
-    [onNodesChangeBase, scheduleSave]
+    [canWrite, onNodesChangeBase, scheduleSave]
   );
 
   const onNodeDragStop = useCallback<OnNodeDrag<CanvasFlowNode>>(() => {
+    if (!canWrite) return;
     scheduleSave();
-  }, [scheduleSave]);
+  }, [canWrite, scheduleSave]);
 
   const refreshProject = useCallback(async () => {
     const next = await apiClient.getProject(project.id, { cache: "no-store" });
@@ -534,6 +546,7 @@ export function ImageCanvasPage({
 
   const addReferenceNode = useCallback(
     (asset: Asset) => {
+      if (!canWrite) return;
       const nodeId = `reference-${asset.id}`;
       // Whether this asset already has a node decides if we should measure and
       // resize; existence dedup itself stays authoritative inside setNodes.
@@ -613,11 +626,12 @@ export function ImageCanvasPage({
       };
       image.src = previewUrl;
     },
-    [scheduleSave, setNodes]
+    [canWrite, scheduleSave, setNodes]
   );
 
   const handleRemoveReferenceBbox = useCallback(
     (assetId: string) => {
+      if (!canWrite) return;
       const node = nodesRef.current.find(
         (item) =>
           item.type === "reference" &&
@@ -627,11 +641,16 @@ export function ImageCanvasPage({
       updateNodeData(setNodes, node.id, { bbox: null });
       scheduleSave();
     },
-    [scheduleSave, setNodes]
+    [canWrite, scheduleSave, setNodes]
   );
 
   async function handleReferenceFiles(files: File[]) {
-    if (files.length === 0 || isUploadingReference || isSubmitting) return;
+    if (
+      !canWrite ||
+      files.length === 0 ||
+      isUploadingReference ||
+      isSubmitting
+    ) return;
     setIsUploadingReference(true);
     setFeedback(null);
     try {
@@ -667,7 +686,7 @@ export function ImageCanvasPage({
   }
 
   async function handleGenerate() {
-    if (isSubmitting || !prompt.trim()) return;
+    if (!canWrite || isSubmitting || !prompt.trim()) return;
     setIsSubmitting(true);
     setFeedback(null);
     try {
@@ -743,6 +762,7 @@ export function ImageCanvasPage({
         return asset ? getAssetDownloadUrl(asset) : null;
       },
       onOutputImageLoad: (nodeId, naturalWidth, naturalHeight) => {
+        if (!canWrite) return;
         if (naturalWidth <= 0 || naturalHeight <= 0) return;
         const node = nodesRef.current.find((item) => item.id === nodeId);
         if (!node || node.type !== "output") return;
@@ -779,6 +799,7 @@ export function ImageCanvasPage({
           router.push(`/projects/${project.id}/canvas/layers/${existing.id}`);
           return;
         }
+        if (!canWrite) return;
         setDecomposeContext({ asset, nodeId });
       },
       onOutputPreview: (nodeId) => {
@@ -791,6 +812,7 @@ export function ImageCanvasPage({
         if (asset) setPreviewAsset(asset);
       },
       onOutputSetAsReference: (nodeId) => {
+        if (!canWrite) return;
         const node = nodesRef.current.find((item) => item.id === nodeId);
         const assetId =
           node && node.type === "output"
@@ -800,10 +822,12 @@ export function ImageCanvasPage({
         if (asset) void handleSetOutputAsReference(asset);
       },
       onReferenceBboxChange: (nodeId, bbox) => {
+        if (!canWrite) return;
         updateNodeData(setNodes, nodeId, { bbox });
         scheduleSave();
       },
       onReferenceImageLoad: (nodeId, naturalWidth, naturalHeight) => {
+        if (!canWrite) return;
         if (naturalWidth <= 0 || naturalHeight <= 0) return;
         const imageAspectRatio = naturalWidth / naturalHeight;
         if (!Number.isFinite(imageAspectRatio) || imageAspectRatio <= 0) return;
@@ -850,14 +874,16 @@ export function ImageCanvasPage({
         const asset = assetId ? assetsById.get(assetId) : undefined;
         if (asset) setPreviewAsset(asset);
       },
-      onRequestRemoveReference: (nodeId) => setRemoveNodeId(nodeId)
+      onRequestRemoveReference: (nodeId) => {
+        if (canWrite) setRemoveNodeId(nodeId);
+      }
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [assetsById, layerSets, project.id, router, scheduleSave, setNodes]
+    [assetsById, canWrite, layerSets, project.id, router, scheduleSave, setNodes]
   );
 
   async function handleSetOutputAsReference(asset: Asset) {
-    if (isUploadingReference) return;
+    if (!canWrite || isUploadingReference) return;
     setFeedback(null);
     try {
       const nextProject = await apiClient.setImageProjectReferenceSelection(
@@ -879,7 +905,7 @@ export function ImageCanvasPage({
   }
 
   async function handleAddFromLibrary(asset: Asset) {
-    if (isUploadingReference || isSubmitting) return;
+    if (!canWrite || isUploadingReference || isSubmitting) return;
     setIsLibraryOpen(false);
     setFeedback(null);
     try {
@@ -903,7 +929,7 @@ export function ImageCanvasPage({
 
   async function confirmRemoveReference() {
     const nodeId = removeNodeId;
-    if (!nodeId) return;
+    if (!canWrite || !nodeId) return;
     const node = nodesRef.current.find((item) => item.id === nodeId);
     const assetId =
       node && node.type === "reference"
@@ -936,7 +962,7 @@ export function ImageCanvasPage({
     bbox: Parameters<typeof apiClient.decomposeImageLayers>[1]["bbox"];
     prompt: string | null;
   }) {
-    if (!decomposeContext || layerBusyNodeId) return;
+    if (!canWrite || !decomposeContext || layerBusyNodeId) return;
     const { asset, nodeId } = decomposeContext;
     setFeedback(null);
     setLayerBusyNodeId(nodeId);
@@ -1001,7 +1027,7 @@ export function ImageCanvasPage({
           {feedback}
         </p>
       ) : null}
-      <input
+      {canWrite ? <input
         accept="image/png,image/jpeg,image/webp"
         aria-label="上传参考图"
         className="sr-only"
@@ -1013,9 +1039,9 @@ export function ImageCanvasPage({
         }}
         ref={referenceInputRef}
         type="file"
-      />
+      /> : null}
       <div className="absolute left-4 top-4 z-20 flex items-center gap-2">
-        <Button
+        {canWrite ? <Button
           disabled={isUploadingReference || isSubmitting}
           onClick={() => referenceInputRef.current?.click()}
           size="sm"
@@ -1024,8 +1050,8 @@ export function ImageCanvasPage({
         >
           <Upload className="h-4 w-4" />
           添加参考图
-        </Button>
-        <Button
+        </Button> : null}
+        {canWrite ? <Button
           disabled={isUploadingReference || isSubmitting}
           onClick={() => setIsLibraryOpen(true)}
           size="sm"
@@ -1034,7 +1060,7 @@ export function ImageCanvasPage({
         >
           <Library className="h-4 w-4" />
           从资产库添加
-        </Button>
+        </Button> : null}
         <Button
           aria-label="关闭"
           onClick={() => router.back()}
@@ -1051,6 +1077,11 @@ export function ImageCanvasPage({
           nodes={nodes}
           onNodeDragStop={onNodeDragStop}
           onNodesChange={onNodesChange}
+          reactFlowProps={{
+            deleteKeyCode: canWrite ? ["Backspace", "Delete"] : null,
+            nodesConnectable: canWrite,
+            nodesDraggable: canWrite
+          }}
         >
           {isEmpty ? (
             <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
@@ -1062,7 +1093,7 @@ export function ImageCanvasPage({
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   添加参考图节点，或直接在右侧填写提示词生成第一张图片。
                 </p>
-                <Button
+                {canWrite ? <Button
                   className="mt-4"
                   disabled={isUploadingReference || isSubmitting}
                   onClick={() => referenceInputRef.current?.click()}
@@ -1071,8 +1102,8 @@ export function ImageCanvasPage({
                 >
                   <Upload className="h-4 w-4" />
                   添加参考图
-                </Button>
-                <Button
+                </Button> : null}
+                {canWrite ? <Button
                   className="mt-2"
                   disabled={isUploadingReference || isSubmitting}
                   onClick={() => setIsLibraryOpen(true)}
@@ -1082,14 +1113,14 @@ export function ImageCanvasPage({
                 >
                   <Library className="h-4 w-4" />
                   从资产库添加
-                </Button>
+                </Button> : null}
               </div>
             </div>
           ) : null}
           <CanvasDock
             aspectRatio={aspectRatio}
             bboxOrder={bboxOrder}
-            disabled={false}
+            disabled={!canWrite}
             feedback={feedback}
             format={format}
             isSubmitting={isSubmitting}

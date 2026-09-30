@@ -59,6 +59,7 @@ import {
   scaleFromResize
 } from "@/lib/layer-editor-geometry";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 interface Draft {
   layers: AigcLayer[];
@@ -134,6 +135,7 @@ function AigcLayerEditorContent({
   runId: string;
   returnToPipeline: () => void;
 }) {
+  const canWrite = useCanWrite();
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
@@ -214,6 +216,7 @@ function AigcLayerEditorContent({
   }, [dirty]);
 
   function commit(next: Draft) {
+    if (!canWrite) return;
     setHistory((current) =>
       draftSignature(current.present) === draftSignature(next)
         ? current
@@ -232,6 +235,7 @@ function AigcLayerEditorContent({
     changes: Partial<Pick<AigcLayer, "scale" | "visible" | "x" | "y">>,
     record = true
   ) {
+    if (!canWrite) return;
     const update = (current: History) => ({
       ...current,
       present: {
@@ -273,6 +277,7 @@ function AigcLayerEditorContent({
   }
 
   function undo() {
+    if (!canWrite) return;
     setHistory((current) => {
       const previous = current.past.at(-1);
       if (!previous) return current;
@@ -286,6 +291,7 @@ function AigcLayerEditorContent({
   }
 
   function redo() {
+    if (!canWrite) return;
     setHistory((current) => {
       const next = current.future[0];
       if (!next) return current;
@@ -299,7 +305,7 @@ function AigcLayerEditorContent({
   }
 
   async function save() {
-    if (!dirty || isSaving) return;
+    if (!canWrite || !dirty || isSaving) return;
     const config: LayerCanvasConfig = {
       selected_layer_id: selected?.id ?? null,
       source_layer_set: layerSetSummary(layerSet),
@@ -364,7 +370,7 @@ function AigcLayerEditorContent({
             {pipeline.name} · {layerSet.canvas_width} × {layerSet.canvas_height} · Pipeline Revision {pipeline.revision}
           </p>
         </div>
-        <Button
+        {canWrite ? <Button
           className="flex-1 border-[#343a43] bg-[#1d2127] text-zinc-200 hover:border-[#46505c] hover:bg-[#252a31] hover:text-white sm:flex-none"
           disabled={isSaving}
           onClick={requestReturn}
@@ -372,8 +378,8 @@ function AigcLayerEditorContent({
           variant="outline"
         >
           放弃修改
-        </Button>
-        <Button
+        </Button> : null}
+        {canWrite ? <Button
           className="flex-1 sm:flex-none"
           disabled={!dirty || isSaving}
           onClick={save}
@@ -385,7 +391,7 @@ function AigcLayerEditorContent({
             <Save className="h-4 w-4" />
           )}
           保存到节点
-        </Button>
+        </Button> : null}
       </header>
 
       <div
@@ -410,18 +416,18 @@ function AigcLayerEditorContent({
           />
           <ToolButton icon={Scan} label="适应画布" onClick={() => setZoom(1)} />
           <div className="mx-1 h-7 w-px shrink-0 bg-border lg:my-1 lg:h-px lg:w-7" />
-          <ToolButton
+          {canWrite ? <ToolButton
             disabled={history.past.length === 0}
             icon={Undo2}
             label="撤销"
             onClick={undo}
-          />
-          <ToolButton
+          /> : null}
+          {canWrite ? <ToolButton
             disabled={history.future.length === 0}
             icon={Redo2}
             label="重做"
             onClick={redo}
-          />
+          /> : null}
         </aside>
 
         <section
@@ -469,6 +475,7 @@ function AigcLayerEditorContent({
                     data-testid={`aigc-canvas-layer-${layer.id}`}
                     key={layer.id}
                     onPointerDown={(event) => {
+                      if (!canWrite) return;
                       dragRef.current = {
                         clientX: event.clientX,
                         clientY: event.clientY,
@@ -528,7 +535,7 @@ function AigcLayerEditorContent({
                         src={url}
                       />
                     ) : null}
-                    {selected?.id === layer.id ? (
+                    {canWrite && selected?.id === layer.id ? (
                       <span
                         aria-label={`等比缩放图层 ${layer.name}`}
                         aria-valuemax={MAX_LAYER_SCALE}
@@ -616,6 +623,7 @@ function AigcLayerEditorContent({
                     isTop={layer.z_index === draft.layers.length}
                     key={layer.id}
                     layer={layer}
+                    readOnly={!canWrite}
                     onDelete={() => {
                       const remaining = draft.layers
                         .filter((candidate) => candidate.id !== layer.id)
@@ -659,12 +667,12 @@ function AigcLayerEditorContent({
               </div>
             </div>
           </div>
-          <TransformControls
+          {canWrite ? <TransformControls
             layer={selected}
             onChange={(changes) =>
               selected && updateLayer(selected.id, changes)
             }
-          />
+          /> : null}
           <div className="border-t border-[#2a3038] bg-[#171a1f] p-3">
             {failedAssetIds.length > 0 ? (
               <p className="mb-2 text-xs font-semibold leading-5 text-destructive" role="alert">
@@ -699,6 +707,7 @@ function LayerRow({
   onMove,
   onSelect,
   onVisibility,
+  readOnly,
   selected
 }: {
   assetUrl: string | null;
@@ -709,6 +718,7 @@ function LayerRow({
   onMove: (direction: "down" | "up") => void;
   onSelect: () => void;
   onVisibility: () => void;
+  readOnly: boolean;
   selected: boolean;
 }) {
   return (
@@ -739,7 +749,7 @@ function LayerRow({
           </span>
         </span>
       </button>
-      <div className="grid shrink-0 grid-cols-2 gap-0.5">
+      {readOnly ? null : <div className="grid shrink-0 grid-cols-2 gap-0.5">
         <ToolButton
           icon={layer.visible ? Eye : EyeOff}
           label={`${layer.visible ? "隐藏" : "显示"}图层 ${layer.name}`}
@@ -750,7 +760,7 @@ function LayerRow({
         <ToolButton disabled={isTop} icon={ArrowUp} label={`上移图层 ${layer.name}`} onClick={() => onMove("up")} small />
         <ToolButton disabled={isBottom} icon={ArrowDown} label={`下移图层 ${layer.name}`} onClick={() => onMove("down")} small />
         <ToolButton icon={Trash2} label={`删除图层 ${layer.name}`} onClick={onDelete} small />
-      </div>
+      </div>}
     </div>
   );
 }

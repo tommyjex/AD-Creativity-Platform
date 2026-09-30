@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import { Menu, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { AccountMenu } from "@/components/layout/account-menu";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -34,6 +35,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="min-h-[100dvh] overflow-hidden bg-[#0b0d10] text-[#f2f4f7]"
         data-testid="app-shell"
       >
+        <AccountMenu mode="immersive" />
         <div data-testid="app-shell-content">{children}</div>
       </div>
     );
@@ -98,6 +100,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
+          <AccountMenu />
+
           <button
             aria-controls="mobile-navigation-menu"
             aria-expanded={isMobileNavOpen}
@@ -144,6 +148,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Link>
               );
             })}
+            <AccountMenu
+              mode="mobile"
+              onNavigate={() => setMobileNavPathname(null)}
+            />
           </nav>
         ) : null}
       </header>

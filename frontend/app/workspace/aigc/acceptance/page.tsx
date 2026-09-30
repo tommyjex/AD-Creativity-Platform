@@ -5,10 +5,11 @@ import { AigcVideoFaceBlurAcceptance } from "@/components/workspace/aigc/aigc-vi
 import { AigcVideoFullscreenAcceptance } from "@/components/workspace/aigc/aigc-video-fullscreen-acceptance";
 import { AigcVideoEnhancementAcceptance } from "@/components/workspace/aigc/aigc-video-enhancement-acceptance";
 import { AigcVideoPlayer } from "@/components/workspace/aigc/aigc-video-player";
-import { createApiClient, getUserFacingErrorMessage } from "@/lib/api-client";
+import { getUserFacingErrorMessage } from "@/lib/api-client";
 import { getAigcVideoDownload } from "@/lib/aigc/download";
 import type { AigcResultAsset } from "@/lib/aigc/types";
 import { getSafeAssetContentUrl } from "@/lib/asset-display";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 
 const MOCK_VIDEO_ASSET: AigcResultAsset = {
   asset_id: "acceptance-video",
@@ -60,7 +61,7 @@ export default async function AigcAcceptancePage({
     );
   }
 
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let pipeline;
   let loadError: unknown;
   try {

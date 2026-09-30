@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { ImageCanvasPage } from "@/components/workspace/image-canvas-page";
 import {
-  createApiClient,
   getUserFacingErrorMessage,
   isApiError
 } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 import type { CanvasLayout, Project } from "@/lib/api-types";
 
 interface ProjectCanvasPageProps {
@@ -17,7 +17,7 @@ export default async function ProjectCanvasPage({
   params
 }: ProjectCanvasPageProps) {
   const { projectId } = await params;
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let project: Project | undefined;
   let loadError: unknown;
 

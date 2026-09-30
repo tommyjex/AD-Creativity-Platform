@@ -12,6 +12,7 @@ import {
 } from "@/lib/api-client";
 import type { BriefCreate, ProjectCreate } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 const platformOptions = [
   { label: "抖音 / 短视频强转化", value: "douyin" },
@@ -37,6 +38,7 @@ const selectClassName =
   "flex h-10 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-all focus-visible:border-primary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function BriefForm() {
+  const canWrite = useCanWrite();
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,7 +46,7 @@ export function BriefForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isSubmitting) {
+    if (!canWrite || isSubmitting) {
       return;
     }
 
@@ -91,6 +93,14 @@ export function BriefForm() {
       setErrorMessage(formatSubmitError(error));
       setIsSubmitting(false);
     }
+  }
+
+  if (!canWrite) {
+    return (
+      <p className="rounded-2xl border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
+        当前账号为只读模式，可查看项目与资产，但不能新建项目。
+      </p>
+    );
   }
 
   return (

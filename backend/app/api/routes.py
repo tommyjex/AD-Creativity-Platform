@@ -28,6 +28,7 @@ from backend.app.api.dependencies import (
     get_repository,
     get_video_normalizer_service,
     get_workflow_service,
+    require_business_access,
 )
 from backend.app.repositories import (
     AssetReferenceConflictError,
@@ -114,6 +115,7 @@ from backend.app.schemas import (
     USER_DEFINED_ASSET_NAME_SCHEME,
     validate_visible_selling_copy,
 )
+from backend.app.schemas.auth import UserRole
 from backend.app.services.aigc_asset_naming import (
     AIGC_ASSET_NAME_SCHEME,
     AIGC_GENERATED_ASSET_NAME_SCHEME,
@@ -122,6 +124,7 @@ from backend.app.services.aigc_asset_naming import (
     build_aigc_download_filename,
 )
 from backend.app.services.assets import AssetStorageService, StoredAssetInput
+from backend.app.services.auth import SessionPrincipal
 from backend.app.services.background import BackgroundTaskRunner
 from backend.app.services.composer import (
     CompositionSource,
@@ -165,7 +168,7 @@ from backend.app.video_prompt import (
     validate_merged_prompt_timeline,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_business_access)])
 logger = logging.getLogger(__name__)
 
 IMAGE_BRIEF_CONTENT_FIELDS = {
@@ -1389,6 +1392,7 @@ def delete_tool_task(
 @router.get("/tools/tasks/{task_id}", response_model=ToolTask, tags=["tools"])
 async def get_tool_task(
     task_id: str,
+    principal: SessionPrincipal = Depends(require_business_access),
     repository: Repository = Depends(get_repository),
     asset_storage: AssetStorageService = Depends(get_asset_storage_service),
     face_blur_client_factory: Callable[[], FaceBlurVideoClient] = Depends(
@@ -1398,7 +1402,8 @@ async def get_tool_task(
     try:
         task = repository.get_tool_task(task_id)
         if (
-            task.type == ToolTaskType.FACE_BLUR_VIDEO
+            principal.user.role != UserRole.VIEWER
+            and task.type == ToolTaskType.FACE_BLUR_VIDEO
             and task.status in {Status.QUEUED, Status.RUNNING}
         ):
             return await _refresh_face_blur_tool_task(

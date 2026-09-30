@@ -15,6 +15,11 @@ const apiMocks = vi.hoisted(() => ({
   submitFaceBlurVideo: vi.fn(),
   uploadToolAsset: vi.fn()
 }));
+const permissionMocks = vi.hoisted(() => ({ canWrite: true }));
+
+vi.mock("@/lib/auth/auth-provider", () => ({
+  useCanWrite: () => permissionMocks.canWrite
+}));
 
 vi.mock("@/lib/api-client", () => ({
   apiClient: apiMocks,
@@ -223,6 +228,7 @@ function chooseDialogAsset(dialog: HTMLElement, name: string) {
 
 describe("ToolsWorkspace", () => {
   beforeEach(() => {
+    permissionMocks.canWrite = true;
     Object.values(apiMocks).forEach((mock) => mock.mockReset());
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
@@ -232,6 +238,36 @@ describe("ToolsWorkspace", () => {
       configurable: true,
       value: vi.fn()
     });
+  });
+
+  it("keeps viewer task history visible without upload, generation, retry, or delete controls", () => {
+    permissionMocks.canWrite = false;
+    render(
+      <ToolsWorkspace
+        initialAssets={[videoAsset]}
+        initialTasks={[failedTask, succeededVideoGenerationTask]}
+      />
+    );
+
+    expect(screen.getByText(failedTask.id)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始人物打码" })).toBeNull();
+    expect(screen.queryByLabelText("上传输入视频")).toBeNull();
+    expect(screen.queryByRole("button", { name: "重试任务" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("tab", { name: "全模态参考生视频" })
+    );
+    expect(
+      screen.getByRole("button", {
+        name: `展开生成任务 ${succeededVideoGenerationTask.id}`
+      })
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", {
+        name: `删除生成任务 ${succeededVideoGenerationTask.id}`
+      })
+    ).toBeNull();
+    expect(apiMocks.submitFaceBlurVideo).not.toHaveBeenCalled();
+    expect(apiMocks.retryToolTask).not.toHaveBeenCalled();
   });
 
   afterEach(() => {

@@ -58,6 +58,7 @@ import { getViewportBoundPreviewStyle } from "@/lib/media-layout";
 import { formatDate, statusVariant } from "@/lib/project-display";
 import type { TextGenerationController } from "@/lib/use-text-generation-stream";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 export type DetailTab =
   | "brief"
@@ -97,6 +98,7 @@ interface ProjectDetailTabsProps {
   onActiveTabChange: (tab: DetailTab) => void;
   onProjectUpdated: (project: Project) => void;
   project: Project;
+  readOnly?: boolean;
   textGeneration: TextGenerationController;
 }
 
@@ -460,6 +462,7 @@ function StoryboardShotList({
   project: Project;
   shots: StoryboardShot[];
 }) {
+  const canWrite = useCanWrite();
   const [deletingShotId, setDeletingShotId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     message: string;
@@ -467,7 +470,7 @@ function StoryboardShotList({
   } | null>(null);
 
   async function handleDeleteShot(shot: StoryboardShot) {
-    if (deletingShotId !== null) {
+    if (!canWrite || deletingShotId !== null) {
       return;
     }
     setDeletingShotId(shot.id);
@@ -544,7 +547,7 @@ function StoryboardShotList({
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary">{shot.duration_seconds} 秒</Badge>
                 <Badge variant={statusVariant(shot.status)}>{shot.status}</Badge>
-                <Button
+                {canWrite ? <Button
                   disabled={deletingShotId !== null}
                   onClick={() => handleDeleteShot(shot)}
                   size="sm"
@@ -560,7 +563,7 @@ function StoryboardShotList({
                     <Trash2 aria-hidden="true" className="h-4 w-4" />
                   )}
                   删除镜头
-                </Button>
+                </Button> : null}
               </div>
             </div>
 
@@ -653,6 +656,7 @@ function EditableTextArtifactPanel({
   titleFallback: string;
   triggerLabel: string;
 }) {
+  const canWrite = useCanWrite();
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState(artifact.content);
   const [feedback, setFeedback] = useState<{
@@ -667,7 +671,7 @@ function EditableTextArtifactPanel({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isSaving) {
+    if (!canWrite || isSaving) {
       return;
     }
 
@@ -709,7 +713,7 @@ function EditableTextArtifactPanel({
   }
 
   async function handleRegenerate() {
-    if (pendingAction !== null || isSaving) {
+    if (!canWrite || pendingAction !== null || isSaving) {
       return;
     }
     setPendingAction("generate");
@@ -727,7 +731,7 @@ function EditableTextArtifactPanel({
   }
 
   async function handleDelete() {
-    if (pendingAction !== null || isSaving) {
+    if (!canWrite || pendingAction !== null || isSaving) {
       return;
     }
     setPendingAction("delete");
@@ -767,7 +771,7 @@ function EditableTextArtifactPanel({
           >
             {formatDate(artifact.updated_at)}
           </time>
-          {!isEditing ? (
+          {canWrite && !isEditing ? (
             <>
               <Button
                 onClick={() => {
@@ -888,6 +892,7 @@ function CharacterPanel({
   onProjectUpdated: (project: Project) => void;
   project: Project;
 }) {
+  const canWrite = useCanWrite();
   const [failedImageAssetIds, setFailedImageAssetIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -919,7 +924,7 @@ function CharacterPanel({
   );
 
   async function handleSkipCharacters() {
-    if (pendingCharacterAction !== null) {
+    if (!canWrite || pendingCharacterAction !== null) {
       return;
     }
     setPendingCharacterAction("skip");
@@ -942,7 +947,7 @@ function CharacterPanel({
   }
 
   function beginEdit(card: CharacterCard, field: "description" | "name") {
-    if (savingCardId !== null) {
+    if (!canWrite || savingCardId !== null) {
       return;
     }
     setEditingField({ cardId: card.id, field });
@@ -956,7 +961,7 @@ function CharacterPanel({
   }
 
   async function saveCardField(card: CharacterCard) {
-    if (!editingField || savingCardId !== null) {
+    if (!canWrite || !editingField || savingCardId !== null) {
       return;
     }
 
@@ -1001,6 +1006,7 @@ function CharacterPanel({
 
   async function handleGenerateImage(card: CharacterCard) {
     if (
+      !canWrite ||
       generatingCardIds.has(card.id) ||
       deletingCardId === card.id ||
       savingCardId === card.id
@@ -1036,6 +1042,7 @@ function CharacterPanel({
 
   async function handleDeleteCharacter(card: CharacterCard) {
     if (
+      !canWrite ||
       pendingCharacterAction !== null ||
       deletingCardId !== null ||
       generatingCardIds.has(card.id)
@@ -1069,7 +1076,7 @@ function CharacterPanel({
               project={project}
               stage="character"
             />
-            <Button
+            {canWrite ? <Button
               disabled={pendingCharacterAction !== null}
               onClick={handleSkipCharacters}
               type="button"
@@ -1084,7 +1091,7 @@ function CharacterPanel({
                 <SkipForward aria-hidden="true" className="h-4 w-4" />
               )}
               无角色需求，跳过
-            </Button>
+            </Button> : null}
           </div>
         }
         description={
@@ -1198,7 +1205,7 @@ function CharacterPanel({
                     )}
                   </div>
                   <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                    <Button
+                    {canWrite ? <Button
                       disabled={isGenerating || isDeleting || isSaving}
                       onClick={() => void handleGenerateImage(card)}
                       size="sm"
@@ -1214,8 +1221,8 @@ function CharacterPanel({
                         <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
                       )}
                       {hasImage ? "重新生成" : "形象生成"}
-                    </Button>
-                    <Button
+                    </Button> : null}
+                    {canWrite ? <Button
                       disabled={isGenerating || isDeleting || isSaving}
                       onClick={() => void handleDeleteCharacter(card)}
                       size="sm"
@@ -1231,7 +1238,7 @@ function CharacterPanel({
                         <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
                       )}
                       删除
-                    </Button>
+                    </Button> : null}
                   </div>
                 </div>
 
@@ -1256,7 +1263,7 @@ function CharacterPanel({
                       >
                         {card.description}
                       </p>
-                      <Button
+                      {canWrite ? <Button
                         size="icon"
                         variant="ghost"
                         className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
@@ -1267,7 +1274,7 @@ function CharacterPanel({
                         type="button"
                       >
                         <PencilLine className="h-3 w-3" />
-                      </Button>
+                      </Button> : null}
                     </div>
                   )}
                 </div>
@@ -1389,6 +1396,7 @@ function ComposePanel({
   onProjectUpdated: (project: Project) => void;
   project: Project;
 }) {
+  const canWrite = useCanWrite();
   const [pendingDelete, setPendingDelete] = useState(false);
   const [feedback, setFeedback] = useState<{
     message: string;
@@ -1403,7 +1411,7 @@ function ComposePanel({
   );
 
   async function handleDelete() {
-    if (!finalVideo || pendingDelete) {
+    if (!canWrite || !finalVideo || pendingDelete) {
       return;
     }
     setPendingDelete(true);
@@ -1459,7 +1467,7 @@ function ComposePanel({
             stage="compose"
             variant="outline"
           />
-          <Button
+          {canWrite ? <Button
             disabled={pendingDelete}
             onClick={handleDelete}
             type="button"
@@ -1471,7 +1479,7 @@ function ComposePanel({
               <Trash2 aria-hidden="true" className="h-4 w-4" />
             )}
             删除成片
-          </Button>
+          </Button> : null}
         </div>
       </div>
 
@@ -1537,6 +1545,7 @@ function StageGenerateButton({
   stage: Exclude<Stage, "brief">;
   variant?: "default" | "outline";
 }) {
+  const canWrite = useCanWrite();
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeTask, setActiveTask] = useState<GenerationTask | null>(null);
   const [feedback, setFeedback] = useState<{
@@ -1606,7 +1615,7 @@ function StageGenerateButton({
   }, [activeTask, onProjectUpdated, project.id]);
 
   async function handleGenerate() {
-    if (isGenerating) {
+    if (!canWrite || isGenerating) {
       return;
     }
     setIsGenerating(true);
@@ -1642,6 +1651,10 @@ function StageGenerateButton({
       });
       setIsGenerating(false);
     }
+  }
+
+  if (!canWrite) {
+    return null;
   }
 
   return (

@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from functools import lru_cache
-import json
 import logging
 from typing import Iterable, Literal, Optional, Sequence
-import urllib.request
 
 from pydantic import Field, ValidationError
 
@@ -85,7 +82,6 @@ from .modelark import (
     allowed_aigc_prompt_generation_types,
 )
 from .prompt_optimization import (
-    extract_protected_literals,
     render_seedream_prompt_with_warnings,
     validate_prompt_optimization_result,
 )
@@ -986,33 +982,6 @@ class ModelArkGenerationService:
                 response = AigcPromptOptimizeResponse.model_validate(
                     result.model_dump(mode="json")
                 )
-            # #region debug-point D:prompt-optimization-service-validation
-            try:
-                await asyncio.to_thread(
-                    urllib.request.urlopen,
-                    urllib.request.Request(
-                        "http://127.0.0.1:7777/event",
-                        data=json.dumps(
-                            {
-                                "sessionId": "llm-prompt-parse",
-                                "runId": "post-fix",
-                                "hypothesisId": "D",
-                                "location": "generation.py:978",
-                                "msg": "[DEBUG] service response before validation",
-                                "data": {
-                                    "response_text_length": len(response.optimized_text),
-                                    "response_type": type(result).__name__,
-                                    "target_type": request.target_type,
-                                },
-                            }
-                        ).encode(),
-                        headers={"Content-Type": "application/json"},
-                    ),
-                    timeout=1,
-                )
-            except Exception:
-                pass
-            # #endregion
             try:
                 validate_prompt_optimization_result(request, response)
             except ModelArkTextParseError as exc:
@@ -1044,34 +1013,7 @@ class ModelArkGenerationService:
                 },
             )
             return response
-        except (ModelArkProviderError, ModelArkTextParseError) as exc:
-            # #region debug-point D:prompt-optimization-service-error
-            try:
-                await asyncio.to_thread(
-                    urllib.request.urlopen,
-                    urllib.request.Request(
-                        "http://127.0.0.1:7777/event",
-                        data=json.dumps(
-                            {
-                                "sessionId": "llm-prompt-parse",
-                                "runId": "post-fix",
-                                "hypothesisId": "D",
-                                "location": "generation.py:1006",
-                                "msg": "[DEBUG] service validation failed",
-                                "data": {
-                                    "error_type": type(exc).__name__,
-                                    "message": str(exc),
-                                    "target_type": request.target_type,
-                                },
-                            }
-                        ).encode(),
-                        headers={"Content-Type": "application/json"},
-                    ),
-                    timeout=1,
-                )
-            except Exception:
-                pass
-            # #endregion
+        except (ModelArkProviderError, ModelArkTextParseError):
             raise
         except (ValidationError, ValueError) as exc:
             raise ModelArkTextParseError(

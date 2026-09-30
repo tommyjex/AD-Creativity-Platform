@@ -1,12 +1,12 @@
 import { ToolsWorkspace } from "@/components/workspace/tools-workspace";
 import {
-  createApiClient,
   getUserFacingErrorMessage
 } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 import type { Asset, ToolTask } from "@/lib/api-types";
 
 export default async function WorkspaceToolsPage() {
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let initialAssets: Asset[] = [];
   let initialTasks: ToolTask[] = [];
   let initialError: string | undefined;

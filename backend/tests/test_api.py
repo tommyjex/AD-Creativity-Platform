@@ -36,6 +36,8 @@ from backend.app.services.assets import AssetStorageService
 from backend.app.services.composer import VideoCompositionError
 from backend.app.services.workflow import WorkflowService
 
+from backend.tests.auth_helpers import authenticate_test_client
+
 
 def _sse_events(response) -> list[tuple[str, dict[str, object]]]:
     events = []
@@ -723,6 +725,7 @@ def _client_with_generation(
     app.dependency_overrides[get_modelark_generation_service] = lambda: generation_service
 
     with TestClient(app) as test_client:
+        authenticate_test_client(test_client, repository)
         yield test_client
 
     app.dependency_overrides.clear()

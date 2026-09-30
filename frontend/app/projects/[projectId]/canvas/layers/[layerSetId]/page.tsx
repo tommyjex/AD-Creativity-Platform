@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { LayerEditorPage } from "@/components/workspace/layer-editor-page";
 import {
-  createApiClient,
   getUserFacingErrorMessage,
   isApiError
 } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 import type { ImageLayerSetDetail } from "@/lib/api-types";
 
 interface ProjectLayerEditorPageProps {
@@ -18,7 +18,7 @@ export default async function ProjectLayerEditorPage({
   params
 }: ProjectLayerEditorPageProps) {
   const { layerSetId, projectId } = await params;
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let layerSet: ImageLayerSetDetail | undefined;
   let loadError: unknown;
 

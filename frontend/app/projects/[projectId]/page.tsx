@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { ProjectWorkflow } from "@/components/project-workflow";
 import {
-  createApiClient,
   getUserFacingErrorMessage,
   isApiError
 } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 import type { Asset, Project } from "@/lib/api-types";
 
 interface ProjectDetailPageProps {
@@ -17,7 +17,7 @@ export default async function ProjectDetailPage({
   params
 }: ProjectDetailPageProps) {
   const { projectId } = await params;
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let result: [Project, Asset[]] | undefined;
   let loadError: unknown;
 

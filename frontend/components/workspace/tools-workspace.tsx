@@ -26,6 +26,7 @@ import {
   type SetStateAction
 } from "react";
 import { Badge } from "@/components/ui/badge";
+import { ReadOnlyNotice } from "@/components/auth/read-only-notice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -62,6 +63,7 @@ import {
   SEEDANCE_MODELS
 } from "@/lib/seedance";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 const ACTIVE_STATUSES = new Set(["queued", "running"]);
 const VIDEO_GENERATION_TASKS_PER_PAGE = 10;
@@ -100,6 +102,7 @@ export function ToolsWorkspace({
   initialTasks: ToolTask[];
   initialError?: string;
 }) {
+  const canWrite = useCanWrite();
   const [tab, setTab] = useState<ToolTab>("face-blur");
   const [assets, setAssets] = useState(initialAssets);
   const [tasks, setTasks] = useState(initialTasks);
@@ -136,6 +139,7 @@ export function ToolsWorkspace({
           <p className="mt-2 text-sm text-muted-foreground">
             独立处理人物打码与全模态参考生视频，全部素材和结果会归档至工具资产。
           </p>
+          {!canWrite ? <ReadOnlyNotice className="mt-3 max-w-xl" /> : null}
         </div>
         <Button
           className="mt-4 sm:mt-0"
@@ -177,9 +181,9 @@ export function ToolsWorkspace({
 
       <div className="mt-6">
         {tab === "face-blur" ? (
-          <FaceBlurPanel assets={assets} onAssetsChange={setAssets} onFeedback={setFeedback} onTasksChange={setTasks} tasks={tasks} />
+          <FaceBlurPanel assets={assets} canWrite={canWrite} onAssetsChange={setAssets} onFeedback={setFeedback} onTasksChange={setTasks} tasks={tasks} />
         ) : (
-          <VideoGenerationPanel assets={assets} onAssetsChange={setAssets} onFeedback={setFeedback} onTasksChange={setTasks} tasks={tasks} />
+          <VideoGenerationPanel assets={assets} canWrite={canWrite} onAssetsChange={setAssets} onFeedback={setFeedback} onTasksChange={setTasks} tasks={tasks} />
         )}
       </div>
     </section>
@@ -246,7 +250,7 @@ function FaceBlurPanel(props: PanelProps) {
   }
 
   async function submit() {
-    if (!videoAssetId) return;
+    if (!props.canWrite || !videoAssetId) return;
     setIsSubmitting(true);
     try {
       const nextTask = await apiClient.submitFaceBlurVideo({
@@ -266,7 +270,7 @@ function FaceBlurPanel(props: PanelProps) {
 
   return (
     <div className="space-y-5">
-      <Card>
+      {props.canWrite ? <Card>
         <CardHeader>
           <CardTitle>人物打码配置</CardTitle>
           <p className="text-sm text-muted-foreground">仅设置打码方式与强度，检测阈值使用 MediaKit 默认值。</p>
@@ -297,12 +301,13 @@ function FaceBlurPanel(props: PanelProps) {
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </Card> : null}
       <div className="grid gap-5 xl:grid-cols-[minmax(22rem,0.82fr)_minmax(0,1.18fr)]">
         <FaceBlurTaskList
           assets={props.assets}
           onSelectTask={setSelectedTaskId}
           onTasksChange={props.onTasksChange}
+          canWrite={props.canWrite}
           selectedTaskId={selectedTaskId}
           tasks={faceBlurTasks}
         />
@@ -371,7 +376,7 @@ function VideoGenerationPanel(props: PanelProps) {
   useToolTaskPolling(selectedTask, props.onTasksChange, props.onAssetsChange);
 
   async function submit() {
-    if (!prompt.trim() || durationError) return;
+    if (!props.canWrite || !prompt.trim() || durationError) return;
     setIsSubmitting(true);
     try {
       const nextTask = await apiClient.generateToolVideo({
@@ -396,7 +401,7 @@ function VideoGenerationPanel(props: PanelProps) {
   }
 
   async function optimize() {
-    if (!prompt.trim() || isOptimizing || isSubmitting) return;
+    if (!props.canWrite || !prompt.trim() || isOptimizing || isSubmitting) return;
     setIsOptimizing(true);
     try {
       const { optimized_prompt } = await apiClient.optimizeToolVideoPrompt({
@@ -417,7 +422,7 @@ function VideoGenerationPanel(props: PanelProps) {
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
       <div className="space-y-5">
-        <Card>
+        {props.canWrite ? <Card>
           <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
             <div>
               <CardTitle>全模态参考生视频</CardTitle>
@@ -501,7 +506,7 @@ function VideoGenerationPanel(props: PanelProps) {
               <Textarea id="tool-video-prompt" maxLength={12000} onChange={(event) => setPrompt(event.target.value)} placeholder="描述画面主体、动作、镜头语言、节奏和声音氛围。" value={prompt} />
             </div>
           </CardContent>
-        </Card>
+        </Card> : null}
         <VideoGenerationComparison
           outputAsset={outputVideo}
           outputEmptyText={videoGenerationOutputEmptyText(selectedTask)}
@@ -518,6 +523,7 @@ function VideoGenerationPanel(props: PanelProps) {
         page={displayedPage}
         selectedTaskId={selectedTaskId}
         tasks={videoGenerationTasks}
+        canWrite={props.canWrite}
       />
     </div>
   );
@@ -525,6 +531,7 @@ function VideoGenerationPanel(props: PanelProps) {
 
 type PanelProps = {
   assets: Asset[];
+  canWrite: boolean;
   tasks: ToolTask[];
   onAssetsChange: Dispatch<SetStateAction<Asset[]>>;
   onTasksChange: Dispatch<SetStateAction<ToolTask[]>>;
@@ -837,11 +844,12 @@ function TaskEmptyState() {
 
 function FaceBlurTaskList({
   assets,
+  canWrite,
   onSelectTask,
   onTasksChange,
   selectedTaskId,
   tasks
-}: Pick<PanelProps, "assets" | "onTasksChange"> & {
+}: Pick<PanelProps, "assets" | "canWrite" | "onTasksChange"> & {
   onSelectTask: (taskId: string) => void;
   selectedTaskId: string | null;
   tasks: ToolTask[];
@@ -968,7 +976,7 @@ function FaceBlurTaskList({
                           </dd>
                         </div>
                       </dl>
-                      {task.status === "failed" ? (
+                      {canWrite && task.status === "failed" ? (
                         <div className="mt-3 space-y-3">
                           <div className="rounded-lg border border-destructive/20 bg-destructive/[0.06] p-3 text-sm text-destructive">
                             {task.error?.message ?? "任务未完成，请重试。"}
@@ -1000,6 +1008,7 @@ function FaceBlurTaskList({
 }
 
 function VideoGenerationTaskList({
+  canWrite,
   onFeedback,
   onPageChange,
   onPageReset,
@@ -1008,7 +1017,7 @@ function VideoGenerationTaskList({
   page,
   selectedTaskId,
   tasks
-}: Pick<PanelProps, "onFeedback" | "onTasksChange"> & {
+}: Pick<PanelProps, "canWrite" | "onFeedback" | "onTasksChange"> & {
   onPageChange: (page: number) => void;
   onPageReset: () => void;
   onSelectTask: (taskId: string | null) => void;
@@ -1045,7 +1054,7 @@ function VideoGenerationTaskList({
 
   async function confirmDelete() {
     const taskToDelete = pendingDeleteTask;
-    if (!taskToDelete) return;
+    if (!canWrite || !taskToDelete) return;
 
     setIsDeleting(true);
     try {
@@ -1155,7 +1164,7 @@ function VideoGenerationTaskList({
                           )}
                         />
                       </button>
-                      <button
+                      {canWrite ? <button
                         aria-label={`删除生成任务 ${task.id}`}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
                         onClick={() => {
@@ -1166,7 +1175,7 @@ function VideoGenerationTaskList({
                         type="button"
                       >
                         <Trash2 aria-hidden="true" className="h-4 w-4" />
-                      </button>
+                      </button> : null}
                     </div>
                   </div>
                   {expanded ? (
@@ -1204,7 +1213,7 @@ function VideoGenerationTaskList({
                           </dd>
                         </div>
                       </dl>
-                      {task.status === "failed" ? (
+                      {canWrite && task.status === "failed" ? (
                         <div className="mt-3 space-y-3">
                           <div className="rounded-lg border border-destructive/20 bg-destructive/[0.06] p-3 text-sm text-destructive">
                             {task.error?.message ?? "任务未完成，请重试。"}

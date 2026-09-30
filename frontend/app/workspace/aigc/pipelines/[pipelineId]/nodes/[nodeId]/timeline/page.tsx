@@ -1,8 +1,9 @@
 import { AigcTimelineEditorShell } from "@/components/workspace/aigc/aigc-timeline-editor-shell";
 import { AigcTimelineLoadError } from "@/components/workspace/aigc/aigc-timeline-load-error";
 import { AigcMultitrackAcceptance } from "@/components/workspace/aigc/aigc-multitrack-acceptance";
-import { createApiClient, getUserFacingErrorMessage } from "@/lib/api-client";
+import { getUserFacingErrorMessage } from "@/lib/api-client";
 import { loadAigcTimelineEditorData } from "@/lib/aigc/timeline-loader";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 
 const ACCEPTANCE_ID = "acceptance-multitrack";
 
@@ -19,7 +20,7 @@ export default async function AigcTimelineEditorPage({
   ) {
     return <AigcMultitrackAcceptance />;
   }
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let data;
 
   try {

@@ -7,6 +7,7 @@ from typing import Iterable, TypeVar
 from backend.app.aigc_run_scope import aigc_run_conflict_node_ids
 from backend.app.schemas import (
     AIGC_GENERATED_MEDIA_NAMING_MODEL,
+    USER_DEFINED_ASSET_NAME_SCHEME,
     AigcAssetDirection,
     AigcPipeline,
     AigcPipelineAssetReference,
@@ -16,17 +17,17 @@ from backend.app.schemas import (
     AigcPipelineRunMode,
     AigcPipelineRunNode,
     AigcPipelineRunStatus,
-    AigcRunNodeStatus,
     AigcPipelineTaskAssetReference,
     AigcPipelineTaskAttempt,
     AigcPipelineTemplate,
     AigcPipelineTemplateCreate,
     AigcPipelineTemplateUpdate,
     AigcPipelineUpdate,
-    AigcTaskStatus,
+    AigcRunNodeStatus,
     AigcTaskError,
     AigcTaskMetrics,
     AigcTaskResult,
+    AigcTaskStatus,
     AigcWorkerLease,
     Asset,
     AssetCategory,
@@ -41,15 +42,15 @@ from backend.app.schemas import (
     CharacterCardCreate,
     GenerationTask,
     GenerationTaskCreate,
-    ImagePromptVersion,
-    ImagePromptVersionCreate,
+    ImageInputNode,
     ImageLayer,
     ImageLayerCreate,
     ImageLayerSet,
     ImageLayerSetCreate,
     ImageLayerUpdate,
-    ImageInputNode,
     ImageNode,
+    ImagePromptVersion,
+    ImagePromptVersionCreate,
     MultiTrackEditNode,
     MultiTrackSubtitleElement,
     Project,
@@ -66,42 +67,44 @@ from backend.app.schemas import (
     TargetLanguage,
     TextArtifact,
     TextArtifactCreate,
+    ToolAssetRole,
     ToolTask,
     ToolTaskCreate,
     ToolTaskInputAsset,
-    ToolAssetRole,
-    USER_DEFINED_ASSET_NAME_SCHEME,
     VideoInputNode,
     VideoNode,
 )
+from backend.app.schemas.auth import AuthSession, UserRecord, UserRole
+from backend.app.schemas.brief import Brief
+from backend.app.schemas.common import utc_now
+from backend.app.schemas.enums import Stage, ToolTaskType
 from backend.app.services.aigc_asset_naming import (
     aigc_generated_media_name_target_node_ids,
     aigc_generated_output_metadata,
     aigc_node_display_name,
 )
-from backend.app.schemas.brief import Brief
-from backend.app.schemas.common import utc_now
-from backend.app.schemas.enums import Stage, ToolTaskType
 from backend.app.video_prompt import (
     build_merged_shot_video_prompt,
     expand_atomic_shots,
 )
 
-from .base import (
-    ActiveRunConflictError,
-    AigcPipelineThumbnailOutput,
-    AssetReferenceConflictError,
-    NotFoundError,
-    PipelineRunConflictError,
-    RevisionConflictError,
-    multitrack_subtitle_asset_slot,
-)
 from .aigc_json_parser import (
     JsonParserMaterializationError,
     detach_removed_json_parser_edges,
     materialize_json_parser_definition,
 )
-
+from .base import (
+    ActiveRunConflictError,
+    AigcPipelineThumbnailOutput,
+    AssetReferenceConflictError,
+    LastAdminError,
+    NotFoundError,
+    PipelineRunConflictError,
+    RevisionConflictError,
+    SetupCompletedError,
+    UserConflictError,
+    multitrack_subtitle_asset_slot,
+)
 
 ModelT = TypeVar(
     "ModelT",
@@ -125,6 +128,8 @@ ModelT = TypeVar(
     StoryboardShot,
     TextArtifact,
     ToolTask,
+    AuthSession,
+    UserRecord,
 )
 
 ACTIVE_AIGC_RUN_STATUSES = frozenset(
@@ -163,9 +168,7 @@ class InMemoryRepository:
             tuple[str, str, str], AigcPipelineAssetReference
         ] = {}
         self._aigc_runs: dict[str, AigcPipelineRun] = {}
-        self._aigc_run_nodes: dict[
-            tuple[str, str], AigcPipelineRunNode
-        ] = {}
+        self._aigc_run_nodes: dict[tuple[str, str], AigcPipelineRunNode] = {}
         self._aigc_run_idempotency: dict[tuple[str, str], str] = {}
         self._aigc_tasks: dict[str, AigcPipelineTaskAttempt] = {}
         self._aigc_task_idempotency: dict[tuple[str, str, str], str] = {}
@@ -175,6 +178,259 @@ class InMemoryRepository:
             tuple[str, str, str, int], AigcPipelineTaskAssetReference
         ] = {}
         self._aigc_worker_lease: AigcWorkerLease | None = None
+        self._users: dict[str, UserRecord] = {}
+        self._user_ids_by_username: dict[str, str] = {}
+        self._auth_sessions: dict[str, AuthSession] = {}
+        self._auth_session_ids_by_digest: dict[str, str] = {}
+        self._login_failures: dict[tuple[str, str], tuple[datetime, int, datetime]] = {}
+
+    def count_users(self) -> int:
+        with self._lock:
+            return len(self._users)
+
+    def create_initial_admin(
+        self,
+        user: UserRecord,
+        auth_session: AuthSession | None = None,
+    ) -> UserRecord:
+        with self._lock:
+            if self._users:
+                raise SetupCompletedError("system initialization is complete")
+            if user.role != UserRole.ADMIN:
+                raise ValueError("initial user must be an admin")
+            saved = self._create_user(user)
+            if auth_session is not None:
+                self.create_auth_session(auth_session)
+            return saved
+
+    def create_user(self, user: UserRecord) -> UserRecord:
+        with self._lock:
+            return self._create_user(user)
+
+    def _create_user(self, user: UserRecord) -> UserRecord:
+        if user.username in self._user_ids_by_username:
+            raise UserConflictError("username already exists")
+        saved = self._copy(user)
+        self._users[saved.id] = saved
+        self._user_ids_by_username[saved.username] = saved.id
+        return self._copy(saved)
+
+    def get_user(self, user_id: str) -> UserRecord:
+        with self._lock:
+            user = self._users.get(user_id)
+            if user is None:
+                raise NotFoundError(f"user not found: {user_id}")
+            return self._copy(user)
+
+    def get_user_by_username(self, username: str) -> UserRecord | None:
+        with self._lock:
+            user_id = self._user_ids_by_username.get(username)
+            if user_id is None:
+                return None
+            return self._copy(self._users[user_id])
+
+    def list_users(self) -> list[UserRecord]:
+        with self._lock:
+            users = sorted(
+                self._users.values(),
+                key=lambda item: (item.created_at, item.id),
+            )
+            return [self._copy(user) for user in users]
+
+    def update_user_login(
+        self,
+        user_id: str,
+        *,
+        logged_in_at: datetime,
+    ) -> UserRecord:
+        return self._update_user(user_id, last_login_at=logged_in_at)
+
+    def update_user_password(
+        self,
+        user_id: str,
+        *,
+        password_hash: str,
+        must_change_password: bool,
+        updated_at: datetime,
+    ) -> UserRecord:
+        return self._update_user(
+            user_id,
+            password_hash=password_hash,
+            must_change_password=must_change_password,
+            updated_at=updated_at,
+        )
+
+    def update_user_role(
+        self,
+        user_id: str,
+        *,
+        role: UserRole,
+        updated_at: datetime,
+    ) -> UserRecord:
+        with self._lock:
+            current = self._require_user(user_id)
+            if (
+                current.role == UserRole.ADMIN
+                and current.is_enabled
+                and role != UserRole.ADMIN
+                and self._enabled_admin_count() == 1
+            ):
+                raise LastAdminError("at least one enabled admin is required")
+            return self._update_user(user_id, role=role, updated_at=updated_at)
+
+    def update_user_status(
+        self,
+        user_id: str,
+        *,
+        is_enabled: bool,
+        updated_at: datetime,
+    ) -> UserRecord:
+        with self._lock:
+            current = self._require_user(user_id)
+            if (
+                current.role == UserRole.ADMIN
+                and current.is_enabled
+                and not is_enabled
+                and self._enabled_admin_count() == 1
+            ):
+                raise LastAdminError("at least one enabled admin is required")
+            return self._update_user(
+                user_id,
+                is_enabled=is_enabled,
+                updated_at=updated_at,
+            )
+
+    def _update_user(self, user_id: str, **changes: object) -> UserRecord:
+        with self._lock:
+            current = self._require_user(user_id)
+            updated = current.model_copy(update=changes, deep=True)
+            self._users[user_id] = updated
+            return self._copy(updated)
+
+    def _require_user(self, user_id: str) -> UserRecord:
+        user = self._users.get(user_id)
+        if user is None:
+            raise NotFoundError(f"user not found: {user_id}")
+        return user
+
+    def _enabled_admin_count(self) -> int:
+        return sum(
+            user.role == UserRole.ADMIN and user.is_enabled
+            for user in self._users.values()
+        )
+
+    def create_auth_session(self, auth_session: AuthSession) -> AuthSession:
+        with self._lock:
+            if auth_session.token_digest in self._auth_session_ids_by_digest:
+                raise UserConflictError("session token digest already exists")
+            self._require_user(auth_session.user_id)
+            saved = self._copy(auth_session)
+            self._auth_sessions[saved.id] = saved
+            self._auth_session_ids_by_digest[saved.token_digest] = saved.id
+            return self._copy(saved)
+
+    def get_auth_session_by_digest(
+        self,
+        token_digest: str,
+    ) -> AuthSession | None:
+        with self._lock:
+            session_id = self._auth_session_ids_by_digest.get(token_digest)
+            if session_id is None:
+                return None
+            return self._copy(self._auth_sessions[session_id])
+
+    def touch_auth_session(
+        self,
+        session_id: str,
+        *,
+        last_activity_at: datetime,
+        idle_expires_at: datetime,
+    ) -> AuthSession:
+        with self._lock:
+            current = self._auth_sessions.get(session_id)
+            if current is None or current.revoked_at is not None:
+                raise NotFoundError(f"auth session not found: {session_id}")
+            if current.last_activity_at >= last_activity_at:
+                return self._copy(current)
+            updated = current.model_copy(
+                update={
+                    "last_activity_at": last_activity_at,
+                    "idle_expires_at": idle_expires_at,
+                },
+                deep=True,
+            )
+            self._auth_sessions[session_id] = updated
+            return self._copy(updated)
+
+    def revoke_auth_session(
+        self,
+        session_id: str,
+        *,
+        revoked_at: datetime,
+    ) -> None:
+        with self._lock:
+            current = self._auth_sessions.get(session_id)
+            if current is not None and current.revoked_at is None:
+                self._auth_sessions[session_id] = current.model_copy(
+                    update={"revoked_at": revoked_at},
+                    deep=True,
+                )
+
+    def revoke_user_sessions(
+        self,
+        user_id: str,
+        *,
+        revoked_at: datetime,
+        exclude_session_id: str | None = None,
+    ) -> None:
+        with self._lock:
+            for session_id, current in list(self._auth_sessions.items()):
+                if (
+                    current.user_id == user_id
+                    and session_id != exclude_session_id
+                    and current.revoked_at is None
+                ):
+                    self._auth_sessions[session_id] = current.model_copy(
+                        update={"revoked_at": revoked_at},
+                        deep=True,
+                    )
+
+    def get_login_failure_count(
+        self,
+        username: str,
+        source_digest: str,
+        *,
+        window_started_after: datetime,
+    ) -> int:
+        with self._lock:
+            record = self._login_failures.get((username, source_digest))
+            if record is None or record[0] < window_started_after:
+                return 0
+            return record[1]
+
+    def record_login_failure(
+        self,
+        username: str,
+        source_digest: str,
+        *,
+        failed_at: datetime,
+        window_started_after: datetime,
+    ) -> int:
+        with self._lock:
+            key = (username, source_digest)
+            record = self._login_failures.get(key)
+            if record is None or record[0] < window_started_after:
+                count = 1
+                window_started_at = failed_at
+            else:
+                window_started_at, count, _ = record
+                count += 1
+            self._login_failures[key] = (window_started_at, count, failed_at)
+            return count
+
+    def clear_login_failures(self, username: str, source_digest: str) -> None:
+        with self._lock:
+            self._login_failures.pop((username, source_digest), None)
 
     def create_aigc_template(
         self,
@@ -297,9 +553,7 @@ class InMemoryRepository:
             updated = AigcPipeline.model_validate(
                 {
                     **current.model_dump(),
-                    **data.model_dump(
-                        exclude={"expected_revision", "definition"}
-                    ),
+                    **data.model_dump(exclude={"expected_revision", "definition"}),
                     "definition": definition,
                     "revision": current.revision + 1,
                     "updated_at": utc_now(),
@@ -409,7 +663,9 @@ class InMemoryRepository:
             else node
             for node in current.definition.nodes
         ]
-        missing_ids = target_ids.difference(node.id for node in current.definition.nodes)
+        missing_ids = target_ids.difference(
+            node.id for node in current.definition.nodes
+        )
         if missing_ids:
             raise NotFoundError(
                 f"AIGC pipeline nodes not found: {sorted(missing_ids)!r}"
@@ -457,9 +713,7 @@ class InMemoryRepository:
             del self._aigc_pipelines[pipeline_id]
             self._aigc_pipeline_deleted_at.pop(pipeline_id, None)
             for key in [
-                key
-                for key in self._aigc_pipeline_assets
-                if key[0] == pipeline_id
+                key for key in self._aigc_pipeline_assets if key[0] == pipeline_id
             ]:
                 del self._aigc_pipeline_assets[key]
 
@@ -520,9 +774,7 @@ class InMemoryRepository:
                     start_node_id=active_run.start_node_id,
                 )
                 if candidate_scope & active_scope:
-                    raise ActiveRunConflictError(
-                        "AIGC flow already has an active run"
-                    )
+                    raise ActiveRunConflictError("AIGC flow already has an active run")
             run_number = (
                 max(
                     (
@@ -548,9 +800,9 @@ class InMemoryRepository:
             if {node.node_id for node in created_nodes} != snapshot_ids:
                 raise ValueError("AIGC run nodes must match the definition snapshot")
             self._aigc_runs[created.id] = created
-            self._aigc_run_idempotency[
-                (created.pipeline_id, idempotency_key)
-            ] = created.id
+            self._aigc_run_idempotency[(created.pipeline_id, idempotency_key)] = (
+                created.id
+            )
             for node in created_nodes:
                 self._aigc_run_nodes[(created.id, node.node_id)] = node
             self._aigc_pipelines[pipeline.id] = pipeline.model_copy(
@@ -713,14 +965,15 @@ class InMemoryRepository:
                 and item.status in {AigcTaskStatus.QUEUED, AigcTaskStatus.RUNNING}
                 for item in self._aigc_tasks.values()
             ):
-                raise ActiveRunConflictError("AIGC run node already has an active attempt")
+                raise ActiveRunConflictError(
+                    "AIGC run node already has an active attempt"
+                )
             attempt = (
                 max(
                     (
                         item.attempt
                         for item in self._aigc_tasks.values()
-                        if item.run_id == task.run_id
-                        and item.node_id == task.node_id
+                        if item.run_id == task.run_id and item.node_id == task.node_id
                     ),
                     default=0,
                 )
@@ -734,7 +987,10 @@ class InMemoryRepository:
             )
             if created.task_id in self._aigc_tasks:
                 raise ValueError(f"AIGC task already exists: {created.task_id}")
-            if retry_of_task_id is not None and retry_of_task_id not in self._aigc_tasks:
+            if (
+                retry_of_task_id is not None
+                and retry_of_task_id not in self._aigc_tasks
+            ):
                 raise NotFoundError(f"AIGC retry task not found: {retry_of_task_id}")
             self._aigc_tasks[created.task_id] = created
             self._aigc_task_idempotency[key] = created.task_id
@@ -863,7 +1119,9 @@ class InMemoryRepository:
                 {
                     **task.model_dump(),
                     "status": final_status,
-                    "progress": 100 if final_status == AigcTaskStatus.SUCCEEDED else task.progress,
+                    "progress": 100
+                    if final_status == AigcTaskStatus.SUCCEEDED
+                    else task.progress,
                     "result": final_result,
                     "error": error if accepted else None,
                     "metrics": metrics,
@@ -921,9 +1179,7 @@ class InMemoryRepository:
                 pipeline is None
                 or self._aigc_pipeline_deleted_at.get(task.pipeline_id) is not None
             ):
-                raise NotFoundError(
-                    f"AIGC pipeline not found: {task.pipeline_id}"
-                )
+                raise NotFoundError(f"AIGC pipeline not found: {task.pipeline_id}")
             generated_name = naming.name
             target_node_ids = aigc_generated_media_name_target_node_ids(
                 run.definition_snapshot,
@@ -1028,8 +1284,7 @@ class InMemoryRepository:
             pipeline = self._aigc_pipelines.get(task.pipeline_id)
             if (
                 pipeline is None
-                or self._aigc_pipeline_deleted_at.get(task.pipeline_id)
-                is not None
+                or self._aigc_pipeline_deleted_at.get(task.pipeline_id) is not None
             ):
                 materialization_error = JsonParserMaterializationError(
                     "json_parser_source_changed",
@@ -1078,9 +1333,7 @@ class InMemoryRepository:
                 },
                 deep=True,
             )
-            references = self._aigc_asset_references_for_pipeline(
-                updated_pipeline
-            )
+            references = self._aigc_asset_references_for_pipeline(updated_pipeline)
             committed = AigcPipelineTaskAttempt.model_validate(
                 {
                     **task.model_dump(),
@@ -1106,9 +1359,7 @@ class InMemoryRepository:
             except Exception:
                 self._aigc_pipelines[pipeline.id] = pipeline
                 for key in [
-                    key
-                    for key in self._aigc_pipeline_assets
-                    if key[0] == pipeline.id
+                    key for key in self._aigc_pipeline_assets if key[0] == pipeline.id
                 ]:
                     del self._aigc_pipeline_assets[key]
                 self._aigc_pipeline_assets.update(previous_asset_references)
@@ -1141,9 +1392,7 @@ class InMemoryRepository:
         with self._lock:
             for reference in items:
                 if reference.task_id not in self._aigc_tasks:
-                    raise NotFoundError(
-                        f"AIGC task not found: {reference.task_id}"
-                    )
+                    raise NotFoundError(f"AIGC task not found: {reference.task_id}")
                 if reference.asset_id not in self._assets:
                     raise NotFoundError(f"asset not found: {reference.asset_id}")
                 key = (
@@ -1260,9 +1509,7 @@ class InMemoryRepository:
             project_type=data.project_type,
             brief=brief,
             current_stage=(
-                Stage.IMAGE
-                if data.project_type.value == "image_asset"
-                else Stage.BRIEF
+                Stage.IMAGE if data.project_type.value == "image_asset" else Stage.BRIEF
             ),
         )
 
@@ -1628,7 +1875,9 @@ class InMemoryRepository:
                 raise NotFoundError(f"tool task not found: {task_id}")
             return self._copy(
                 task.model_copy(
-                    update={"input_assets": self._tool_task_input_assets.get(task_id, [])},
+                    update={
+                        "input_assets": self._tool_task_input_assets.get(task_id, [])
+                    },
                     deep=True,
                 )
             )
@@ -1652,7 +1901,9 @@ class InMemoryRepository:
                 self._copy(
                     task.model_copy(
                         update={
-                            "input_assets": self._tool_task_input_assets.get(task.id, [])
+                            "input_assets": self._tool_task_input_assets.get(
+                                task.id, []
+                            )
                         },
                         deep=True,
                     )
@@ -1717,7 +1968,9 @@ class InMemoryRepository:
                 self._assets[asset.id] = asset
                 if asset.project_id is not None:
                     self._projects[asset.project_id].assets.append(asset)
-            for project_id in {asset.project_id for asset in assets if asset.project_id}:
+            for project_id in {
+                asset.project_id for asset in assets if asset.project_id
+            }:
                 self._touch_project(project_id)
             return [self._copy(asset) for asset in assets]
 
@@ -1747,9 +2000,7 @@ class InMemoryRepository:
             ] = []
             for reference in items:
                 if reference.task_id not in self._aigc_tasks:
-                    raise NotFoundError(
-                        f"AIGC task not found: {reference.task_id}"
-                    )
+                    raise NotFoundError(f"AIGC task not found: {reference.task_id}")
                 if (
                     reference.asset_id != asset.id
                     and reference.asset_id not in self._assets
@@ -1767,9 +2018,7 @@ class InMemoryRepository:
                 existing = self._aigc_task_assets.get(key)
                 if existing is not None:
                     if existing != reference:
-                        raise ValueError(
-                            "AIGC task asset reference already exists"
-                        )
+                        raise ValueError("AIGC task asset reference already exists")
                     continue
                 new_references.append((key, reference))
 
@@ -1923,11 +2172,9 @@ class InMemoryRepository:
             if current.revision != expected_revision:
                 raise RevisionConflictError("image layer set revision conflict")
             updates = list(layers)
-            if (
-                len(updates) != len(current.layers)
-                or {item.id for item in updates}
-                != {item.id for item in current.layers}
-            ):
+            if len(updates) != len(current.layers) or {item.id for item in updates} != {
+                item.id for item in current.layers
+            }:
                 raise ValueError("all image layers must be updated exactly once")
             update_by_id = {item.id: item for item in updates}
             next_layers = [
@@ -1949,14 +2196,22 @@ class InMemoryRepository:
             return self._copy(updated)
 
     def replace_image_layer_asset(
-        self, project_id: str, set_id: str, *, expected_revision: int,
-        layer_id: str, asset: AssetCreate,
+        self,
+        project_id: str,
+        set_id: str,
+        *,
+        expected_revision: int,
+        layer_id: str,
+        asset: AssetCreate,
     ) -> ImageLayerSet:
         with self._lock:
             current = self.get_image_layer_set(project_id, set_id)
             if current.revision != expected_revision:
                 raise RevisionConflictError("image layer set revision conflict")
-            if asset.project_id != project_id or asset.asset_role != AssetRole.INTERNAL_LAYER:
+            if (
+                asset.project_id != project_id
+                or asset.asset_role != AssetRole.INTERNAL_LAYER
+            ):
                 raise ValueError("replacement must be an internal layer asset")
             if not any(layer.id == layer_id for layer in current.layers):
                 raise ValueError("image layer not found")
@@ -1968,7 +2223,8 @@ class InMemoryRepository:
                 **current.model_dump(exclude={"layers", "revision", "updated_at"}),
                 layers=[
                     layer.model_copy(update={"asset_id": created.id}, deep=True)
-                    if layer.id == layer_id else layer
+                    if layer.id == layer_id
+                    else layer
                     for layer in current.layers
                 ],
                 revision=current.revision + 1,
@@ -2461,9 +2717,7 @@ class InMemoryRepository:
 
             primary = ordered[0]
             title_prefix = (
-                "Shot"
-                if project.brief.target_language == TargetLanguage.EN
-                else "镜头"
+                "Shot" if project.brief.target_language == TargetLanguage.EN else "镜头"
             )
             merged = primary.model_copy(
                 update={
@@ -2471,9 +2725,7 @@ class InMemoryRepository:
                     "description": "\n".join(descriptions),
                     "visual_prompt": "\n".join(visual_prompts),
                     "narration": "\n".join(narrations) if narrations else None,
-                    "duration_seconds": sum(
-                        shot.duration_seconds for shot in ordered
-                    ),
+                    "duration_seconds": sum(shot.duration_seconds for shot in ordered),
                     "video_prompt": merged_video_prompt,
                     "reference_image_asset_ids": [],
                     "reference_video_asset_ids": [],
@@ -2530,7 +2782,9 @@ class InMemoryRepository:
             self._require_project(project_id)
             merged = self._require_storyboard_shot(project_id, shot_id)
             if not merged.merge_source_shots:
-                raise ValueError("storyboard shot does not have an atomic merge snapshot")
+                raise ValueError(
+                    "storyboard shot does not have an atomic merge snapshot"
+                )
 
             remaining = [
                 existing
@@ -2554,20 +2808,12 @@ class InMemoryRepository:
             ]
             ordered = [
                 *sorted(
-                    (
-                        shot
-                        for shot in remaining
-                        if shot.index < merged.index
-                    ),
+                    (shot for shot in remaining if shot.index < merged.index),
                     key=lambda item: item.index,
                 ),
                 *restored,
                 *sorted(
-                    (
-                        shot
-                        for shot in remaining
-                        if shot.index > merged.index
-                    ),
+                    (shot for shot in remaining if shot.index > merged.index),
                     key=lambda item: item.index,
                 ),
             ]
@@ -2590,11 +2836,7 @@ class InMemoryRepository:
                 deep=True,
             )
             restored_ids = {shot.id for shot in restored}
-            return [
-                self._copy(shot)
-                for shot in reindexed
-                if shot.id in restored_ids
-            ]
+            return [self._copy(shot) for shot in reindexed if shot.id in restored_ids]
 
     def create_text_artifact(self, data: TextArtifactCreate) -> TextArtifact:
         with self._lock:
@@ -2708,7 +2950,9 @@ class InMemoryRepository:
 
             return updated_artifacts
 
-    def mark_assets_stale(self, project_id: str, stages: Iterable[Stage]) -> list[Asset]:
+    def mark_assets_stale(
+        self, project_id: str, stages: Iterable[Stage]
+    ) -> list[Asset]:
         with self._lock:
             self._require_project(project_id)
             stale_stages = set(stages)
@@ -2721,7 +2965,9 @@ class InMemoryRepository:
                     and asset.metadata.get("usage")
                     != "storyboard_video_tail_frame_reference"
                 ):
-                    updated_assets.append(self.update_asset(asset.id, status=Status.STALE))
+                    updated_assets.append(
+                        self.update_asset(asset.id, status=Status.STALE)
+                    )
 
             return updated_assets
 
@@ -2831,9 +3077,7 @@ class InMemoryRepository:
         pipeline_id: str,
         references: Iterable[AigcPipelineAssetReference],
     ) -> None:
-        for key in [
-            key for key in self._aigc_pipeline_assets if key[0] == pipeline_id
-        ]:
+        for key in [key for key in self._aigc_pipeline_assets if key[0] == pipeline_id]:
             del self._aigc_pipeline_assets[key]
         for reference in references:
             self._aigc_pipeline_assets[
@@ -2890,7 +3134,10 @@ class InMemoryRepository:
         self._require_project(project_id)
         if asset_id is None:
             return None
-        if asset_id not in self._assets or self._assets[asset_id].project_id != project_id:
+        if (
+            asset_id not in self._assets
+            or self._assets[asset_id].project_id != project_id
+        ):
             raise NotFoundError(f"asset not found: {asset_id}")
         return self._assets[asset_id]
 

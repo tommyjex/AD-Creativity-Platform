@@ -49,6 +49,7 @@ export function AigcMultitrackEditor({
   onReload,
   onSave,
   onUploadSubtitle,
+  readOnly = false,
   revision,
   sources,
   title
@@ -61,6 +62,7 @@ export function AigcMultitrackEditor({
     config: MultiTrackEditConfig
   ) => Promise<AigcMultitrackSaveResult | void> | AigcMultitrackSaveResult | void;
   onUploadSubtitle?: (file: File) => Promise<string>;
+  readOnly?: boolean;
   revision: number;
   sources: AigcTimelineSource[];
   title: string;
@@ -105,6 +107,7 @@ export function AigcMultitrackEditor({
   }
 
   function deleteTrack(track: MultiTrackTrack) {
+    if (readOnly) return;
     state.dispatch({ type: "track/remove", trackId: track.id });
     if (selectedTrackId === track.id) {
       setSelectedTrackId(null);
@@ -124,6 +127,7 @@ export function AigcMultitrackEditor({
       { type: "image" | "text" }
     >["transform"]
   ) {
+    if (readOnly) return;
     state.dispatch({
       type: "config/replace",
       config: {
@@ -141,7 +145,7 @@ export function AigcMultitrackEditor({
   }
 
   async function save() {
-    if (pending) return;
+    if (readOnly || pending) return;
     const currentState = store.getState();
     if (!currentState.dirty) return;
     const current = currentState.config;
@@ -176,7 +180,7 @@ export function AigcMultitrackEditor({
   }
 
   async function execute() {
-    if (!state.canExecute || pending) return;
+    if (readOnly || !state.canExecute || pending) return;
     setPending("execute");
     setFeedback(null);
     try {
@@ -193,7 +197,7 @@ export function AigcMultitrackEditor({
   }
 
   async function uploadSubtitle(file: File | undefined) {
-    if (!file) return;
+    if (readOnly || !file) return;
     const validationError = await validateSrt(file);
     if (validationError) {
       setFeedback(validationError);
@@ -265,6 +269,7 @@ export function AigcMultitrackEditor({
   }
 
   function addSourceElement(source: AigcTimelineSource) {
+    if (readOnly) return;
     const current = store.getState();
     const track =
       current.config.tracks.find((candidate) => candidate.type === source.kind) ??
@@ -287,6 +292,7 @@ export function AigcMultitrackEditor({
   }
 
   function addInlineText() {
+    if (readOnly) return;
     const current = store.getState();
     const track =
       current.config.tracks.find((candidate) => candidate.type === "text") ??
@@ -336,7 +342,7 @@ export function AigcMultitrackEditor({
         <span className="hidden text-[10px] text-zinc-500 sm:inline">
           {saveStatusLabel(state.dirty, state.saveStatus)}
         </span>
-        <Button
+        {readOnly ? null : <Button
           aria-label="撤销"
           className="h-8 w-8 p-0"
           disabled={!state.canUndo || Boolean(pending)}
@@ -346,8 +352,8 @@ export function AigcMultitrackEditor({
           variant="ghost"
         >
           <Undo2 className="h-3.5 w-3.5" />
-        </Button>
-        <Button
+        </Button>}
+        {readOnly ? null : <Button
           aria-label="重做"
           className="hidden h-8 w-8 p-0 sm:inline-flex"
           disabled={!state.canRedo || Boolean(pending)}
@@ -357,8 +363,8 @@ export function AigcMultitrackEditor({
           variant="ghost"
         >
           <Redo2 className="h-3.5 w-3.5" />
-        </Button>
-        <Button
+        </Button>}
+        {readOnly ? null : <Button
           aria-label="放弃修改"
           className="hidden sm:inline-flex"
           disabled={!state.dirty || Boolean(pending)}
@@ -372,8 +378,8 @@ export function AigcMultitrackEditor({
         >
           <RotateCcw className="h-3.5 w-3.5" />
           <span className="hidden xl:inline">放弃</span>
-        </Button>
-        <Button
+        </Button>}
+        {readOnly ? null : <Button
           aria-label="保存到节点"
           disabled={!state.dirty || hasInvalidFontType || Boolean(pending)}
           onClick={() => void save()}
@@ -387,8 +393,8 @@ export function AigcMultitrackEditor({
             <Save className="h-3.5 w-3.5" />
           )}
           <span className="hidden md:inline">保存</span>
-        </Button>
-        <Button
+        </Button>}
+        {readOnly ? null : <Button
           aria-label="执行剪辑"
           disabled={!state.canExecute || Boolean(pending)}
           onClick={() => void execute()}
@@ -401,20 +407,20 @@ export function AigcMultitrackEditor({
             <Play className="h-3.5 w-3.5" />
           )}
           <span className="hidden md:inline">执行剪辑</span>
-        </Button>
+        </Button>}
       </header>
 
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-[#2a3038] bg-[#101318] px-2 sm:px-3">
-        <AddTrackControl
+        {readOnly ? null : <AddTrackControl
           onAdd={(track) => {
             state.dispatch({ type: "track/add", track });
             setSelectedTrackId(track.id);
             setSelectedElementId(null);
           }}
           tracks={state.config.tracks}
-        />
-        <AddSourceControl onAdd={addSourceElement} sources={state.sources} />
-        <Button
+        />}
+        {readOnly ? null : <AddSourceControl onAdd={addSourceElement} sources={state.sources} />}
+        {readOnly ? null : <Button
           className="h-7 border-[#343a43] px-2 text-[10px] text-zinc-400"
           onClick={addInlineText}
           size="sm"
@@ -423,8 +429,8 @@ export function AigcMultitrackEditor({
         >
           <FilePlus2 className="h-3 w-3" />
           <span className="hidden sm:inline">内联文字</span>
-        </Button>
-        <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 border border-[#343a43] px-2 text-[10px] font-medium text-zinc-400 hover:border-blue-500/50 hover:text-white">
+        </Button>}
+        {readOnly ? null : <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 border border-[#343a43] px-2 text-[10px] font-medium text-zinc-400 hover:border-blue-500/50 hover:text-white">
           {pending === "subtitle" ? (
             <LoaderCircle className="h-3 w-3 animate-spin" />
           ) : (
@@ -440,7 +446,7 @@ export function AigcMultitrackEditor({
             ref={fileInput}
             type="file"
           />
-        </label>
+        </label>}
         <span className="hidden text-[10px] text-zinc-600 md:inline">
           字幕独占轨道 · 模板不会保留该 SRT 资产 ID
         </span>
@@ -511,7 +517,10 @@ export function AigcMultitrackEditor({
           selectedElementId={selectedElementId}
           sources={state.sources}
         />
-        <div className="hidden min-h-0 border-l border-[#2a3038] lg:row-span-2 lg:block">
+        <fieldset
+          className="hidden min-h-0 border-l border-[#2a3038] lg:row-span-2 lg:block"
+          disabled={readOnly}
+        >
           <AigcMultitrackInspector
             config={state.config}
             dispatch={state.dispatch}
@@ -520,8 +529,9 @@ export function AigcMultitrackEditor({
             selectedTrack={selectedTrack}
             sources={state.sources}
           />
-        </div>
-        <AigcMultitrackTimeline
+        </fieldset>
+        <div className={readOnly ? "pointer-events-none min-h-0" : "min-h-0"}>
+          <AigcMultitrackTimeline
           config={state.config}
           dispatch={state.dispatch}
           onDeleteTrack={deleteTrack}
@@ -536,8 +546,9 @@ export function AigcMultitrackEditor({
           selectedElementId={selectedElementId}
           selectedTrackId={selectedTrackId}
           sources={state.sources}
-          zoom={state.zoom}
-        />
+            zoom={state.zoom}
+          />
+        </div>
       </div>
 
       <div
@@ -569,14 +580,16 @@ export function AigcMultitrackEditor({
             <X className="h-4 w-4" />
           </Button>
           {mobileInspectorOpen ? (
-            <AigcMultitrackInspector
+            <fieldset disabled={readOnly}>
+              <AigcMultitrackInspector
               config={state.config}
               dispatch={state.dispatch}
               issues={state.executionIssues}
               selectedElement={selectedElement}
               selectedTrack={selectedTrack}
               sources={state.sources}
-            />
+              />
+            </fieldset>
           ) : null}
         </div>
       </div>

@@ -1941,10 +1941,10 @@ class AigcModelGateway:
                             "model": params.model,
                             "generation_mode": params.generation_mode,
                             "task_type": params.task_type,
-                            "resolution": params.resolution,
-                            "aspect_ratio": params.aspect_ratio,
-                            "duration_seconds": params.duration_seconds,
-                            "generate_audio": params.generate_audio,
+                            "resolution": request.resolution,
+                            "aspect_ratio": request.aspect_ratio,
+                            "duration_seconds": request.duration_seconds,
+                            "generate_audio": request.generate_audio,
                             "prompt_sha256": hashlib.sha256(
                                 params.prompt.encode("utf-8")
                             ).hexdigest(),

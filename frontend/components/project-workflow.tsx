@@ -33,6 +33,7 @@ import {
   summarizeAssets
 } from "@/lib/project-display";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 const STAGE_CONFIGS: Array<{
   stage: GenerationStage;
@@ -114,6 +115,7 @@ export function ProjectWorkflow({
   initialAssets,
   initialProject
 }: ProjectWorkflowProps) {
+  const canWrite = useCanWrite();
   const [project, setProject] = useState(initialProject);
   const [assets, setAssets] = useState(
     initialAssets.length > 0 ? initialAssets : initialProject.assets
@@ -197,7 +199,7 @@ export function ProjectWorkflow({
   }, [activeTaskIds, refreshProjectSnapshot]);
 
   async function handleGenerate(stage: GenerationStage) {
-    if (pendingStage !== null) {
+    if (!canWrite || pendingStage !== null) {
       return;
     }
 
@@ -224,7 +226,7 @@ export function ProjectWorkflow({
   }
 
   async function handleRetry(taskId: string) {
-    if (retryingTaskId !== null) {
+    if (!canWrite || retryingTaskId !== null) {
       return;
     }
 
@@ -315,12 +317,14 @@ export function ProjectWorkflow({
         <StageProgressPanel
           artifacts={latestArtifactsByStage}
           assets={assets}
+          canWrite={canWrite}
           latestTasksByStage={latestTasksByStage}
           onGenerate={handleGenerate}
           pendingStage={pendingStage}
           project={project}
         />
         <TaskStatusPanel
+          canWrite={canWrite}
           onRetry={handleRetry}
           retryingTaskId={retryingTaskId}
           tasks={tasks}
@@ -399,6 +403,7 @@ function ProjectOverview({
 function StageProgressPanel({
   artifacts,
   assets,
+  canWrite,
   latestTasksByStage,
   onGenerate,
   pendingStage,
@@ -406,6 +411,7 @@ function StageProgressPanel({
 }: {
   artifacts: Map<Stage, TextArtifact>;
   assets: Asset[];
+  canWrite: boolean;
   latestTasksByStage: Map<Stage, GenerationTask>;
   onGenerate: (stage: GenerationStage) => void;
   pendingStage: GenerationStage | null;
@@ -480,7 +486,7 @@ function StageProgressPanel({
                     ) : null}
                   </div>
                 </div>
-                <Button
+                {canWrite ? <Button
                   className="shrink-0 rounded-2xl"
                   disabled={pendingStage !== null || isRunning}
                   onClick={() => onGenerate(config.stage)}
@@ -499,7 +505,7 @@ function StageProgressPanel({
                   ) : (
                     config.label
                   )}
-                </Button>
+                </Button> : null}
               </div>
             </div>
           );
@@ -510,10 +516,12 @@ function StageProgressPanel({
 }
 
 function TaskStatusPanel({
+  canWrite,
   onRetry,
   retryingTaskId,
   tasks
 }: {
+  canWrite: boolean;
   onRetry: (taskId: string) => void;
   retryingTaskId: string | null;
   tasks: GenerationTask[];
@@ -554,7 +562,7 @@ function TaskStatusPanel({
                     {task.id}
                   </div>
                 </div>
-                {task.status === "failed" ? (
+                {canWrite && task.status === "failed" ? (
                   <Button
                     disabled={retryingTaskId !== null}
                     onClick={() => onRetry(task.id)}

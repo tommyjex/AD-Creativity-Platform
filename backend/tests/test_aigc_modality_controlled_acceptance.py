@@ -34,6 +34,7 @@ from backend.app.services.aigc_gateway import (
     AIGC_VIDEO_EXECUTOR_VERSION,
     AigcGatewayExecution,
 )
+from backend.tests.auth_helpers import authenticate_test_client
 
 
 class ControlledGateway:
@@ -98,6 +99,7 @@ def controlled_api(
     app.dependency_overrides[get_video_normalizer_service] = lambda: video_normalizer
     app.dependency_overrides[get_aigc_pipeline_runtime] = lambda: runtime
     with TestClient(app) as client:
+        authenticate_test_client(client, repository)
         yield client, repository, gateway
     app.dependency_overrides.clear()
 

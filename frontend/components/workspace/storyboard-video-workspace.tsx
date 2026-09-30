@@ -67,6 +67,7 @@ import type {
   StoryboardShotVideoConfig
 } from "@/lib/api-types";
 import { formatDate, statusVariant } from "@/lib/project-display";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 import { reindexReferencesAfterRemoval } from "@/lib/storyboard-reference";
 import {
   canMergeShots,
@@ -139,6 +140,7 @@ export function StoryboardVideoWorkspace({
   onProjectUpdated,
   project
 }: StoryboardVideoWorkspaceProps) {
+  const canWrite = useCanWrite();
   const [shots, setShots] = useState(() => sortShots(project.storyboard));
   const [assets, setAssets] = useState(project.assets);
   const [selectedShotId, setSelectedShotId] = useState(
@@ -450,6 +452,7 @@ export function StoryboardVideoWorkspace({
   }, [activeTaskIds, refreshProject]);
 
   function commitLocal(nextShots: StoryboardShot[], nextAssets = assets) {
+    if (!canWrite) return;
     setShots(sortShots(nextShots));
     setAssets(nextAssets);
     onProjectUpdated({
@@ -461,6 +464,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleSavePrompt() {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) {
       return;
     }
@@ -499,6 +503,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleOptimizePrompt() {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) {
       return;
     }
@@ -575,6 +580,7 @@ export function StoryboardVideoWorkspace({
     kind: ReferenceAssetKind,
     event: ChangeEvent<HTMLInputElement>
   ) {
+    if (!canWrite) return;
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -657,6 +663,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleAttachReference(kind: ReferenceAssetKind, assetId: string) {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) {
       return;
     }
@@ -697,6 +704,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleSetFirstFrame(assetId: string) {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) return;
     if (selectedConfig && hasStoryboardReferenceMedia(selectedConfig)) {
       setEditorFeedback({
@@ -722,6 +730,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleSetPreviousShotLastFrame(sourceVideoAssetId: string) {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) return;
     if (selectedConfig && hasStoryboardReferenceMedia(selectedConfig)) {
       setEditorFeedback({
@@ -756,6 +765,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleClearFirstFrame() {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) return;
     setPendingAction("first-frame:clear");
     try {
@@ -774,6 +784,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleUploadFirstFrame(event: ChangeEvent<HTMLInputElement>) {
+    if (!canWrite) return;
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!selectedShot || !file || pendingAction) return;
@@ -808,6 +819,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleRemoveReference(kind: ReferenceAssetKind, assetId: string) {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) {
       return;
     }
@@ -856,6 +868,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleGenerateVideo() {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) {
       return;
     }
@@ -899,6 +912,7 @@ export function StoryboardVideoWorkspace({
   }
 
   function openVideoEdit() {
+    if (!canWrite) return;
     if (!selectedShot || !selectedVideoAsset || pendingAction) {
       return;
     }
@@ -918,6 +932,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleSubmitVideoEdit() {
+    if (!canWrite) return;
     if (
       !selectedShot ||
       !selectedVideoAsset ||
@@ -975,6 +990,7 @@ export function StoryboardVideoWorkspace({
   }
 
   function handleContinueEditing() {
+    if (!canWrite) return;
     if (!videoComparison || pendingAction) {
       return;
     }
@@ -984,6 +1000,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleKeepEditedVideo(assetId: string) {
+    if (!canWrite) return;
     if (!videoComparison || pendingAction) {
       return;
     }
@@ -1018,6 +1035,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleDeleteCurrentVideo(assetId: string) {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) {
       return;
     }
@@ -1047,6 +1065,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleApplyLastFrameToSubsequentReferences() {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) {
       return;
     }
@@ -1084,6 +1103,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleEnsureLastFrameReferenceAsset() {
+    if (!canWrite) return;
     if (!selectedShot || pendingAction) {
       return;
     }
@@ -1114,6 +1134,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleMergeShots() {
+    if (!canWrite) return;
     if (pendingAction || !canMerge) {
       return;
     }
@@ -1157,6 +1178,7 @@ export function StoryboardVideoWorkspace({
   }
 
   async function handleSplitShot() {
+    if (!canWrite) return;
     if (!splitTargetShot || pendingAction) {
       return;
     }
@@ -1197,6 +1219,7 @@ export function StoryboardVideoWorkspace({
   }
 
   function openEditor(shotId: string) {
+    if (!canWrite) return;
     promptOptimizationAbortRef.current?.abort();
     promptOptimizationAbortRef.current = null;
     editorSessionSequence.current += 1;
@@ -1294,7 +1317,7 @@ export function StoryboardVideoWorkspace({
                     : "支持将相邻的短镜头合并为一个更长的镜头。"}
                 </p>
               </div>
-              <Button
+              {canWrite ? <Button
                 aria-pressed={isMergeMode}
                 disabled={isMerging}
                 onClick={toggleMergeMode}
@@ -1304,7 +1327,7 @@ export function StoryboardVideoWorkspace({
               >
                 <Combine aria-hidden="true" className="h-4 w-4" />
                 {isMergeMode ? "退出合并" : "合并分镜"}
-              </Button>
+              </Button> : null}
             </div>
 
             {isMergeMode ? (
@@ -1378,6 +1401,7 @@ export function StoryboardVideoWorkspace({
                   }
                   onSplit={() => setSplitTargetShotId(shot.id)}
                   onToggleMerge={() => toggleMergeSelection(shot.id)}
+                  readOnly={!canWrite}
                   shot={shot}
                   task={shotTasks[shot.id]}
                 />
@@ -1433,6 +1457,7 @@ export function StoryboardVideoWorkspace({
                 handleEnsureLastFrameReferenceAsset
               }
               onGenerate={handleGenerateVideo}
+              readOnly={!canWrite}
               selectedShot={selectedShot}
               task={selectedShot ? shotTasks[selectedShot.id] : undefined}
             />
@@ -1629,6 +1654,7 @@ function ShotSelector({
   onSelect,
   onSplit,
   onToggleMerge,
+  readOnly,
   shot,
   task
 }: {
@@ -1640,6 +1666,7 @@ function ShotSelector({
   onSelect: () => void;
   onSplit: () => void;
   onToggleMerge: () => void;
+  readOnly: boolean;
   shot: StoryboardShot;
   task?: GenerationTask;
 }) {
@@ -1701,7 +1728,7 @@ function ShotSelector({
           aria-pressed={isMergeMode ? isMergeSelected : isSelected}
           className="block min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/25"
           onClick={onSelect}
-          onDoubleClick={isMergeMode ? undefined : onEdit}
+          onDoubleClick={isMergeMode || readOnly ? undefined : onEdit}
           type="button"
         >
           <div className="flex items-start justify-between gap-3">
@@ -1725,7 +1752,7 @@ function ShotSelector({
           <Badge variant="secondary">{shot.duration_seconds} 秒</Badge>
           <Badge variant="outline">{referenceCount} 个参考素材</Badge>
         </div>
-        {isMergeMode ? null : (
+        {isMergeMode || readOnly ? null : (
           <div className="flex shrink-0 items-center gap-1">
             {shot.is_merged && shot.merge_source_count > 1 ? (
               <Button
@@ -1774,6 +1801,7 @@ function VideoPreviewPanel({
   onEditVideo,
   onEnsureLastFrameReferenceAsset,
   onGenerate,
+  readOnly,
   selectedShot,
   task
 }: {
@@ -1792,6 +1820,7 @@ function VideoPreviewPanel({
   onEditVideo: () => void;
   onEnsureLastFrameReferenceAsset: () => void;
   onGenerate: () => void;
+  readOnly: boolean;
   selectedShot: StoryboardShot | null;
   task?: GenerationTask;
 }) {
@@ -1972,7 +2001,7 @@ function VideoPreviewPanel({
           />
         </dl>
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        {readOnly ? null : <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           {asset ? (
             <Button
               className="min-w-36"
@@ -2085,7 +2114,7 @@ function VideoPreviewPanel({
               删除当前分镜视频
             </Button>
           ) : null}
-        </div>
+        </div>}
       </div>
     </article>
   );

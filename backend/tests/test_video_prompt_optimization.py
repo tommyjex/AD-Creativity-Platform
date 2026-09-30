@@ -34,6 +34,7 @@ from backend.app.video_prompt import (
     build_single_shot_video_prompt,
     extract_timeline_ranges,
 )
+from backend.tests.auth_helpers import authenticate_test_client
 
 
 def _sse_events(response) -> list[tuple[str, dict[str, object]]]:
@@ -102,6 +103,7 @@ def _client_with_generation(
     app.dependency_overrides[get_repository] = lambda: repository
     app.dependency_overrides[get_modelark_generation_service] = lambda: generation
     with TestClient(app) as client:
+        authenticate_test_client(client, repository)
         yield client
     app.dependency_overrides.clear()
 

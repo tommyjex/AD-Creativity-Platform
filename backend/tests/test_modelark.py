@@ -1206,6 +1206,45 @@ def test_seedance_request_rejects_invalid_mode_combinations_and_weak_types(
         )
 
 
+@pytest.mark.parametrize("task_type", ["edit", "extend"])
+def test_seedance_edit_and_extend_normalize_provider_constraints(
+    task_type: str,
+) -> None:
+    request = SeedanceVideoGenerationRequest(
+        model="doubao-seedance-2-5-260628",
+        generation_mode="multimodal_reference",
+        task_type=task_type,  # type: ignore[arg-type]
+        prompt="基于参考视频保持主体一致并调整镜头节奏",
+        reference_video_urls=["https://assets.example.com/reference.mp4"],
+        duration_seconds=12,
+        resolution="720p",
+        aspect_ratio="16:9",
+        generate_audio=True,
+    )
+    client = FakeArkClient(
+        video_create_responses=[SimpleNamespace(id=f"task-{task_type}")],
+        video_get_responses=[
+            SimpleNamespace(
+                status="succeeded",
+                content=SimpleNamespace(
+                    video_url="https://model.example/generated.mp4"
+                ),
+            )
+        ],
+    )
+    adapter = BytePlusModelArkAdapter(_settings(), client=client)
+
+    result = asyncio.run(adapter.generate_seedance_video(request))
+
+    create_call = client.content_generation.tasks.create_calls[0]
+    assert request.duration_seconds == -1
+    assert request.aspect_ratio == "adaptive"
+    assert create_call["duration"] == -1
+    assert create_call["ratio"] == "adaptive"
+    assert result.metadata["duration_seconds"] == -1
+    assert result.metadata["aspect_ratio"] == "adaptive"
+
+
 def test_seedance_mock_and_real_adapters_return_consistent_metadata() -> None:
     request = SeedanceVideoGenerationRequest(
         model="doubao-seedance-2-5-260628",

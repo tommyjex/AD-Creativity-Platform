@@ -1,5 +1,6 @@
 import { AigcEditor } from "@/components/workspace/aigc/aigc-editor";
-import { createApiClient, getUserFacingErrorMessage } from "@/lib/api-client";
+import { getUserFacingErrorMessage } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 
 export default async function AigcTemplateEditorPage({
   params
@@ -7,7 +8,7 @@ export default async function AigcTemplateEditorPage({
   params: Promise<{ templateId: string }>;
 }) {
   const { templateId } = await params;
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let template;
 
   try {

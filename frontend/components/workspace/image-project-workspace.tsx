@@ -37,6 +37,7 @@ import {
 } from "@/components/workspace/image-canvas-editor";
 import { LayerDecomposeDialog } from "@/components/workspace/layer-decompose-dialog";
 import { LayerEditorDialog } from "@/components/workspace/layer-editor-dialog";
+import { ImageProjectReadOnlyDetail } from "@/components/workspace/image-project-read-only-detail";
 import { getSafePreviewUrl } from "@/lib/asset-display";
 import { apiClient, getUserFacingErrorMessage } from "@/lib/api-client";
 import type {
@@ -51,6 +52,7 @@ import type {
 import { validateImagePromptCopy } from "@/lib/image-prompt-copy";
 import { formatDate, statusVariant } from "@/lib/project-display";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 const selectClassName =
   "flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm focus-visible:border-primary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15";
@@ -70,6 +72,7 @@ export function ImageProjectWorkspace({
   onProjectUpdated: (project: Project) => void;
   project: Project;
 }) {
+  const canWrite = useCanWrite();
   const [workspaceProject, setWorkspaceProject] = useState(project);
   const [versions, setVersions] = useState<ImagePromptVersion[]>([]);
   const [prompt, setPrompt] = useState("");
@@ -291,6 +294,15 @@ export function ImageProjectWorkspace({
       window.clearTimeout(timer);
     };
   }, [layerTask, project.id, refreshProject]);
+
+  if (!canWrite) {
+    return (
+      <ImageProjectReadOnlyDetail
+        onProjectUpdated={onProjectUpdated}
+        project={workspaceProject}
+      />
+    );
+  }
 
   function handleSelectVersion(version: ImagePromptVersion) {
     setSelectedVersionId(version.id);

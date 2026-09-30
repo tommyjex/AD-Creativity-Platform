@@ -24,6 +24,7 @@ import {
   X
 } from "lucide-react";
 import { ProjectEmptyState } from "@/components/project-empty-state";
+import { ReadOnlyNotice } from "@/components/auth/read-only-notice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +77,7 @@ import type {
   WorkspaceAssetFilters,
   WorkspaceAssetSource
 } from "@/lib/workspace-asset-source";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 const PAGE_SIZE = 30;
 const ASSET_CARD_CLASS_NAME =
@@ -139,6 +141,7 @@ export function WorkspaceAssetLibrary({
   projects,
   toolTasks = []
 }: WorkspaceAssetLibraryProps) {
+  const canWrite = useCanWrite();
   const [assets, setAssets] = useState(initialAssets);
   const [prevInitialAssets, setPrevInitialAssets] = useState(initialAssets);
   const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
@@ -328,7 +331,7 @@ export function WorkspaceAssetLibrary({
     isRenaming || renameValidationError !== null || isRenameNameUnchanged;
 
   async function handleConfirmDelete() {
-    if (!pendingDelete) {
+    if (!canWrite || !pendingDelete) {
       return;
     }
 
@@ -363,6 +366,9 @@ export function WorkspaceAssetLibrary({
   }
 
   function handleRequestRename(asset: Asset) {
+    if (!canWrite) {
+      return;
+    }
     setPendingRename(asset);
     setRenameName(getWorkspaceAssetDescription(asset));
     setRenameError(null);
@@ -378,7 +384,7 @@ export function WorkspaceAssetLibrary({
 
   async function handleRenameSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!pendingRename || renameRequestInFlightRef.current) {
+    if (!canWrite || !pendingRename || renameRequestInFlightRef.current) {
       return;
     }
 
@@ -429,6 +435,7 @@ export function WorkspaceAssetLibrary({
             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
               集中管理项目、工具与 AIGC 工作台资产，可追溯来源、任务状态与创建信息。
             </p>
+            {!canWrite ? <ReadOnlyNotice className="mt-3 max-w-xl" /> : null}
           </div>
           <Badge className="w-fit" variant="info">
             {displayedAssetCount} 项资产
@@ -528,9 +535,9 @@ export function WorkspaceAssetLibrary({
                           : filteredScene
                       }
                       key={section}
-                      onRequestDelete={setPendingDelete}
+                      onRequestDelete={canWrite ? setPendingDelete : undefined}
                       onRequestPreview={setPendingPreview}
-                      onRequestRename={handleRequestRename}
+                      onRequestRename={canWrite ? handleRequestRename : undefined}
                       projectNames={projectNames}
                       section={section}
                     />
@@ -542,9 +549,9 @@ export function WorkspaceAssetLibrary({
                     <ArtifactsSection
                       items={filteredArtifacts}
                       key={section}
-                      onRequestDelete={setPendingDelete}
+                      onRequestDelete={canWrite ? setPendingDelete : undefined}
                       onRequestPreview={setPendingPreview}
-                      onRequestRename={handleRequestRename}
+                      onRequestRename={canWrite ? handleRequestRename : undefined}
                       projectNames={projectNames}
                     />
                   );
@@ -554,9 +561,9 @@ export function WorkspaceAssetLibrary({
                   <ImageProductSection
                     assets={filteredProducts}
                     key={section}
-                    onRequestDelete={setPendingDelete}
+                    onRequestDelete={canWrite ? setPendingDelete : undefined}
                     onRequestPreview={setPendingPreview}
-                    onRequestRename={handleRequestRename}
+                    onRequestRename={canWrite ? handleRequestRename : undefined}
                     projectNames={projectNames}
                   />
                 );
@@ -565,9 +572,9 @@ export function WorkspaceAssetLibrary({
               {source === "all" || source === "tools" ? (
                 <ToolAssetsSection
                   assets={filteredToolAssets}
-                  onRequestDelete={setPendingDelete}
+                  onRequestDelete={canWrite ? setPendingDelete : undefined}
                   onRequestPreview={setPendingPreview}
-                  onRequestRename={handleRequestRename}
+                  onRequestRename={canWrite ? handleRequestRename : undefined}
                   source="tools"
                   toolTasksById={toolTasksById}
                 />
@@ -575,9 +582,9 @@ export function WorkspaceAssetLibrary({
               {source === "all" || source === "aigc" ? (
                 <ToolAssetsSection
                   assets={filteredAigcAssets}
-                  onRequestDelete={setPendingDelete}
+                  onRequestDelete={canWrite ? setPendingDelete : undefined}
                   onRequestPreview={setPendingPreview}
-                  onRequestRename={handleRequestRename}
+                  onRequestRename={canWrite ? handleRequestRename : undefined}
                   source="aigc"
                   toolTasksById={toolTasksById}
                 />
@@ -1008,9 +1015,9 @@ function CategoryAssetSection({
   section
 }: {
   assets: Asset[];
-  onRequestDelete: (target: DeleteTarget) => void;
+  onRequestDelete?: (target: DeleteTarget) => void;
   onRequestPreview: (target: PreviewTarget) => void;
-  onRequestRename: (asset: Asset) => void;
+  onRequestRename?: (asset: Asset) => void;
   projectNames: Map<string, string>;
   section: Extract<AssetSection, "character" | "scene">;
 }) {
@@ -1058,9 +1065,9 @@ function ArtifactsSection({
   projectNames
 }: {
   items: ArtifactDisplayItem[];
-  onRequestDelete: (target: DeleteTarget) => void;
+  onRequestDelete?: (target: DeleteTarget) => void;
   onRequestPreview: (target: PreviewTarget) => void;
-  onRequestRename: (asset: Asset) => void;
+  onRequestRename?: (asset: Asset) => void;
   projectNames: Map<string, string>;
 }) {
   const { page, pageCount, pageItems, setPage } = usePagedItems(items);
@@ -1107,9 +1114,9 @@ function ImageProductSection({
   projectNames
 }: {
   assets: Asset[];
-  onRequestDelete: (target: DeleteTarget) => void;
+  onRequestDelete?: (target: DeleteTarget) => void;
   onRequestPreview: (target: PreviewTarget) => void;
-  onRequestRename: (asset: Asset) => void;
+  onRequestRename?: (asset: Asset) => void;
   projectNames: Map<string, string>;
 }) {
   const { page, pageCount, pageItems, setPage } = usePagedItems(assets);
@@ -1154,9 +1161,9 @@ function ToolAssetsSection({
   toolTasksById
 }: {
   assets: Asset[];
-  onRequestDelete: (target: DeleteTarget) => void;
+  onRequestDelete?: (target: DeleteTarget) => void;
   onRequestPreview: (target: PreviewTarget) => void;
-  onRequestRename: (asset: Asset) => void;
+  onRequestRename?: (asset: Asset) => void;
   source: Extract<WorkspaceAssetSource, "aigc" | "tools">;
   toolTasksById: Map<string, ToolTask>;
 }) {
@@ -1220,9 +1227,9 @@ function ToolAssetCard({
   task
 }: {
   asset: Asset;
-  onRequestDelete: (target: DeleteTarget) => void;
+  onRequestDelete?: (target: DeleteTarget) => void;
   onRequestPreview: (target: PreviewTarget) => void;
-  onRequestRename: (asset: Asset) => void;
+  onRequestRename?: (asset: Asset) => void;
   source: Extract<WorkspaceAssetSource, "aigc" | "tools">;
   task?: ToolTask;
 }) {
@@ -1339,16 +1346,16 @@ function ToolAssetCard({
             <span className="flex-1" />
           )}
           <AssetCardActions
-            onDelete={() =>
+            onDelete={onRequestDelete ? () =>
               onRequestDelete({
                 assetId: asset.id,
                 isLastFrame: false,
                 isToolAsset: true,
                 label: description,
                 projectId: null
-              })
+              }) : undefined
             }
-            onRename={() => onRequestRename(asset)}
+            onRename={onRequestRename ? () => onRequestRename(asset) : undefined}
           />
         </div>
       </div>
@@ -1360,7 +1367,7 @@ function AssetCardActions({
   onDelete,
   onRename
 }: {
-  onDelete: () => void;
+  onDelete?: () => void;
   onRename?: () => void;
 }) {
   return (
@@ -1378,7 +1385,7 @@ function AssetCardActions({
           <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
         </Button>
       ) : null}
-      <Button
+      {onDelete ? <Button
         aria-label="删除资产"
         className="h-8 w-8 rounded-lg p-0 text-destructive hover:text-destructive"
         onClick={onDelete}
@@ -1388,7 +1395,7 @@ function AssetCardActions({
         variant="outline"
       >
         <Trash2 aria-hidden="true" className="h-4 w-4" />
-      </Button>
+      </Button> : null}
     </div>
   );
 }
@@ -1467,9 +1474,9 @@ function WorkspaceAssetCard({
 }: {
   asset: Asset;
   categoryLabel: string;
-  onRequestDelete: (target: DeleteTarget) => void;
+  onRequestDelete?: (target: DeleteTarget) => void;
   onRequestPreview: (target: PreviewTarget) => void;
-  onRequestRename: (asset: Asset) => void;
+  onRequestRename?: (asset: Asset) => void;
   projectName: string;
 }) {
   const description = getWorkspaceAssetDescription(asset);
@@ -1523,16 +1530,16 @@ function WorkspaceAssetCard({
         </dl>
         <div className="mt-4 flex justify-end">
           <AssetCardActions
-            onDelete={() =>
+            onDelete={onRequestDelete ? () =>
               onRequestDelete({
                 assetId: asset.id,
                 isLastFrame: false,
                 isToolAsset: false,
                 label: description,
                 projectId: asset.project_id
-              })
+              }) : undefined
             }
-            onRename={() => onRequestRename(asset)}
+            onRename={onRequestRename ? () => onRequestRename(asset) : undefined}
           />
         </div>
       </div>
@@ -1548,9 +1555,9 @@ function ArtifactCard({
   projectName
 }: {
   item: ArtifactDisplayItem;
-  onRequestDelete: (target: DeleteTarget) => void;
+  onRequestDelete?: (target: DeleteTarget) => void;
   onRequestPreview: (target: PreviewTarget) => void;
-  onRequestRename: (asset: Asset) => void;
+  onRequestRename?: (asset: Asset) => void;
   projectName: string;
 }) {
   const { asset, isLastFrame, kind } = item;
@@ -1612,16 +1619,20 @@ function ArtifactCard({
         </dl>
         <div className="mt-4 flex justify-end">
           <AssetCardActions
-            onDelete={() =>
+            onDelete={onRequestDelete ? () =>
               onRequestDelete({
                 assetId: asset.id,
                 isLastFrame,
                 isToolAsset: false,
                 label: displayName,
                 projectId: asset.project_id
-              })
+              }) : undefined
             }
-            onRename={isLastFrame ? undefined : () => onRequestRename(asset)}
+            onRename={
+              !isLastFrame && onRequestRename
+                ? () => onRequestRename(asset)
+                : undefined
+            }
           />
         </div>
       </div>

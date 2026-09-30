@@ -1,4 +1,5 @@
 import pytest
+
 from backend.app.core.config import ConfigurationError, Settings
 
 
@@ -39,6 +40,78 @@ def test_tls_logging_defaults_are_disabled_and_safe() -> None:
     assert settings.tls_timeout_seconds == 5
 
 
+def test_auth_security_defaults() -> None:
+    settings = Settings()
+
+    assert settings.site_origin == "http://localhost:3000"
+    assert settings.auth_cookie_secure is False
+    assert settings.auth_session_idle_seconds == 12 * 60 * 60
+    assert settings.auth_session_absolute_seconds == 7 * 24 * 60 * 60
+    assert settings.auth_login_window_seconds == 15 * 60
+    assert settings.auth_login_max_failures == 5
+
+
+def test_production_rejects_wildcard_cors_and_insecure_cookie() -> None:
+    with pytest.raises(ValueError, match="CORS_ORIGINS"):
+        Settings(environment="production", cors_origins=["*"])
+    with pytest.raises(ValueError, match="AUTH_COOKIE_SECURE"):
+        Settings(
+            environment="production",
+            cors_origins=["https://app.example.com"],
+            auth_cookie_secure=False,
+        )
+
+
+def test_auth_origins_are_validated_and_normalized() -> None:
+    settings = Settings(
+        site_origin="HTTPS://APP.EXAMPLE.COM:443/",
+        cors_origins=[
+            "https://app.example.com",
+            "https://app.example.com:443/",
+        ],
+    )
+
+    assert settings.site_origin == "https://app.example.com"
+    assert settings.cors_origins == ["https://app.example.com"]
+
+    with pytest.raises(ValueError, match="SITE_ORIGIN"):
+        Settings(site_origin="https://app.example.com/path")
+    with pytest.raises(ValueError, match="CORS_ORIGINS"):
+        Settings(cors_origins=["https://app.example.com/path"])
+
+
+def test_production_requires_https_site_origin_in_cors() -> None:
+    with pytest.raises(ValueError, match="HTTPS"):
+        Settings(
+            environment="production",
+            cors_origins=["http://app.example.com"],
+            site_origin="http://app.example.com",
+            auth_cookie_secure=True,
+        )
+    with pytest.raises(ValueError, match="include SITE_ORIGIN"):
+        Settings(
+            environment="production",
+            cors_origins=["https://api.example.com"],
+            site_origin="https://app.example.com",
+            auth_cookie_secure=True,
+        )
+
+
+def test_production_auth_settings_are_loaded_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.setenv("SITE_ORIGIN", "https://app.example.com/")
+    monkeypatch.delenv("AUTH_COOKIE_SECURE", raising=False)
+
+    settings = Settings.from_env()
+
+    assert settings.cors_origins == ["https://app.example.com"]
+    assert settings.site_origin == "https://app.example.com"
+    assert settings.auth_cookie_secure is True
+
+
 def test_tls_logging_settings_read_secret_environment_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -75,7 +148,9 @@ def test_tls_logging_settings_read_secret_environment_values(
     assert "tls-secret-secret" not in str(settings)
 
 
-def test_settings_reads_database_and_tos_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_reads_database_and_tos_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     env_values = {
         "DB_HOST": "db.internal",
         "DB_PORT": "3307",
@@ -110,7 +185,9 @@ def test_settings_reads_database_and_tos_environment(monkeypatch: pytest.MonkeyP
     assert settings.tos_bucket == "ad-assets"
 
 
-def test_settings_prefers_primary_tos_key_names(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_prefers_primary_tos_key_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("TOS_ACCESS_KEY", "primary-access-value")
     monkeypatch.setenv("TOS_AK", "alias-access-value")
     monkeypatch.setenv("TOS_SECRET_KEY", "primary-secret-value")

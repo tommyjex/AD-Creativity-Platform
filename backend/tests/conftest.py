@@ -24,6 +24,8 @@ from backend.app.services.media_inspector import MediaInspection
 from backend.app.services.workflow import WorkflowService
 from backend.app.services.video_normalizer import NormalizedVideo
 
+from backend.tests.auth_helpers import authenticate_test_client
+
 
 class FakeObjectStorageClient:
     def __init__(self) -> None:
@@ -270,7 +272,7 @@ def media_inspector() -> FakeMediaInspector:
 
 
 @pytest.fixture
-def client(
+def anonymous_client(
     repository: InMemoryRepository,
     test_asset_storage: AssetStorageService,
     background_task_runner: CapturingBackgroundTaskRunner,
@@ -294,14 +296,26 @@ def client(
     app.dependency_overrides[get_media_inspector_service] = lambda: media_inspector
     app.dependency_overrides[get_background_task_runner] = lambda: background_task_runner
 
-    with TestClient(app) as test_client:
+    with TestClient(
+        app,
+        headers={"Origin": "http://localhost:3000"},
+    ) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def mysql_client(
+def client(
+    anonymous_client: TestClient,
+    repository: InMemoryRepository,
+) -> TestClient:
+    authenticate_test_client(anonymous_client, repository)
+    return anonymous_client
+
+
+@pytest.fixture
+def mysql_anonymous_client(
     mysql_repository: MySQLRepository,
     test_asset_storage: AssetStorageService,
     background_task_runner: CapturingBackgroundTaskRunner,
@@ -325,10 +339,22 @@ def mysql_client(
     app.dependency_overrides[get_media_inspector_service] = lambda: media_inspector
     app.dependency_overrides[get_background_task_runner] = lambda: background_task_runner
 
-    with TestClient(app) as test_client:
+    with TestClient(
+        app,
+        headers={"Origin": "http://localhost:3000"},
+    ) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def mysql_client(
+    mysql_anonymous_client: TestClient,
+    mysql_repository: MySQLRepository,
+) -> TestClient:
+    authenticate_test_client(mysql_anonymous_client, mysql_repository)
+    return mysql_anonymous_client
 
 
 @pytest.fixture

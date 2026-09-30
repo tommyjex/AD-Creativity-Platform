@@ -100,6 +100,7 @@ import {
   isApiError
 } from "@/lib/api-client";
 import { createClientId } from "@/lib/client-id";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 import {
   AutosaveCoordinator,
   type AutosaveState
@@ -320,6 +321,7 @@ function AigcEditorContent({
   entity: EditorEntity;
   mode: "pipeline" | "template";
 }) {
+  const canWrite = useCanWrite();
   const router = useRouter();
   const editorStore = useAigcEditorStoreApi();
   const queryClient = useQueryClient();
@@ -507,8 +509,10 @@ function AigcEditorContent({
   const authoritativeNodeNamesRef = useRef(new Map<string, string>());
 
   useEffect(() => {
-    autosaveCoordinator.activate();
-    autosaveCoordinator.update(editorDraftFromState(editorStore.getState()));
+    if (canWrite) {
+      autosaveCoordinator.activate();
+      autosaveCoordinator.update(editorDraftFromState(editorStore.getState()));
+    }
     return editorStore.subscribe((state, previous) => {
       if (state.definition.nodes !== previous.definition.nodes) {
         setNodes(state.definition.nodes.map(toFlowNode));
@@ -525,9 +529,11 @@ function AigcEditorContent({
           )
         );
       }
-      autosaveCoordinator.update(editorDraftFromState(state));
+      if (canWrite) {
+        autosaveCoordinator.update(editorDraftFromState(state));
+      }
     });
-  }, [autosaveCoordinator, editorStore]);
+  }, [autosaveCoordinator, canWrite, editorStore]);
 
   useEffect(() => {
     if (mode !== "pipeline") return;
@@ -673,9 +679,10 @@ function AigcEditorContent({
   }, [autosaveState.dirty, autosaveState.revision, editorStore, markSaved]);
 
   useEffect(() => {
+    if (!canWrite) return;
     autosaveCoordinator.activate();
     return () => autosaveCoordinator.dispose();
-  }, [autosaveCoordinator]);
+  }, [autosaveCoordinator, canWrite]);
 
   useEffect(() => {
     function warnBeforeUnload(event: BeforeUnloadEvent) {
@@ -859,6 +866,15 @@ function AigcEditorContent({
 
   const onNodesChange = useCallback(
     (changes: NodeChange<AigcFlowNode>[]) => {
+      if (!canWrite) {
+        setNodes((current) =>
+          applyNodeChanges(
+            changes.filter((change) => change.type === "select"),
+            current
+          )
+        );
+        return;
+      }
       for (const change of changes) {
         if (change.type === "remove") removeNode(change.id);
         if (change.type === "select" && change.selected) {
@@ -867,19 +883,21 @@ function AigcEditorContent({
       }
       setNodes((current) => applyNodeChanges(changes, current));
     },
-    [removeNode, selectNodeAndInspect]
+    [canWrite, removeNode, selectNodeAndInspect]
   );
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
+      if (!canWrite) return;
       for (const change of changes) {
         if (change.type === "remove") removeEdge(change.id);
       }
       setEdges((current) => applyEdgeChanges(changes, current));
     },
-    [removeEdge]
+    [canWrite, removeEdge]
   );
   const onConnect = useCallback(
     (connection: Connection) => {
+      if (!canWrite) return;
       const validationError = getAigcConnectionValidationError(
         connection,
         definition.nodes,
@@ -905,7 +923,7 @@ function AigcEditorContent({
       );
       setFeedback(null);
     },
-    [connect, definition.edges, definition.nodes]
+    [canWrite, connect, definition.edges, definition.nodes]
   );
   const validateConnection = useCallback(
     (connection: Connection | Edge) => {
@@ -936,6 +954,9 @@ function AigcEditorContent({
   );
 
   async function flushLatestDraft(startNodeId?: string) {
+    if (!canWrite) {
+      return { ok: true as const, revision: entity.revision };
+    }
     const result = await autosaveCoordinator.flush(
       startNodeId
         ? {
@@ -959,7 +980,7 @@ function AigcEditorContent({
   }
 
   async function saveAsTemplate() {
-    if (mode !== "pipeline") return;
+    if (!canWrite || mode !== "pipeline") return;
     const normalizedName = templateName.trim();
     if (!normalizedName) {
       setTemplateError("请输入模板名称。");
@@ -988,7 +1009,7 @@ function AigcEditorContent({
   }
 
   async function execute(startNodeId?: string) {
-    if (!allowExecution || mode !== "pipeline") return;
+    if (!canWrite || !allowExecution || mode !== "pipeline") return;
     if (runListUnavailable) return;
     if (startNodeId) {
       if (
@@ -1077,6 +1098,7 @@ function AigcEditorContent({
 
   async function retryFailedNode(runId: string, nodeId: string) {
     if (
+      !canWrite ||
       runListUnavailable ||
       runProjection.isNodeActive(nodeId) ||
       submissionPendingForNode(nodeId, pendingRunStartsRef.current)
@@ -1096,6 +1118,7 @@ function AigcEditorContent({
   }
 
   async function cancelActiveRun(runId: string) {
+    if (!canWrite) return;
     try {
       await cancelRun.mutateAsync(runId);
     } catch (error) {
@@ -1109,7 +1132,11 @@ function AigcEditorContent({
 
   function leave(event: MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
-    void navigateAfterFlush(workspaceRoute);
+    if (canWrite) {
+      void navigateAfterFlush(workspaceRoute);
+    } else {
+      router.push(workspaceRoute);
+    }
   }
 
   function toggleDetails() {
@@ -1121,10 +1148,18 @@ function AigcEditorContent({
   }
 
   const continueFromNode = useLatestCallback(
-    (nodeId: string) => void execute(nodeId)
+    (nodeId: string) => {
+      if (canWrite) void execute(nodeId);
+    }
   );
   const openLayerEditor = useLatestCallback(
-    (href: string) => void navigateAfterFlush(href as Route)
+    (href: string) => {
+      if (canWrite) {
+        void navigateAfterFlush(href as Route);
+      } else {
+        router.push(href as Route);
+      }
+    }
   );
   const runActions = useMemo(
     () => ({
@@ -1221,7 +1256,7 @@ function AigcEditorContent({
               )}
             </Button>
           </div>
-          {mode === "pipeline" ? (
+          {canWrite && mode === "pipeline" ? (
             <>
               <div
                 aria-label="文档命令"
@@ -1289,7 +1324,7 @@ function AigcEditorContent({
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {isDesktop && hydrated && desktopNodePaletteVisible ? (
+        {canWrite && isDesktop && hydrated && desktopNodePaletteVisible ? (
           <NodePalette
             onAdd={addNode}
             onClose={() => setDesktopNodePalettePreference(false)}
@@ -1299,7 +1334,7 @@ function AigcEditorContent({
           className="relative min-w-0 flex-1"
           ref={canvasContainerRef}
         >
-          {isDesktop && (!hydrated || !desktopNodePaletteVisible) ? (
+          {canWrite && isDesktop && (!hydrated || !desktopNodePaletteVisible) ? (
             <div className="absolute left-3 top-3 z-30 border border-[#30353d] bg-[#181b20] p-1 shadow-lg shadow-black/30">
               <Button
                 aria-controls="aigc-node-palette"
@@ -1324,7 +1359,7 @@ function AigcEditorContent({
                   : "left-3 top-3"
               )}
             >
-              <Button
+              {canWrite ? <Button
                 aria-controls="aigc-node-palette"
                 aria-expanded={openPanel === "nodes"}
                 aria-label={
@@ -1343,7 +1378,7 @@ function AigcEditorContent({
                 variant="ghost"
               >
                 <PanelLeft className="h-4 w-4" />
-              </Button>
+              </Button> : null}
               <Button
                 aria-label="打开检查器"
                 onClick={() => openInspector("config")}
@@ -1375,7 +1410,9 @@ function AigcEditorContent({
                   nodeTypes={AIGC_NODE_TYPES}
                   nodes={nodes}
                   onNodeDragStop={(_, node) =>
-                    moveNode(node.id, { x: node.position.x, y: node.position.y })
+                    canWrite
+                      ? moveNode(node.id, { x: node.position.x, y: node.position.y })
+                      : undefined
                   }
                   onNodesChange={onNodesChange}
                   reactFlowProps={{
@@ -1386,21 +1423,25 @@ function AigcEditorContent({
                           minZoom: 0.25
                         }),
                     defaultViewport: definition.viewport,
-                    deleteKeyCode: ["Backspace", "Delete"],
+                    deleteKeyCode: canWrite ? ["Backspace", "Delete"] : null,
                     edgesReconnectable: false,
                     isValidConnection: validateConnection,
                     nodeClickDistance: AIGC_NODE_DRAG_THRESHOLD,
                     nodeDragThreshold: AIGC_NODE_DRAG_THRESHOLD,
-                    onConnect,
+                    nodesConnectable: canWrite,
+                    nodesDraggable: canWrite,
+                    onConnect: canWrite ? onConnect : undefined,
                     onEdgesChange,
-                    onMoveEnd: (_, viewport: Viewport) => setViewport(viewport),
+                    onMoveEnd: (_, viewport: Viewport) => {
+                      if (canWrite) setViewport(viewport);
+                    },
                     onNodeClick: (_, node) => selectNodeAndInspect(node.id),
-                    onNodeContextMenu: openNodeMenu,
+                    onNodeContextMenu: canWrite ? openNodeMenu : undefined,
                     onInit: (instance) => {
                       reactFlowRef.current = instance;
                     },
                     onPaneClick: dismissInspectorFromPane,
-                    onPaneContextMenu: openNodePicker,
+                    onPaneContextMenu: canWrite ? openNodePicker : undefined,
                     snapGrid: [16, 16],
                     snapToGrid: true,
                     zoomOnDoubleClick: false
@@ -1408,7 +1449,7 @@ function AigcEditorContent({
               />
             </AigcRunProvider>
           </AigcRunActionsProvider>
-          {contextMenu?.kind === "picker" ? (
+          {canWrite && contextMenu?.kind === "picker" ? (
             <AigcCanvasNodePicker
               onAdd={(type) => {
                 addNode(type, contextMenu.flowPosition);
@@ -1435,7 +1476,7 @@ function AigcEditorContent({
               {feedback}
             </div>
           ) : null}
-          {!isDesktop && openPanel === "nodes" ? (
+          {canWrite && !isDesktop && openPanel === "nodes" ? (
             <NodePalette
               className="absolute inset-y-0 left-0 z-20 w-60 shadow-xl"
               onAdd={(type) => {
@@ -1448,6 +1489,7 @@ function AigcEditorContent({
             <Inspector
               className="absolute inset-y-0 right-0 z-20 w-[min(320px,100vw)] shadow-xl"
               allowExecution={allowExecution}
+              readOnly={!canWrite}
               mode={mode}
               node={selectedNode}
               onCancelRun={(runId) => void cancelActiveRun(runId)}
@@ -1474,6 +1516,7 @@ function AigcEditorContent({
         {isDesktop && openPanel === "inspector" ? (
           <Inspector
             allowExecution={allowExecution}
+            readOnly={!canWrite}
             mode={mode}
             node={selectedNode}
             onCancelRun={(runId) => void cancelActiveRun(runId)}
@@ -1666,6 +1709,7 @@ function Inspector({
   nodePending,
   nodeRunDetail,
   runs,
+  readOnly,
   selectedRunDetail,
   selectedRunDetailState,
   selectedRunId,
@@ -1687,6 +1731,7 @@ function Inspector({
   nodePending: boolean;
   nodeRunDetail: AigcPipelineRunDetail | undefined;
   runs: AigcPipelineRun[];
+  readOnly: boolean;
   selectedRunDetail: AigcPipelineRunDetail | undefined;
   selectedRunDetailState: AigcRunDetailQueryState | undefined;
   selectedRunId: string | null;
@@ -1737,7 +1782,7 @@ function Inspector({
       </div>
       <div className="p-4">
         {tab === "config" ? (
-          <div className="space-y-4">
+          <fieldset className="space-y-4 disabled:opacity-80" disabled={readOnly}>
             <div>
               <Label htmlFor="aigc-editor-name">名称</Label>
               <Input
@@ -1775,7 +1820,8 @@ function Inspector({
                 <InspectorEmpty />
               )}
             </div>
-            {allowExecution &&
+            {!readOnly &&
+            allowExecution &&
             mode === "pipeline" &&
             node &&
             isAigcExecutionNodeType(node.type) ? (
@@ -1791,7 +1837,7 @@ function Inspector({
                 从此节点运行
               </Button>
             ) : null}
-          </div>
+          </fieldset>
         ) : tab === "result" ? (
           <ResultPanel
             definition={definition}
@@ -1806,6 +1852,7 @@ function Inspector({
             />
           ) : (
             <RunPanel
+              readOnly={readOnly}
               onCancel={onCancelRun}
               onRetry={onRetryNode}
               onSelectRun={onSelectRun}
@@ -2975,6 +3022,7 @@ function MediaInputConfig({
   mode: "pipeline" | "template";
   node: MediaInputNode;
 }) {
+  const canWrite = useCanWrite();
   const update = useAigcEditorStore((state) => state.updateNodeConfig);
   const definition = useAigcEditorStore((state) => state.definition);
   const queryClient = useQueryClient();
@@ -3028,7 +3076,7 @@ function MediaInputConfig({
   }
 
   async function uploadMedia(file: File | undefined) {
-    if (!file) return;
+    if (!canWrite || !file) return;
     const validationError = isLayerDecompositionInput
       ? validateLayerDecompositionFile(file)
       : validateAigcMediaFile(options.kind, file);
@@ -3860,6 +3908,7 @@ function RunPanel({
   runDetail,
   runDetailState,
   runs,
+  readOnly,
   selectedRunId
 }: {
   onCancel: (runId: string) => void;
@@ -3868,6 +3917,7 @@ function RunPanel({
   runDetail: AigcPipelineRunDetail | undefined;
   runDetailState: AigcRunDetailQueryState | undefined;
   runs: AigcPipelineRun[];
+  readOnly: boolean;
   selectedRunId: string | null;
 }) {
   if (!runDetail && runs.length === 0) {
@@ -3919,7 +3969,7 @@ function RunPanel({
             error={getAigcRunLogError(runDetail.run)}
             label="Run 失败原因"
           />
-          {isAigcRunActive(runDetail) ? (
+          {!readOnly && isAigcRunActive(runDetail) ? (
             <Button
               className="w-full"
               onClick={() => onCancel(runDetail.run.id)}
@@ -3959,7 +4009,7 @@ function RunPanel({
                             : ""}
                         </p>
                       </div>
-                      {["failed", "timed_out", "blocked"].includes(node.status) ? (
+                      {!readOnly && ["failed", "timed_out", "blocked"].includes(node.status) ? (
                         <Button
                           aria-label={`重试节点：${node.node_id}`}
                           onClick={() => onRetry(runDetail.run.id, node.node_id)}

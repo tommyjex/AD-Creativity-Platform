@@ -53,6 +53,10 @@ _SAFE_CONTEXT_FIELDS = frozenset(
         "duration_ms",
         "error_type",
         "error_code",
+        "actor_user_id",
+        "target_user_id",
+        "username_digest",
+        "source_digest",
     }
 )
 

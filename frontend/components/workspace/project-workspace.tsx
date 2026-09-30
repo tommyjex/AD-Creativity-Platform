@@ -24,6 +24,7 @@ import {
   type ReactNode
 } from "react";
 import { ProjectEmptyState } from "@/components/project-empty-state";
+import { ReadOnlyNotice } from "@/components/auth/read-only-notice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,6 +67,7 @@ import {
 } from "@/lib/project-display";
 import { useTextGenerationStream } from "@/lib/use-text-generation-stream";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 const platformOptions = [
   { label: "抖音", value: "douyin" },
@@ -132,6 +134,7 @@ export function ProjectWorkspace({
   initialError,
   initialProjects
 }: ProjectWorkspaceProps) {
+  const canWrite = useCanWrite();
   const [projects, setProjects] = useState(initialProjects);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -234,6 +237,9 @@ export function ProjectWorkspace({
   }
 
   function handleStartCreate() {
+    if (!canWrite) {
+      return;
+    }
     requestSequence.current += 1;
     setSelectedProjectId(null);
     setSelectedProject(null);
@@ -302,7 +308,7 @@ export function ProjectWorkspace({
   }
 
   async function handleConfirmDelete() {
-    if (!pendingDelete || isDeleting) {
+    if (!canWrite || !pendingDelete || isDeleting) {
       return;
     }
 
@@ -352,15 +358,18 @@ export function ProjectWorkspace({
           <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
             集中管理广告视频与图片素材项目，维护 Brief 和当前创作状态。
           </p>
+          {!canWrite ? <ReadOnlyNotice className="mt-3 max-w-xl" /> : null}
         </div>
-        <Button
-          className="h-11 rounded-xl px-5"
-          onClick={handleStartCreate}
-          type="button"
-        >
-          <Plus aria-hidden="true" className="h-4 w-4" />
-          新建项目
-        </Button>
+        {canWrite ? (
+          <Button
+            className="h-11 rounded-xl px-5"
+            onClick={handleStartCreate}
+            type="button"
+          >
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            新建项目
+          </Button>
+        ) : null}
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[21rem_minmax(0,1fr)]">
@@ -495,7 +504,7 @@ export function ProjectWorkspace({
                 <ProjectListButton
                   isSelected={selectedProjectId === project.id && !isCreating}
                   key={project.id}
-                  onDelete={setPendingDelete}
+                  onDelete={canWrite ? setPendingDelete : undefined}
                   onSelect={handleSelectProject}
                   project={project}
                 />
@@ -542,18 +551,19 @@ export function ProjectWorkspace({
             />
           ) : selectedProject ? (
             <ProjectDetail
+              canWrite={canWrite}
               key={selectedProject.id}
               onUpdated={handleUpdated}
               project={selectedProject}
             />
           ) : projects.length === 0 ? (
             <ProjectEmptyState
-              action={
+              action={canWrite ? (
                 <Button onClick={handleStartCreate} type="button">
                   <Plus aria-hidden="true" className="h-4 w-4" />
                   新建第一个项目
                 </Button>
-              }
+              ) : undefined}
               description="从一份清晰的广告 Brief 开始，创建后即可在这里继续维护项目信息。"
               title="还没有广告项目"
             />
@@ -614,7 +624,7 @@ function ProjectListButton({
   project
 }: {
   isSelected: boolean;
-  onDelete: (project: ProjectListItem) => void;
+  onDelete?: (project: ProjectListItem) => void;
   onSelect: (projectId: string) => void;
   project: ProjectListItem;
 }) {
@@ -659,7 +669,7 @@ function ProjectListButton({
           </time>
         </div>
       </button>
-      <button
+      {onDelete ? <button
         aria-describedby={`project-list-name-${project.id}`}
         aria-label="删除项目"
         className="absolute right-2.5 top-2.5 grid h-8 w-8 place-items-center rounded-lg text-muted-foreground opacity-70 transition hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/25 group-hover:opacity-100"
@@ -668,29 +678,33 @@ function ProjectListButton({
         type="button"
       >
         <Trash2 aria-hidden="true" className="h-4 w-4" />
-      </button>
+      </button> : null}
     </div>
   );
 }
 
 function ProjectDetail({
+  canWrite,
   onUpdated,
   project
 }: {
+  canWrite: boolean;
   onUpdated: (project: Project) => void;
   project: Project;
 }) {
   return project.project_type === "image_asset" ? (
     <ImageProjectDetail onUpdated={onUpdated} project={project} />
   ) : (
-    <VideoProjectDetail onUpdated={onUpdated} project={project} />
+    <VideoProjectDetail canWrite={canWrite} onUpdated={onUpdated} project={project} />
   );
 }
 
 function VideoProjectDetail({
+  canWrite,
   onUpdated,
   project
 }: {
+  canWrite: boolean;
   onUpdated: (project: Project) => void;
   project: Project;
 }) {
@@ -765,6 +779,7 @@ function VideoProjectDetail({
         onProjectUpdated={onUpdated}
         project={project}
         textGeneration={textGeneration}
+        readOnly={!canWrite}
       />
 
       <ProjectDetailTabs
@@ -777,6 +792,7 @@ function VideoProjectDetail({
         onProjectUpdated={onUpdated}
         project={project}
         textGeneration={textGeneration}
+        readOnly={!canWrite}
       />
     </div>
   );
@@ -861,6 +877,7 @@ function ProjectBriefPanel({
   onUpdated: (project: Project) => void;
   project: Project;
 }) {
+  const canWrite = useCanWrite();
   const [isEditing, setIsEditing] = useState(false);
 
   if (isEditing) {
@@ -890,10 +907,10 @@ function ProjectBriefPanel({
             默认查看当前项目需求，点击编辑后可修改并保存。
           </p>
         </div>
-        <Button onClick={() => setIsEditing(true)} type="button" variant="outline">
+        {canWrite ? <Button onClick={() => setIsEditing(true)} type="button" variant="outline">
           <PencilLine aria-hidden="true" className="h-4 w-4" />
           编辑 Brief
-        </Button>
+        </Button> : null}
       </div>
 
       <div className="space-y-6 p-6 sm:p-7">

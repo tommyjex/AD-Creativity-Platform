@@ -56,6 +56,7 @@ import type {
   ImageLayerUpdate
 } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 interface DragState {
   clientX: number;
@@ -107,6 +108,7 @@ export function LayerEditorDialog({
   onOpenChange: (open: boolean) => void;
   open: boolean;
 }) {
+  const canWrite = useCanWrite();
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
@@ -164,6 +166,7 @@ export function LayerEditorDialog({
     layerId: string,
     changes: Partial<Pick<ImageLayer, "scale" | "visible" | "x" | "y">>
   ) {
+    if (!canWrite) return;
     setLayers((current) =>
       current.map((layer) =>
         layer.id === layerId ? { ...layer, ...changes } : layer
@@ -177,7 +180,7 @@ export function LayerEditorDialog({
     event: ReactPointerEvent<HTMLDivElement>,
     layer: ImageLayer
   ) {
-    if (!layer.visible) return;
+    if (!canWrite || !layer.visible) return;
     setSelectedId(layer.id);
     dragRef.current = {
       clientX: event.clientX,
@@ -216,6 +219,7 @@ export function LayerEditorDialog({
     event: ReactPointerEvent<HTMLSpanElement>,
     layer: ImageLayer
   ) {
+    if (!canWrite) return;
     const [x1, y1, x2, y2] = layer.bbox_absolute;
     setSelectedId(layer.id);
     dragRef.current = null;
@@ -262,6 +266,7 @@ export function LayerEditorDialog({
   }
 
   async function persistLayout(): Promise<ImageLayerSetDetail | null> {
+    if (!canWrite) return null;
     setIsSaving(true);
     try {
       const updated = await apiClient.updateImageLayerSet(
@@ -291,7 +296,7 @@ export function LayerEditorDialog({
   }
 
   async function handleSave() {
-    if (!dirty || isSaving) return;
+    if (!canWrite || !dirty || isSaving) return;
     setFeedback(null);
     const updated = await persistLayout();
     if (updated) {
@@ -355,7 +360,7 @@ export function LayerEditorDialog({
   }
 
   async function handleExport() {
-    if (dirty || isExporting) return;
+    if (!canWrite || dirty || isExporting) return;
     setFeedback("正在导出已保存的图层版本…");
     setExportedAsset(null);
     try {
@@ -371,7 +376,7 @@ export function LayerEditorDialog({
   }
 
   async function handleRetryExport() {
-    if (!exportTask || exportTask.status !== "failed") return;
+    if (!canWrite || !exportTask || exportTask.status !== "failed") return;
     setFeedback("正在重试导出…");
     try {
       await pollExportTask(await apiClient.retryTask(exportTask.id));
@@ -381,7 +386,7 @@ export function LayerEditorDialog({
   }
 
   async function handleContentEdit() {
-    if (!selectedLayer || !contentEditPrompt.trim() || isContentEditing || isSaving) {
+    if (!canWrite || !selectedLayer || !contentEditPrompt.trim() || isContentEditing || isSaving) {
       return;
     }
     setFeedback(null);
@@ -521,7 +526,7 @@ export function LayerEditorDialog({
                           src={url}
                         />
                       ) : null}
-                      {selectedId === layer.id && layer.visible ? (
+                      {canWrite && selectedId === layer.id && layer.visible ? (
                         <span
                           aria-label={`等比缩放图层 ${layer.name}`}
                           aria-valuemax={MAX_LAYER_SCALE}
@@ -592,6 +597,7 @@ export function LayerEditorDialog({
                         isTop={layer.z_index === layers.length}
                         key={layer.id}
                         layer={layer}
+                        readOnly={!canWrite}
                         onMove={(direction) =>
                           setLayers((current) =>
                             moveLayer(current, layer.id, direction)
@@ -622,13 +628,13 @@ export function LayerEditorDialog({
                 </div>
               </div>
 
-              <TransformControls
+              {canWrite ? <TransformControls
                 layer={selectedLayer}
                 onChange={(changes) =>
                   selectedLayer && updateLayer(selectedLayer.id, changes)
                 }
-              />
-              {selectedLayer ? (
+              /> : null}
+              {canWrite && selectedLayer ? (
                 <div className="border-t border-border p-3">
                   <label className="text-xs font-semibold" htmlFor="layer-content-edit">
                     编辑图层内容
@@ -698,13 +704,13 @@ export function LayerEditorDialog({
               </a>
             </Button>
           ) : null}
-          {exportTask?.status === "failed" ? (
+          {canWrite && exportTask?.status === "failed" ? (
             <Button onClick={handleRetryExport} type="button" variant="outline">
               <RefreshCw className="h-4 w-4" />
               重试导出
             </Button>
           ) : null}
-          <Button
+          {canWrite ? <Button
             disabled={dirty || isSaving || isReloading || isExporting}
             onClick={handleExport}
             title={dirty ? "请先保存图层修改再导出" : "导出已保存的图层版本"}
@@ -717,8 +723,8 @@ export function LayerEditorDialog({
               <ImageDown className="h-4 w-4" />
             )}
             导出成品
-          </Button>
-          <Button
+          </Button> : null}
+          {canWrite ? <Button
             disabled={!dirty || isSaving || isReloading}
             onClick={handleSave}
             type="button"
@@ -729,7 +735,7 @@ export function LayerEditorDialog({
               <Save className="h-4 w-4" />
             )}
             保存图层
-          </Button>
+          </Button> : null}
         </div>
       </DialogContent>
     </Dialog>
@@ -744,6 +750,7 @@ function LayerRow({
   onMove,
   onSelect,
   onVisibility,
+  readOnly,
   selected
 }: {
   assetUrl: string | null;
@@ -753,6 +760,7 @@ function LayerRow({
   onMove: (direction: "down" | "up") => void;
   onSelect: () => void;
   onVisibility: () => void;
+  readOnly: boolean;
   selected: boolean;
 }) {
   return (
@@ -789,7 +797,7 @@ function LayerRow({
           </span>
         </span>
       </button>
-      <div className="grid shrink-0 grid-cols-2 gap-0.5">
+      {readOnly ? null : <div className="grid shrink-0 grid-cols-2 gap-0.5">
         <LayerIconButton
           disabled={false}
           icon={layer.visible ? Eye : EyeOff}
@@ -814,7 +822,7 @@ function LayerRow({
           label={`下移图层 ${layer.name}`}
           onClick={() => onMove("down")}
         />
-      </div>
+      </div>}
     </div>
   );
 }

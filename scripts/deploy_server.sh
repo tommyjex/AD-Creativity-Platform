@@ -47,6 +47,38 @@ require_executable() {
   [[ -x "$path" ]] || die "Required executable not found or not executable: $path"
 }
 
+trim_whitespace() {
+  local value="$1"
+
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+read_dotenv_value() {
+  local name="$1"
+  local line
+  local value=""
+  local found=0
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?${name}[[:space:]]*=(.*)$ ]]; then
+      value="$(trim_whitespace "${BASH_REMATCH[2]}")"
+      if [[ "${#value}" -ge 2 ]] &&
+        { [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]] ||
+          [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; }; then
+        value="${value:1:${#value}-2}"
+      fi
+      value="$(trim_whitespace "$value")"
+      found=1
+    fi
+  done <"$APP_ROOT/.env"
+
+  [[ "$found" -eq 1 ]] || return 1
+  printf '%s' "$value"
+}
+
 run_privileged() {
   if [[ "$EUID" -eq 0 ]]; then
     "$@"
@@ -90,8 +122,15 @@ validate_positive_integer() {
 }
 
 preflight() {
+  local app_env
+  local auth_cookie_secure
+  local cors_origins
+  local cors_origin
+  local cors_contains_site_origin=0
+  local -a configured_origins
   local node_version
   local node_major
+  local site_origin
 
   log "Running deployment preflight checks."
 
@@ -101,6 +140,38 @@ preflight() {
   require_file "$APP_ROOT/frontend/package-lock.json"
   require_executable "$APP_ROOT/.venv/bin/python"
   require_directory "$APP_ROOT/backend"
+
+  app_env="$(read_dotenv_value "APP_ENV")" ||
+    die "APP_ENV must be set to production in $APP_ROOT/.env"
+  cors_origins="$(read_dotenv_value "CORS_ORIGINS")" ||
+    die "CORS_ORIGINS must be set and non-empty in $APP_ROOT/.env"
+  site_origin="$(read_dotenv_value "SITE_ORIGIN")" ||
+    die "SITE_ORIGIN must be set and non-empty in $APP_ROOT/.env"
+  auth_cookie_secure="$(read_dotenv_value "AUTH_COOKIE_SECURE")" ||
+    die "AUTH_COOKIE_SECURE must be exactly true in $APP_ROOT/.env"
+
+  [[ -n "$cors_origins" ]] ||
+    die "CORS_ORIGINS must be set and non-empty in $APP_ROOT/.env"
+  [[ -n "$site_origin" ]] ||
+    die "SITE_ORIGIN must be set and non-empty in $APP_ROOT/.env"
+  [[ "$app_env" == "production" || "$app_env" == "prod" ]] ||
+    die "APP_ENV must be set to production in $APP_ROOT/.env"
+  [[ "$cors_origins" != *"*"* ]] ||
+    die "CORS_ORIGINS must not contain '*' in $APP_ROOT/.env"
+  [[ "$site_origin" =~ ^https://[^/?#@[:space:]]+$ ]] ||
+    die "SITE_ORIGIN must be an HTTPS origin without a path in $APP_ROOT/.env"
+  [[ "$auth_cookie_secure" == "true" ]] ||
+    die "AUTH_COOKIE_SECURE must be exactly true in $APP_ROOT/.env"
+  IFS=',' read -r -a configured_origins <<<"$cors_origins"
+  for cors_origin in "${configured_origins[@]}"; do
+    cors_origin="$(trim_whitespace "$cors_origin")"
+    if [[ "$cors_origin" == "$site_origin" ]]; then
+      cors_contains_site_origin=1
+      break
+    fi
+  done
+  [[ "$cors_contains_site_origin" -eq 1 ]] ||
+    die "CORS_ORIGINS must include SITE_ORIGIN in $APP_ROOT/.env"
 
   require_command curl
   require_command env

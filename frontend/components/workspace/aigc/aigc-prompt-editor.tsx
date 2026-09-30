@@ -43,6 +43,7 @@ import type {
   AigcV2Node,
   TextConfig
 } from "@/lib/aigc/types";
+import { useCanWrite } from "@/lib/auth/auth-provider";
 
 const MAX_INSTRUCTION_CODE_POINTS = 4000;
 const MAX_DIRECTION_CODE_POINTS = 2000;
@@ -62,6 +63,8 @@ export function AigcPromptEditor({
   readOnly?: boolean;
   runDetail?: AigcPipelineRunDetail | null;
 }) {
+  const canWrite = useCanWrite();
+  const effectiveReadOnly = readOnly || !canWrite;
   const nodeInteraction = useAigcNodeInteraction();
   const definition = useAigcEditorStore((state) => state.definition);
   const store = useAigcEditorStoreApi();
@@ -223,7 +226,7 @@ export function AigcPromptEditor({
   const showsVideoReferenceMarkerHint =
     selectedOptimizationTarget?.node.type === "video_generation";
   const canEditText =
-    !readOnly &&
+    !effectiveReadOnly &&
     (!upstream ||
       Boolean(
         effectiveProjection &&
@@ -231,6 +234,7 @@ export function AigcPromptEditor({
           effectiveProjection.text !== null
       ));
   const canOptimize =
+    !effectiveReadOnly &&
     targets.length > 0 &&
     Boolean(
       effectiveText.trim() ||
@@ -238,6 +242,7 @@ export function AigcPromptEditor({
     );
 
   function updateText(value: string): boolean {
+    if (effectiveReadOnly) return false;
     if (AIGC_COORDINATE_TAG_PATTERN.test(value)) {
       setValidationMessage("坐标标签由框选生成，不能手工输入。");
       return false;
@@ -290,6 +295,7 @@ export function AigcPromptEditor({
   }
 
   function updateReferenceInstruction(sourceNodeId: string, value: string) {
+    if (effectiveReadOnly) return;
     if (AIGC_COORDINATE_TAG_PATTERN.test(value)) {
       setValidationMessage("坐标标签由框选生成，不能手工输入。");
       return;
@@ -306,6 +312,7 @@ export function AigcPromptEditor({
   function openOptimizationDialog(
     origin: "inspector" | "fullscreen" = "inspector"
   ) {
+    if (effectiveReadOnly) return;
     const optimizationText =
       origin === "fullscreen" ? fullscreenDraft : effectiveText;
     if (
@@ -328,6 +335,7 @@ export function AigcPromptEditor({
   }
 
   async function optimizePrompt() {
+    if (effectiveReadOnly) return;
     const selectedTarget = targets.find(
       (target) => target.id === targetNodeId
     );
@@ -510,7 +518,7 @@ export function AigcPromptEditor({
                   {references.length}/10
                 </span>
               ) : null}
-              <Button
+              {effectiveReadOnly ? null : <Button
                 aria-label="优化提示词"
                 disabled={!canOptimize || isOptimizing}
                 onClick={() => openOptimizationDialog()}
@@ -529,7 +537,7 @@ export function AigcPromptEditor({
                   <WandSparkles className="h-3.5 w-3.5" />
                 )}
                 {isOptimizing ? "优化中" : "优化提示词"}
-              </Button>
+              </Button>}
             </div>
           </div>
           <div
@@ -615,7 +623,7 @@ export function AigcPromptEditor({
                         {status}
                       </span>
                     ) : null}
-                    <button
+                    {effectiveReadOnly ? null : <button
                       aria-label={`移除框选引用：${sourceLabel}`}
                       className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground transition hover:bg-secondary hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
                       disabled={isOptimizing}
@@ -626,12 +634,12 @@ export function AigcPromptEditor({
                       type="button"
                     >
                       <X className="h-3.5 w-3.5" />
-                    </button>
+                    </button>}
                   </div>
                   <Textarea
                     aria-label={`框选引用说明：${sourceLabel}`}
                     className="min-h-14 resize-y border-0 bg-transparent px-2 py-1.5 text-xs shadow-none focus-visible:ring-0"
-                    disabled={isOptimizing}
+                    disabled={effectiveReadOnly || isOptimizing}
                     onChange={(event) =>
                       updateReferenceInstruction(
                         reference.source_node_id,

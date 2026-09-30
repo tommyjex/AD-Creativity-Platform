@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
-import { AppShell } from "@/components/layout/app-shell";
+import { Suspense, type ReactNode } from "react";
+import { AuthApp, AuthProvider } from "@/lib/auth/auth-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,8 +16,23 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="dark">
       <body>
-        <AppShell>{children}</AppShell>
+        <AuthProvider>
+          <Suspense fallback={<AuthLoading />}>
+            <AuthApp>{children}</AuthApp>
+          </Suspense>
+        </AuthProvider>
       </body>
     </html>
+  );
+}
+
+function AuthLoading() {
+  return (
+    <main
+      aria-label="正在验证登录状态"
+      className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground"
+    >
+      正在验证登录状态...
+    </main>
   );
 }

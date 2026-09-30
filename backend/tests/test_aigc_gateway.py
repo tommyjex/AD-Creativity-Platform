@@ -3563,6 +3563,42 @@ def test_gateway_maps_first_and_last_frames_to_seedance_roles(
     ]
 
 
+def test_gateway_persists_normalized_seedance_edit_parameters(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_media_asset(repository, "video-a", AssetType.UPLOADED_VIDEO)
+    generation = FakeAigcGeneration()
+    gateway = AigcModelGateway(repository, generation, test_asset_storage)  # type: ignore[arg-type]
+    params = video_params()
+    params.update(
+        {
+            "task_type": "edit",
+            "reference_image_asset_ids": [],
+            "reference_audio_asset_ids": [],
+            "duration_seconds": 12,
+            "aspect_ratio": "16:9",
+        }
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_GENERATION,
+        params,
+    )
+
+    execution = asyncio.run(gateway.execute(task))
+
+    request = generation.video_requests[0]
+    assert request.task_type == "edit"
+    assert request.duration_seconds == -1
+    assert request.aspect_ratio == "adaptive"
+    output = execution.result.assets[0]
+    saved = repository.get_asset(output.asset_id)
+    assert saved.metadata["task_type"] == "edit"
+    assert saved.metadata["duration_seconds"] == -1
+    assert saved.metadata["aspect_ratio"] == "adaptive"
+
+
 @pytest.mark.parametrize(
     ("asset_id", "asset_type", "mime_type"),
     [

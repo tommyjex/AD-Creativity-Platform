@@ -4,10 +4,12 @@ from contextlib import asynccontextmanager
 from inspect import isawaitable
 from time import perf_counter
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .api.dependencies import (
     discard_aigc_pipeline_runtime,
@@ -21,7 +23,7 @@ from .api.dependencies import (
     get_video_enhancement_client_factory,
 )
 from .api.router import api_router
-from .core.config import get_settings
+from .core.config import ConfigurationError, get_settings, normalize_http_origin
 from .core.logging import (
     bind_log_context,
     configure_structured_logging,
@@ -145,11 +147,12 @@ def create_app() -> FastAPI:
         lifespan=_lifespan,
     )
     application.state.tls_log_sink = tls_sink
+    application.state.settings = settings
 
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
+        allow_origins=settings.cors_origins,
+        allow_credentials="*" not in settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -164,6 +167,24 @@ def create_app() -> FastAPI:
         token = bind_log_context(request_id=request_id)
         logger = logging.getLogger(__name__)
         route = request.url.path
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            supplied_origin = request.headers.get("origin")
+            if supplied_origin is None:
+                referer = request.headers.get("referer")
+                supplied_origin = referer
+            if not _origin_matches(supplied_origin, settings.site_origin):
+                response = JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": {
+                            "code": "origin_forbidden",
+                            "message": "Request origin is not allowed.",
+                        }
+                    },
+                )
+                response.headers["X-Request-ID"] = request_id
+                reset_log_context(token)
+                return response
         log_event(
             logger,
             "http.request",
@@ -187,6 +208,15 @@ def create_app() -> FastAPI:
             raise
         else:
             duration_seconds = perf_counter() - started_at
+            if response.headers.get("X-Auth-Clear-Cookie") == "1":
+                del response.headers["X-Auth-Clear-Cookie"]
+                response.delete_cookie(
+                    "ad_session",
+                    path="/",
+                    httponly=True,
+                    secure=settings.auth_cookie_secure,
+                    samesite="lax",
+                )
             response.headers["X-Request-ID"] = request_id
             response.headers["X-Process-Time"] = f"{duration_seconds:.6f}"
             log_event(
@@ -216,3 +246,16 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+def _origin_matches(candidate: str | None, expected: str) -> bool:
+    if candidate is None:
+        return False
+    try:
+        parsed = urlsplit(candidate)
+        if not parsed.scheme or not parsed.netloc:
+            return False
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        return normalize_http_origin(origin, name="request origin") == expected
+    except (ConfigurationError, ValueError):
+        return False

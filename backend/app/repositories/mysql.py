@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from backend.app.aigc_run_scope import aigc_run_conflict_node_ids
@@ -17,6 +18,7 @@ from backend.app.db.models import (
     AigcPipelineTemplateORM,
     AigcPipelineWorkerLeaseORM,
     AssetORM,
+    AuthSessionORM,
     BriefORM,
     CanvasLayoutORM,
     CharacterCardORM,
@@ -24,15 +26,18 @@ from backend.app.db.models import (
     ImageLayerORM,
     ImageLayerSetORM,
     ImagePromptVersionORM,
+    LoginThrottleORM,
     ProjectORM,
     StoryboardShotORM,
     TextArtifactORM,
-    ToolTaskORM,
     ToolTaskInputAssetORM,
+    ToolTaskORM,
+    UserORM,
 )
 from backend.app.db.session import get_engine, make_session_factory
 from backend.app.schemas import (
     AIGC_GENERATED_MEDIA_NAMING_MODEL,
+    USER_DEFINED_ASSET_NAME_SCHEME,
     AigcAssetDirection,
     AigcPipeline,
     AigcPipelineAssetReference,
@@ -43,13 +48,13 @@ from backend.app.schemas import (
     AigcPipelineRunMode,
     AigcPipelineRunNode,
     AigcPipelineRunStatus,
-    AigcRunNodeStatus,
     AigcPipelineTaskAssetReference,
     AigcPipelineTaskAttempt,
     AigcPipelineTemplate,
     AigcPipelineTemplateCreate,
     AigcPipelineTemplateUpdate,
     AigcPipelineUpdate,
+    AigcRunNodeStatus,
     AigcTaskError,
     AigcTaskMetrics,
     AigcTaskResult,
@@ -68,15 +73,15 @@ from backend.app.schemas import (
     CharacterCardCreate,
     GenerationTask,
     GenerationTaskCreate,
-    ImagePromptVersion,
-    ImagePromptVersionCreate,
+    ImageInputNode,
     ImageLayer,
     ImageLayerCreate,
     ImageLayerSet,
     ImageLayerSetCreate,
     ImageLayerUpdate,
-    ImageInputNode,
     ImageNode,
+    ImagePromptVersion,
+    ImagePromptVersionCreate,
     MultiTrackEditNode,
     MultiTrackSubtitleElement,
     Project,
@@ -89,45 +94,48 @@ from backend.app.schemas import (
     StoryboardShot,
     StoryboardShotCreate,
     StoryboardShotVideoConfigUpdate,
-    TaskError,
     TargetLanguage,
+    TaskError,
     TextArtifact,
     TextArtifactCreate,
+    ToolAssetRole,
     ToolTask,
     ToolTaskCreate,
     ToolTaskError,
     ToolTaskInputAsset,
-    ToolAssetRole,
-    USER_DEFINED_ASSET_NAME_SCHEME,
     VideoInputNode,
     VideoNode,
 )
+from backend.app.schemas.auth import AuthSession, UserRecord, UserRole
+from backend.app.schemas.brief import Brief
+from backend.app.schemas.common import utc_now
+from backend.app.schemas.enums import Stage, Status, ToolTaskType
 from backend.app.services.aigc_asset_naming import (
     aigc_generated_media_name_target_node_ids,
     aigc_generated_output_metadata,
     aigc_node_display_name,
 )
-from backend.app.schemas.brief import Brief
-from backend.app.schemas.common import utc_now
-from backend.app.schemas.enums import Stage, Status, ToolTaskType
 from backend.app.video_prompt import (
     build_merged_shot_video_prompt,
     expand_atomic_shots,
 )
 
-from .base import (
-    ActiveRunConflictError,
-    AigcPipelineThumbnailOutput,
-    AssetReferenceConflictError,
-    NotFoundError,
-    PipelineRunConflictError,
-    RevisionConflictError,
-    multitrack_subtitle_asset_slot,
-)
 from .aigc_json_parser import (
     JsonParserMaterializationError,
     detach_removed_json_parser_edges,
     materialize_json_parser_definition,
+)
+from .base import (
+    ActiveRunConflictError,
+    AigcPipelineThumbnailOutput,
+    AssetReferenceConflictError,
+    LastAdminError,
+    NotFoundError,
+    PipelineRunConflictError,
+    RevisionConflictError,
+    SetupCompletedError,
+    UserConflictError,
+    multitrack_subtitle_asset_slot,
 )
 
 ACTIVE_AIGC_RUN_STATUSES = frozenset(
@@ -143,6 +151,293 @@ class MySQLRepository:
 
     def __init__(self, session_factory: sessionmaker[Session] | None = None) -> None:
         self._session_factory = session_factory or make_session_factory(get_engine())
+
+    def count_users(self) -> int:
+        with self._session_factory() as session:
+            return session.scalar(select(func.count()).select_from(UserORM)) or 0
+
+    def create_initial_admin(
+        self,
+        user: UserRecord,
+        auth_session: AuthSession | None = None,
+    ) -> UserRecord:
+        try:
+            with self._session_factory.begin() as session:
+                existing = session.scalar(select(UserORM.id).limit(1).with_for_update())
+                if existing is not None:
+                    raise SetupCompletedError("system initialization is complete")
+                if user.role != UserRole.ADMIN:
+                    raise ValueError("initial user must be an admin")
+                orm_user = self._user_to_orm(user)
+                orm_user.initialization_key = "initial-admin"
+                session.add(orm_user)
+                session.flush()
+                if auth_session is not None:
+                    session.add(AuthSessionORM(**auth_session.model_dump()))
+                    session.flush()
+                return self._user_from_orm(orm_user)
+        except IntegrityError as exc:
+            raise SetupCompletedError("system initialization is complete") from exc
+
+    def create_user(self, user: UserRecord) -> UserRecord:
+        try:
+            with self._session_factory.begin() as session:
+                orm_user = self._user_to_orm(user)
+                session.add(orm_user)
+                session.flush()
+                return self._user_from_orm(orm_user)
+        except IntegrityError as exc:
+            raise UserConflictError("username already exists") from exc
+
+    def get_user(self, user_id: str) -> UserRecord:
+        with self._session_factory() as session:
+            user = session.get(UserORM, user_id)
+            if user is None:
+                raise NotFoundError(f"user not found: {user_id}")
+            return self._user_from_orm(user)
+
+    def get_user_by_username(self, username: str) -> UserRecord | None:
+        with self._session_factory() as session:
+            user = session.scalar(select(UserORM).where(UserORM.username == username))
+            return self._user_from_orm(user) if user is not None else None
+
+    def list_users(self) -> list[UserRecord]:
+        with self._session_factory() as session:
+            users = session.scalars(
+                select(UserORM).order_by(UserORM.created_at, UserORM.id)
+            ).all()
+            return [self._user_from_orm(user) for user in users]
+
+    def update_user_login(
+        self,
+        user_id: str,
+        *,
+        logged_in_at: datetime,
+    ) -> UserRecord:
+        with self._session_factory.begin() as session:
+            user = self._require_user(session, user_id)
+            user.last_login_at = logged_in_at
+            session.flush()
+            return self._user_from_orm(user)
+
+    def update_user_password(
+        self,
+        user_id: str,
+        *,
+        password_hash: str,
+        must_change_password: bool,
+        updated_at: datetime,
+    ) -> UserRecord:
+        with self._session_factory.begin() as session:
+            user = self._require_user(session, user_id)
+            user.password_hash = password_hash
+            user.must_change_password = must_change_password
+            user.updated_at = updated_at
+            session.flush()
+            return self._user_from_orm(user)
+
+    def update_user_role(
+        self,
+        user_id: str,
+        *,
+        role: UserRole,
+        updated_at: datetime,
+    ) -> UserRecord:
+        with self._session_factory.begin() as session:
+            user = self._require_user(session, user_id, for_update=True)
+            if (
+                user.role == UserRole.ADMIN
+                and user.is_enabled
+                and role != UserRole.ADMIN
+                and self._enabled_admin_count(session) == 1
+            ):
+                raise LastAdminError("at least one enabled admin is required")
+            user.role = role
+            user.updated_at = updated_at
+            session.flush()
+            return self._user_from_orm(user)
+
+    def update_user_status(
+        self,
+        user_id: str,
+        *,
+        is_enabled: bool,
+        updated_at: datetime,
+    ) -> UserRecord:
+        with self._session_factory.begin() as session:
+            user = self._require_user(session, user_id, for_update=True)
+            if (
+                user.role == UserRole.ADMIN
+                and user.is_enabled
+                and not is_enabled
+                and self._enabled_admin_count(session) == 1
+            ):
+                raise LastAdminError("at least one enabled admin is required")
+            user.is_enabled = is_enabled
+            user.updated_at = updated_at
+            session.flush()
+            return self._user_from_orm(user)
+
+    def create_auth_session(self, auth_session: AuthSession) -> AuthSession:
+        try:
+            with self._session_factory.begin() as session:
+                orm_session = AuthSessionORM(**auth_session.model_dump())
+                session.add(orm_session)
+                session.flush()
+                return self._auth_session_from_orm(orm_session)
+        except IntegrityError as exc:
+            raise UserConflictError("session token digest already exists") from exc
+
+    def get_auth_session_by_digest(
+        self,
+        token_digest: str,
+    ) -> AuthSession | None:
+        with self._session_factory() as session:
+            auth_session = session.scalar(
+                select(AuthSessionORM).where(
+                    AuthSessionORM.token_digest == token_digest
+                )
+            )
+            return (
+                self._auth_session_from_orm(auth_session)
+                if auth_session is not None
+                else None
+            )
+
+    def touch_auth_session(
+        self,
+        session_id: str,
+        *,
+        last_activity_at: datetime,
+        idle_expires_at: datetime,
+    ) -> AuthSession:
+        with self._session_factory.begin() as session:
+            session.execute(
+                update(AuthSessionORM)
+                .where(
+                    AuthSessionORM.id == session_id,
+                    AuthSessionORM.revoked_at.is_(None),
+                    AuthSessionORM.last_activity_at < last_activity_at,
+                )
+                .values(
+                    last_activity_at=last_activity_at,
+                    idle_expires_at=idle_expires_at,
+                )
+            )
+            auth_session = session.get(
+                AuthSessionORM,
+                session_id,
+                populate_existing=True,
+            )
+            if auth_session is None or auth_session.revoked_at is not None:
+                raise NotFoundError(f"auth session not found: {session_id}")
+            return self._auth_session_from_orm(auth_session)
+
+    def revoke_auth_session(
+        self,
+        session_id: str,
+        *,
+        revoked_at: datetime,
+    ) -> None:
+        with self._session_factory.begin() as session:
+            session.execute(
+                update(AuthSessionORM)
+                .where(
+                    AuthSessionORM.id == session_id,
+                    AuthSessionORM.revoked_at.is_(None),
+                )
+                .values(revoked_at=revoked_at)
+            )
+
+    def revoke_user_sessions(
+        self,
+        user_id: str,
+        *,
+        revoked_at: datetime,
+        exclude_session_id: str | None = None,
+    ) -> None:
+        conditions = [
+            AuthSessionORM.user_id == user_id,
+            AuthSessionORM.revoked_at.is_(None),
+        ]
+        if exclude_session_id is not None:
+            conditions.append(AuthSessionORM.id != exclude_session_id)
+        with self._session_factory.begin() as session:
+            session.execute(
+                update(AuthSessionORM).where(*conditions).values(revoked_at=revoked_at)
+            )
+
+    def get_login_failure_count(
+        self,
+        username: str,
+        source_digest: str,
+        *,
+        window_started_after: datetime,
+    ) -> int:
+        with self._session_factory() as session:
+            throttle = session.get(LoginThrottleORM, (username, source_digest))
+            if (
+                throttle is None
+                or _as_utc(throttle.window_started_at) < window_started_after
+            ):
+                return 0
+            return throttle.failed_count
+
+    def record_login_failure(
+        self,
+        username: str,
+        source_digest: str,
+        *,
+        failed_at: datetime,
+        window_started_after: datetime,
+    ) -> int:
+        for attempt in range(2):
+            try:
+                with self._session_factory.begin() as session:
+                    throttle = session.get(
+                        LoginThrottleORM,
+                        (username, source_digest),
+                        with_for_update=True,
+                    )
+                    if (
+                        throttle is None
+                        or _as_utc(throttle.window_started_at)
+                        < window_started_after
+                    ):
+                        if throttle is None:
+                            throttle = LoginThrottleORM(
+                                username=username,
+                                source_digest=source_digest,
+                                window_started_at=failed_at,
+                                failed_count=1,
+                                updated_at=failed_at,
+                            )
+                            session.add(throttle)
+                        else:
+                            throttle.window_started_at = failed_at
+                            throttle.failed_count = 1
+                            throttle.updated_at = failed_at
+                    else:
+                        throttle.failed_count += 1
+                        throttle.updated_at = failed_at
+                    session.flush()
+                    return throttle.failed_count
+            except IntegrityError:
+                if attempt == 1:
+                    raise
+                # A concurrent first failure inserted the composite-key row.
+                # Retry so the row can be locked and incremented.
+                continue
+        raise RuntimeError("unreachable login throttle retry state")
+
+    def clear_login_failures(self, username: str, source_digest: str) -> None:
+        with self._session_factory.begin() as session:
+            session.execute(
+                delete(LoginThrottleORM).where(
+                    LoginThrottleORM.username == username,
+                    LoginThrottleORM.source_digest == source_digest,
+                )
+            )
 
     def create_aigc_template(
         self,
@@ -248,9 +543,7 @@ class MySQLRepository:
                     raise RevisionConflictError(
                         "AIGC source template revision conflict"
                     )
-            references = self._aigc_asset_references_for_pipeline(
-                session, pipeline
-            )
+            references = self._aigc_asset_references_for_pipeline(session, pipeline)
             orm_pipeline = AigcPipelineORM(
                 id=pipeline.id,
                 name=pipeline.name,
@@ -291,9 +584,7 @@ class MySQLRepository:
 
     def list_aigc_pipelines(self, q: str | None = None) -> list[AigcPipeline]:
         keyword = (q or "").strip()
-        statement = select(AigcPipelineORM).where(
-            AigcPipelineORM.deleted_at.is_(None)
-        )
+        statement = select(AigcPipelineORM).where(AigcPipelineORM.deleted_at.is_(None))
         if keyword:
             statement = statement.where(
                 AigcPipelineORM.name.icontains(keyword, autoescape=True)
@@ -341,9 +632,7 @@ class MySQLRepository:
                 created_at=pipeline.created_at,
                 updated_at=utc_now(),
             )
-            references = self._aigc_asset_references_for_pipeline(
-                session, candidate
-            )
+            references = self._aigc_asset_references_for_pipeline(session, candidate)
             pipeline.name = candidate.name
             pipeline.description = candidate.description
             pipeline.definition_json = candidate.definition.model_dump(
@@ -472,8 +761,9 @@ class MySQLRepository:
             if pipeline is None:
                 raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
             runs = session.scalars(
-                select(AigcPipelineRunORM)
-                .where(AigcPipelineRunORM.pipeline_id == pipeline_id)
+                select(AigcPipelineRunORM).where(
+                    AigcPipelineRunORM.pipeline_id == pipeline_id
+                )
             ).all()
             if any(
                 run.status
@@ -562,8 +852,7 @@ class MySQLRepository:
             ):
                 raise RevisionConflictError("AIGC pipeline revision conflict")
             active_runs = session.scalars(
-                select(AigcPipelineRunORM)
-                .where(
+                select(AigcPipelineRunORM).where(
                     AigcPipelineRunORM.pipeline_id == run.pipeline_id,
                     AigcPipelineRunORM.status.in_(ACTIVE_AIGC_RUN_STATUSES),
                 )
@@ -581,9 +870,7 @@ class MySQLRepository:
                     start_node_id=active_run.start_node_id,
                 )
                 if candidate_scope & active_scope:
-                    raise ActiveRunConflictError(
-                        "AIGC flow already has an active run"
-                    )
+                    raise ActiveRunConflictError("AIGC flow already has an active run")
             run_number = (
                 session.scalar(
                     select(func.max(AigcPipelineRunORM.run_number)).where(
@@ -825,9 +1112,7 @@ class MySQLRepository:
                 retry_of_task_id is not None
                 and session.get(AigcPipelineTaskORM, retry_of_task_id) is None
             ):
-                raise NotFoundError(
-                    f"AIGC retry task not found: {retry_of_task_id}"
-                )
+                raise NotFoundError(f"AIGC retry task not found: {retry_of_task_id}")
             attempt = (
                 session.scalar(
                     select(func.max(AigcPipelineTaskORM.attempt)).where(
@@ -1000,10 +1285,14 @@ class MySQLRepository:
             final_result = result if accepted else AigcTaskResult()
             now = utc_now()
             task.status = final_status
-            task.progress = 100 if final_status == AigcTaskStatus.SUCCEEDED else task.progress
+            task.progress = (
+                100 if final_status == AigcTaskStatus.SUCCEEDED else task.progress
+            )
             task.result_json = final_result.model_dump(mode="json")
             task.error_json = (
-                error.model_dump(mode="json") if error is not None and accepted else None
+                error.model_dump(mode="json")
+                if error is not None and accepted
+                else None
             )
             task.metrics_json = metrics.model_dump(mode="json")
             task.finished_at = now
@@ -1098,8 +1387,7 @@ class MySQLRepository:
                 select(AigcPipelineTaskAssetORM)
                 .where(
                     AigcPipelineTaskAssetORM.task_id == task_id,
-                    AigcPipelineTaskAssetORM.direction
-                    == AigcAssetDirection.OUTPUT,
+                    AigcPipelineTaskAssetORM.direction == AigcAssetDirection.OUTPUT,
                 )
                 .order_by(
                     AigcPipelineTaskAssetORM.slot,
@@ -1316,9 +1604,7 @@ class MySQLRepository:
         with self._session_factory.begin() as session:
             for reference in items:
                 if session.get(AigcPipelineTaskORM, reference.task_id) is None:
-                    raise NotFoundError(
-                        f"AIGC task not found: {reference.task_id}"
-                    )
+                    raise NotFoundError(f"AIGC task not found: {reference.task_id}")
                 self._require_asset(session, reference.asset_id)
                 session.add(
                     AigcPipelineTaskAssetORM(
@@ -1412,10 +1698,9 @@ class MySQLRepository:
                     lease_expires_at=now + timedelta(seconds=lease_seconds),
                 )
                 session.add(lease)
-            elif (
-                lease.owner_id != owner_id
-                and self._as_utc(lease.lease_expires_at) > self._as_utc(now)
-            ):
+            elif lease.owner_id != owner_id and self._as_utc(
+                lease.lease_expires_at
+            ) > self._as_utc(now):
                 return None
             else:
                 if lease.owner_id != owner_id:
@@ -1459,9 +1744,7 @@ class MySQLRepository:
             project_type=data.project_type,
             brief=brief,
             current_stage=(
-                Stage.IMAGE
-                if data.project_type.value == "image_asset"
-                else Stage.BRIEF
+                Stage.IMAGE if data.project_type.value == "image_asset" else Stage.BRIEF
             ),
         )
 
@@ -1626,8 +1909,7 @@ class MySQLRepository:
                 .order_by(ImagePromptVersionORM.version.desc())
             ).all()
             return [
-                self._image_prompt_version_from_orm(version)
-                for version in versions
+                self._image_prompt_version_from_orm(version) for version in versions
             ]
 
     def mark_image_prompt_stale(self, project_id: str) -> Project:
@@ -1692,7 +1974,8 @@ class MySQLRepository:
             asset = self._require_project_asset(session, project_id, asset_id)
             if (
                 asset.asset_role != AssetRole.PUBLIC
-                or asset.type not in {AssetType.GENERATED_IMAGE, AssetType.UPLOADED_IMAGE}
+                or asset.type
+                not in {AssetType.GENERATED_IMAGE, AssetType.UPLOADED_IMAGE}
                 or asset.status != Status.SUCCEEDED
             ):
                 raise ValueError("asset is not an eligible current image")
@@ -1794,9 +2077,7 @@ class MySQLRepository:
                     GenerationTaskORM.project_id == task.project_id,
                     GenerationTaskORM.stage == task.stage,
                     GenerationTaskORM.input_hash == task.input_hash,
-                    GenerationTaskORM.status.in_(
-                        [Status.QUEUED, Status.RUNNING]
-                    ),
+                    GenerationTaskORM.status.in_([Status.QUEUED, Status.RUNNING]),
                 )
                 .order_by(GenerationTaskORM.created_at)
                 .limit(1)
@@ -1944,7 +2225,9 @@ class MySQLRepository:
                 for item in session.scalars(
                     select(ToolTaskInputAssetORM)
                     .where(ToolTaskInputAssetORM.task_id == task_id)
-                    .order_by(ToolTaskInputAssetORM.created_at, ToolTaskInputAssetORM.asset_id)
+                    .order_by(
+                        ToolTaskInputAssetORM.created_at, ToolTaskInputAssetORM.asset_id
+                    )
                 ).all()
             ]
 
@@ -2007,7 +2290,9 @@ class MySQLRepository:
     def create_assets(self, items: Iterable[AssetCreate]) -> list[Asset]:
         assets = [Asset(**item.model_dump()) for item in items]
         with self._session_factory.begin() as session:
-            for project_id in {asset.project_id for asset in assets if asset.project_id}:
+            for project_id in {
+                asset.project_id for asset in assets if asset.project_id
+            }:
                 self._require_project(session, project_id)
             for tool_task_id in {
                 asset.tool_task_id for asset in assets if asset.tool_task_id
@@ -2037,7 +2322,9 @@ class MySQLRepository:
                 for asset in assets
             ]
             session.add_all(orm_assets)
-            for project_id in {asset.project_id for asset in assets if asset.project_id}:
+            for project_id in {
+                asset.project_id for asset in assets if asset.project_id
+            }:
                 self._touch_project(session, project_id)
             session.flush()
             return [self._asset_from_orm(asset) for asset in orm_assets]
@@ -2053,8 +2340,7 @@ class MySQLRepository:
         if asset.tool_asset_role != ToolAssetRole.OUTPUT:
             raise ValueError("AIGC output asset must use the output role")
         if not any(
-            item.direction == AigcAssetDirection.OUTPUT
-            and item.asset_id == asset.id
+            item.direction == AigcAssetDirection.OUTPUT and item.asset_id == asset.id
             for item in items
         ):
             raise ValueError("AIGC output reference is required")
@@ -2085,9 +2371,7 @@ class MySQLRepository:
                 existing = session.get(AigcPipelineTaskAssetORM, key)
                 if existing is not None:
                     if existing.asset_id != item.asset_id:
-                        raise ValueError(
-                            "AIGC task asset reference already exists"
-                        )
+                        raise ValueError("AIGC task asset reference already exists")
                     continue
                 new_references.append(item)
 
@@ -2223,7 +2507,8 @@ class MySQLRepository:
             )
             if (
                 source.asset_role != AssetRole.PUBLIC
-                or source.type not in {AssetType.GENERATED_IMAGE, AssetType.UPLOADED_IMAGE}
+                or source.type
+                not in {AssetType.GENERATED_IMAGE, AssetType.UPLOADED_IMAGE}
                 or source.status != Status.SUCCEEDED
             ):
                 raise ValueError("source asset is not a succeeded public image")
@@ -2293,8 +2578,7 @@ class MySQLRepository:
                 .order_by(ImageLayerSetORM.created_at, ImageLayerSetORM.id)
             ).all()
             return [
-                self._image_layer_set_from_orm(layer_set)
-                for layer_set in layer_sets
+                self._image_layer_set_from_orm(layer_set) for layer_set in layer_sets
             ]
 
     def update_image_layer_set(
@@ -2321,11 +2605,9 @@ class MySQLRepository:
                 raise NotFoundError(f"image layer set not found: {set_id}")
             if layer_set.revision != expected_revision:
                 raise RevisionConflictError("image layer set revision conflict")
-            if (
-                len(updates) != len(layer_set.layers)
-                or {item.id for item in updates}
-                != {item.id for item in layer_set.layers}
-            ):
+            if len(updates) != len(layer_set.layers) or {
+                item.id for item in updates
+            } != {item.id for item in layer_set.layers}:
                 raise ValueError("all image layers must be updated exactly once")
             update_by_id = {item.id: item for item in updates}
             for offset, layer in enumerate(layer_set.layers, start=1):
@@ -2345,24 +2627,38 @@ class MySQLRepository:
             return self._image_layer_set_from_orm(layer_set)
 
     def replace_image_layer_asset(
-        self, project_id: str, set_id: str, *, expected_revision: int,
-        layer_id: str, asset: AssetCreate,
+        self,
+        project_id: str,
+        set_id: str,
+        *,
+        expected_revision: int,
+        layer_id: str,
+        asset: AssetCreate,
     ) -> ImageLayerSet:
         with self._session_factory.begin() as session:
             self._require_project(session, project_id)
             layer_set = session.scalar(
-                select(ImageLayerSetORM).options(selectinload(ImageLayerSetORM.layers))
-                .where(ImageLayerSetORM.id == set_id, ImageLayerSetORM.project_id == project_id)
+                select(ImageLayerSetORM)
+                .options(selectinload(ImageLayerSetORM.layers))
+                .where(
+                    ImageLayerSetORM.id == set_id,
+                    ImageLayerSetORM.project_id == project_id,
+                )
                 .with_for_update()
             )
             if layer_set is None:
                 raise NotFoundError(f"image layer set not found: {set_id}")
             if layer_set.revision != expected_revision:
                 raise RevisionConflictError("image layer set revision conflict")
-            layer = next((item for item in layer_set.layers if item.id == layer_id), None)
+            layer = next(
+                (item for item in layer_set.layers if item.id == layer_id), None
+            )
             if layer is None:
                 raise ValueError("image layer not found")
-            if asset.project_id != project_id or asset.asset_role != AssetRole.INTERNAL_LAYER:
+            if (
+                asset.project_id != project_id
+                or asset.asset_role != AssetRole.INTERNAL_LAYER
+            ):
                 raise ValueError("replacement must be an internal layer asset")
             orm_asset = session.get(AssetORM, asset.id)
             if orm_asset is None:
@@ -2469,9 +2765,8 @@ class MySQLRepository:
     def rename_asset(self, asset_id: str, *, name: str) -> Asset:
         with self._session_factory.begin() as session:
             asset = self._require_asset(session, asset_id)
-            if (
-                asset.asset_role != AssetRole.PUBLIC
-                or (asset.project_id is None and asset.tool_asset_role is None)
+            if asset.asset_role != AssetRole.PUBLIC or (
+                asset.project_id is None and asset.tool_asset_role is None
             ):
                 raise NotFoundError(f"asset not found: {asset_id}")
             asset.metadata_json = {
@@ -2888,9 +3183,7 @@ class MySQLRepository:
                 shot.visual_prompt for shot in ordered if shot.visual_prompt
             ]
             narrations = [shot.narration for shot in ordered if shot.narration]
-            selected_models = [
-                self._storyboard_shot_from_orm(shot) for shot in ordered
-            ]
+            selected_models = [self._storyboard_shot_from_orm(shot) for shot in ordered]
             atomic_snapshots = [
                 StoryboardAtomicShotSnapshot(
                     id=source.id,
@@ -2911,17 +3204,13 @@ class MySQLRepository:
 
             primary = ordered[0]
             title_prefix = (
-                "Shot"
-                if project.brief.target_language == TargetLanguage.EN
-                else "镜头"
+                "Shot" if project.brief.target_language == TargetLanguage.EN else "镜头"
             )
             primary.title = f"{title_prefix} {indices[0]}-{indices[-1]}"
             primary.description = "\n".join(descriptions)
             primary.visual_prompt = "\n".join(visual_prompts)
             primary.narration = "\n".join(narrations) if narrations else None
-            primary.duration_seconds = sum(
-                shot.duration_seconds for shot in ordered
-            )
+            primary.duration_seconds = sum(shot.duration_seconds for shot in ordered)
             primary.video_prompt = merged_video_prompt
             primary.reference_image_asset_ids = []
             primary.reference_video_asset_ids = []
@@ -2969,7 +3258,9 @@ class MySQLRepository:
                 for item in (merged.merge_source_shots or [])
             ]
             if not snapshots:
-                raise ValueError("storyboard shot does not have an atomic merge snapshot")
+                raise ValueError(
+                    "storyboard shot does not have an atomic merge snapshot"
+                )
 
             merged_index = merged.index
             session.delete(merged)
@@ -2981,8 +3272,7 @@ class MySQLRepository:
                 .order_by(StoryboardShotORM.index, StoryboardShotORM.created_at)
             ).all()
             original_indices = {
-                remaining_shot.id: remaining_shot.index
-                for remaining_shot in remaining
+                remaining_shot.id: remaining_shot.index for remaining_shot in remaining
             }
             for index, remaining_shot in enumerate(remaining, start=1):
                 remaining_shot.index = -index
@@ -3026,10 +3316,7 @@ class MySQLRepository:
 
             self._touch_project(session, project_id)
             session.flush()
-            return [
-                self._storyboard_shot_from_orm(shot)
-                for shot in restored_orm
-            ]
+            return [self._storyboard_shot_from_orm(shot) for shot in restored_orm]
 
     def create_text_artifact(self, data: TextArtifactCreate) -> TextArtifact:
         artifact = TextArtifact(**data.model_dump())
@@ -3089,9 +3376,7 @@ class MySQLRepository:
                 .limit(1)
             )
             return (
-                self._text_artifact_from_orm(artifact)
-                if artifact is not None
-                else None
+                self._text_artifact_from_orm(artifact) if artifact is not None else None
             )
 
     def update_text_artifact(
@@ -3353,7 +3638,9 @@ class MySQLRepository:
             else node
             for node in current.definition.nodes
         ]
-        missing_ids = target_ids.difference(node.id for node in current.definition.nodes)
+        missing_ids = target_ids.difference(
+            node.id for node in current.definition.nodes
+        )
         if missing_ids:
             raise NotFoundError(
                 f"AIGC pipeline nodes not found: {sorted(missing_ids)!r}"
@@ -3415,9 +3702,7 @@ class MySQLRepository:
             definition_snapshot=run.definition_snapshot,
             input_snapshot=run.input_snapshot or {},
             error=(
-                AigcTaskError.model_validate(run.error_json)
-                if run.error_json
-                else None
+                AigcTaskError.model_validate(run.error_json) if run.error_json else None
             ),
             cancellation_requested=run.cancellation_requested,
             created_at=run.created_at,
@@ -3484,9 +3769,7 @@ class MySQLRepository:
                 if node.error_json
                 else None
             ),
-            attempts=[
-                cls._aigc_task_from_orm(session, task) for task in attempts
-            ],
+            attempts=[cls._aigc_task_from_orm(session, task) for task in attempts],
         )
 
     @classmethod
@@ -3513,10 +3796,7 @@ class MySQLRepository:
         )
         return AigcPipelineRunDetail(
             run=cls._aigc_run_from_orm(run),
-            nodes=[
-                cls._aigc_run_node_from_orm(session, node)
-                for node in sorted_nodes
-            ],
+            nodes=[cls._aigc_run_node_from_orm(session, node) for node in sorted_nodes],
         )
 
     @staticmethod
@@ -3946,9 +4226,7 @@ class MySQLRepository:
             status=shot.status,
             image_asset_id=shot.image_asset_id,
             first_frame_asset_id=shot.first_frame_asset_id,
-            first_frame_source_video_asset_id=(
-                shot.first_frame_source_video_asset_id
-            ),
+            first_frame_source_video_asset_id=(shot.first_frame_source_video_asset_id),
             video_asset_id=shot.video_asset_id,
             video_prompt=shot.video_prompt,
             reference_image_asset_ids=shot.reference_image_asset_ids or [],
@@ -3977,6 +4255,77 @@ class MySQLRepository:
         )
 
     @staticmethod
+    def _require_user(
+        session: Session,
+        user_id: str,
+        *,
+        for_update: bool = False,
+    ) -> UserORM:
+        statement = select(UserORM).where(UserORM.id == user_id)
+        if for_update:
+            statement = statement.with_for_update()
+        user = session.scalar(statement)
+        if user is None:
+            raise NotFoundError(f"user not found: {user_id}")
+        return user
+
+    @staticmethod
+    def _enabled_admin_count(session: Session) -> int:
+        return len(
+            session.scalars(
+                select(UserORM.id)
+                .where(
+                    UserORM.role == UserRole.ADMIN,
+                    UserORM.is_enabled.is_(True),
+                )
+                .with_for_update()
+            ).all()
+        )
+
+    @staticmethod
+    def _user_to_orm(user: UserRecord) -> UserORM:
+        return UserORM(
+            id=user.id,
+            username=user.username,
+            display_name=user.display_name,
+            password_hash=user.password_hash,
+            role=user.role,
+            is_enabled=user.is_enabled,
+            must_change_password=user.must_change_password,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            last_login_at=user.last_login_at,
+        )
+
+    @staticmethod
+    def _user_from_orm(user: UserORM) -> UserRecord:
+        return UserRecord(
+            id=user.id,
+            username=user.username,
+            display_name=user.display_name,
+            password_hash=user.password_hash,
+            role=user.role,
+            is_enabled=user.is_enabled,
+            must_change_password=user.must_change_password,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            last_login_at=user.last_login_at,
+        )
+
+    @staticmethod
+    def _auth_session_from_orm(auth_session: AuthSessionORM) -> AuthSession:
+        return AuthSession(
+            id=auth_session.id,
+            user_id=auth_session.user_id,
+            token_digest=auth_session.token_digest,
+            created_at=auth_session.created_at,
+            last_activity_at=auth_session.last_activity_at,
+            idle_expires_at=auth_session.idle_expires_at,
+            absolute_expires_at=auth_session.absolute_expires_at,
+            revoked_at=auth_session.revoked_at,
+        )
+
+    @staticmethod
     def _default_project_name(brief: Brief) -> str:
         if brief.product_name:
             return brief.product_name
@@ -3990,3 +4339,9 @@ def _reference_field_name(kind: ReferenceAssetKind) -> str:
         ReferenceAssetKind.VIDEO: "reference_video_asset_ids",
         ReferenceAssetKind.AUDIO: "reference_audio_asset_ids",
     }[kind]
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)

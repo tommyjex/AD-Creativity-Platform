@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-import hashlib
 from typing import Protocol
 
 from backend.app.schemas import (
@@ -35,12 +35,12 @@ from backend.app.schemas import (
     CharacterCardCreate,
     GenerationTask,
     GenerationTaskCreate,
-    ImagePromptVersion,
-    ImagePromptVersionCreate,
     ImageLayerCreate,
     ImageLayerSet,
     ImageLayerSetCreate,
     ImageLayerUpdate,
+    ImagePromptVersion,
+    ImagePromptVersionCreate,
     Project,
     ProjectCreate,
     ProjectListItem,
@@ -54,6 +54,7 @@ from backend.app.schemas import (
     ToolTaskCreate,
     ToolTaskInputAsset,
 )
+from backend.app.schemas.auth import AuthSession, UserRecord, UserRole
 from backend.app.schemas.enums import ReferenceAssetKind, Stage, Status, ToolTaskType
 
 
@@ -77,6 +78,18 @@ class PipelineRunConflictError(RuntimeError):
     """Raised when a pipeline is still referenced by an AIGC run."""
 
 
+class UserConflictError(RuntimeError):
+    """Raised when a normalized username already exists."""
+
+
+class SetupCompletedError(RuntimeError):
+    """Raised when first-admin initialization has already completed."""
+
+
+class LastAdminError(RuntimeError):
+    """Raised when an operation would remove the last enabled admin."""
+
+
 @dataclass(frozen=True)
 class AigcPipelineThumbnailOutput:
     pipeline_id: str
@@ -91,6 +104,100 @@ def multitrack_subtitle_asset_slot(track_id: str, element_id: str) -> str:
 
 
 class Repository(Protocol):
+    def count_users(self) -> int: ...
+
+    def create_initial_admin(
+        self,
+        user: UserRecord,
+        auth_session: AuthSession | None = None,
+    ) -> UserRecord: ...
+
+    def create_user(self, user: UserRecord) -> UserRecord: ...
+
+    def get_user(self, user_id: str) -> UserRecord: ...
+
+    def get_user_by_username(self, username: str) -> UserRecord | None: ...
+
+    def list_users(self) -> list[UserRecord]: ...
+
+    def update_user_login(
+        self, user_id: str, *, logged_in_at: datetime
+    ) -> UserRecord: ...
+
+    def update_user_password(
+        self,
+        user_id: str,
+        *,
+        password_hash: str,
+        must_change_password: bool,
+        updated_at: datetime,
+    ) -> UserRecord: ...
+
+    def update_user_role(
+        self,
+        user_id: str,
+        *,
+        role: UserRole,
+        updated_at: datetime,
+    ) -> UserRecord: ...
+
+    def update_user_status(
+        self,
+        user_id: str,
+        *,
+        is_enabled: bool,
+        updated_at: datetime,
+    ) -> UserRecord: ...
+
+    def create_auth_session(self, auth_session: AuthSession) -> AuthSession: ...
+
+    def get_auth_session_by_digest(
+        self,
+        token_digest: str,
+    ) -> AuthSession | None: ...
+
+    def touch_auth_session(
+        self,
+        session_id: str,
+        *,
+        last_activity_at: datetime,
+        idle_expires_at: datetime,
+    ) -> AuthSession: ...
+
+    def revoke_auth_session(
+        self,
+        session_id: str,
+        *,
+        revoked_at: datetime,
+    ) -> None: ...
+
+    def revoke_user_sessions(
+        self,
+        user_id: str,
+        *,
+        revoked_at: datetime,
+        exclude_session_id: str | None = None,
+    ) -> None: ...
+
+    def get_login_failure_count(
+        self,
+        username: str,
+        source_digest: str,
+        *,
+        window_started_after: datetime,
+    ) -> int: ...
+
+    def record_login_failure(
+        self,
+        username: str,
+        source_digest: str,
+        *,
+        failed_at: datetime,
+        window_started_after: datetime,
+    ) -> int: ...
+
+    def clear_login_failures(self, username: str, source_digest: str) -> None: ...
+
     def create_aigc_template(
         self,
         data: AigcPipelineTemplateCreate,

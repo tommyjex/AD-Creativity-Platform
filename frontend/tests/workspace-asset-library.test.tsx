@@ -22,6 +22,11 @@ const apiMocks = vi.hoisted(() => ({
   listToolTasks: vi.fn(),
   renameAsset: vi.fn()
 }));
+const permissionMocks = vi.hoisted(() => ({ canWrite: true }));
+
+vi.mock("@/lib/auth/auth-provider", () => ({
+  useCanWrite: () => permissionMocks.canWrite
+}));
 
 vi.mock("@/lib/api-client", () => ({
   createApiClient: () => apiMocks,
@@ -170,6 +175,7 @@ const toolTask = {
 
 describe("WorkspaceAssetLibrary", () => {
   beforeEach(() => {
+    permissionMocks.canWrite = true;
     apiMocks.deleteAsset.mockReset();
     apiMocks.deleteToolAsset.mockReset();
     apiMocks.listAssets.mockReset();
@@ -177,6 +183,23 @@ describe("WorkspaceAssetLibrary", () => {
     apiMocks.listToolAssets.mockReset();
     apiMocks.listToolTasks.mockReset();
     apiMocks.renameAsset.mockReset();
+  });
+
+  it("keeps viewer previews and downloads while hiding asset mutations", () => {
+    permissionMocks.canWrite = false;
+    render(
+      <WorkspaceAssetLibrary
+        assets={[toolVideoAsset]}
+        filters={{ source: "tools" }}
+        projects={[project]}
+      />
+    );
+
+    expect(screen.getByRole("link", { name: "下载资产" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重命名资产" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "删除资产" })).toBeNull();
+    expect(apiMocks.renameAsset).not.toHaveBeenCalled();
+    expect(apiMocks.deleteToolAsset).not.toHaveBeenCalled();
   });
 
   it("fetches assets without a backend category and keeps sections client-side", async () => {

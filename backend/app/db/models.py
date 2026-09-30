@@ -4,22 +4,22 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
 )
 from sqlalchemy import Enum as SqlEnum
-from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.app.schemas.common import utc_now
 from backend.app.schemas.aigc import (
     AigcAssetDirection,
     AigcPipelineRunMode,
@@ -28,6 +28,8 @@ from backend.app.schemas.aigc import (
     AigcTaskStatus,
     AigcTaskType,
 )
+from backend.app.schemas.auth import UserRole
+from backend.app.schemas.common import utc_now
 from backend.app.schemas.enums import (
     AssetCategory,
     AssetRole,
@@ -57,6 +59,150 @@ def enum_column(
         native_enum=False,
         validate_strings=True,
         **({"length": length} if length is not None else {}),
+    )
+
+
+class UserORM(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), nullable=False)
+    initialization_key: Mapped[Optional[str]] = mapped_column(
+        String(16),
+        nullable=True,
+    )
+    display_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        enum_column(UserRole, length=7),
+        nullable=False,
+    )
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    sessions: Mapped[list[AuthSessionORM]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("username", name="uq_users_username"),
+        UniqueConstraint(
+            "initialization_key",
+            name="uq_users_initialization_key",
+        ),
+    )
+
+
+class AuthSessionORM(Base):
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_digest: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    last_activity_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    idle_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    absolute_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    user: Mapped[UserORM] = relationship(back_populates="sessions")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "token_digest",
+            name="uq_auth_sessions_token_digest",
+        ),
+        Index("ix_auth_sessions_user_revoked", "user_id", "revoked_at"),
+        Index(
+            "ix_auth_sessions_expiration",
+            "idle_expires_at",
+            "absolute_expires_at",
+        ),
+    )
+
+
+class LoginThrottleORM(Base):
+    __tablename__ = "login_throttles"
+
+    username: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    failed_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_login_throttles_window",
+            "window_started_at",
+            "updated_at",
+        ),
+        CheckConstraint(
+            "failed_count >= 0",
+            name="ck_login_throttles_failed_count",
+        ),
     )
 
 
@@ -180,8 +326,12 @@ class BriefORM(Base):
         default=TargetLanguage.ZH,
         server_default=TargetLanguage.ZH.value,
     )
-    target_platform: Mapped[str] = mapped_column(String(64), nullable=False, default="douyin")
-    aspect_ratio: Mapped[str] = mapped_column(String(16), nullable=False, default="9:16")
+    target_platform: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="douyin"
+    )
+    aspect_ratio: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="9:16"
+    )
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     image_purpose: Mapped[Optional[ImagePurpose]] = mapped_column(
         enum_column(ImagePurpose),
@@ -191,7 +341,9 @@ class BriefORM(Base):
     audience: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     product_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    selling_points: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    selling_points: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
 
     project: Mapped[ProjectORM] = relationship(back_populates="brief")
 
@@ -314,6 +466,7 @@ class CharacterCardORM(Base):
 
     project: Mapped[ProjectORM] = relationship(back_populates="character_cards")
     asset: Mapped[Optional[AssetORM]] = relationship(foreign_keys=[asset_id])
+
 
 class StoryboardShotORM(Base):
     __tablename__ = "storyboard_shots"
@@ -451,7 +604,9 @@ class GenerationTaskORM(Base):
         nullable=True,
         index=True,
     )
-    output_asset_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    output_asset_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
     output_text_artifact_id: Mapped[Optional[str]] = mapped_column(
         String(36),
         ForeignKey("text_artifacts.id", ondelete="SET NULL"),
@@ -496,7 +651,9 @@ class ToolTaskORM(Base):
         default=Status.QUEUED,
         index=True,
     )
-    input_snapshot: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    input_snapshot: Mapped[dict[str, object]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     provider_task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     error_code: Mapped[Optional[ErrorCode]] = mapped_column(
         enum_column(ErrorCode),
@@ -601,7 +758,9 @@ class AssetORM(Base):
     )
     stage: Mapped[Optional[Stage]] = mapped_column(enum_column(Stage), nullable=True)
     url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    object_key: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True, index=True)
+    object_key: Mapped[Optional[str]] = mapped_column(
+        String(1024), nullable=True, index=True
+    )
     mime_type: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     source_task_id: Mapped[Optional[str]] = mapped_column(
@@ -700,9 +859,7 @@ class AigcPipelineORM(Base):
         index=True,
     )
 
-    __table_args__ = (
-        CheckConstraint("revision >= 0", name="ck_pipelines_revision"),
-    )
+    __table_args__ = (CheckConstraint("revision >= 0", name="ck_pipelines_revision"),)
 
 
 class AigcPipelineAssetORM(Base):
@@ -755,9 +912,7 @@ class AigcPipelineRunORM(Base):
         default=AigcPipelineRunStatus.QUEUED,
         index=True,
     )
-    definition_snapshot: Mapped[dict[str, object]] = mapped_column(
-        JSON, nullable=False
-    )
+    definition_snapshot: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     input_snapshot: Mapped[dict[str, object]] = mapped_column(
         JSON, nullable=False, default=dict
     )
@@ -775,9 +930,7 @@ class AigcPipelineRunORM(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
-        UniqueConstraint(
-            "pipeline_id", "run_number", name="uq_pipeline_runs_number"
-        ),
+        UniqueConstraint("pipeline_id", "run_number", name="uq_pipeline_runs_number"),
         UniqueConstraint(
             "pipeline_id", "idempotency_key", name="uq_pipeline_runs_idempotency"
         ),
@@ -802,9 +955,7 @@ class AigcPipelineRunNodeORM(Base):
         default=AigcRunNodeStatus.IDLE,
         index=True,
     )
-    current_task_id: Mapped[Optional[str]] = mapped_column(
-        String(36), nullable=True
-    )
+    current_task_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     reused_from_task_id: Mapped[Optional[str]] = mapped_column(
         String(36), nullable=True
     )
@@ -948,9 +1099,7 @@ class AigcPipelineWorkerLeaseORM(Base):
     )
 
     __table_args__ = (
-        CheckConstraint(
-            "fencing_token >= 1", name="ck_pipeline_worker_lease_fencing"
-        ),
+        CheckConstraint("fencing_token >= 1", name="ck_pipeline_worker_lease_fencing"),
     )
 
 

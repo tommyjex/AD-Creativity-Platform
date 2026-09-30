@@ -1,5 +1,6 @@
 import type {
   ApiErrorPayload,
+  AuthUser,
   Asset,
   AssetCategory,
   AssetRenameRequest,
@@ -10,6 +11,8 @@ import type {
   CharacterCard,
   CharacterCardImageGenerationResponse,
   CharacterCardUpdate,
+  ChangePasswordRequest,
+  CreateUserRequest,
   ErrorCode,
   GenerationStreamEvent,
   GenerationStage,
@@ -22,6 +25,7 @@ import type {
   ImageLayerSetDetail,
   ImageLayerSetUpdate,
   ImageToImageGenerationRequest,
+  LoginRequest,
   ImagePromptSuggestion,
   ImagePromptSuggestionRequest,
   ImagePromptVersion,
@@ -33,6 +37,8 @@ import type {
   ProjectUpdate,
   ReferenceAssetKind,
   SetCurrentImageRequest,
+  SetupRequest,
+  SetupStatusResponse,
   Status,
   StoryboardShotGenerateVideoRequest,
   StoryboardShotFirstFrameRequest,
@@ -54,7 +60,8 @@ import type {
   FaceBlurVideoRequest,
   ToolVideoGenerationRequest,
   ToolVideoPromptOptimizeRequest,
-  ToolVideoPromptOptimizeResponse
+  ToolVideoPromptOptimizeResponse,
+  UserRole
 } from "@/lib/api-types";
 import type {
   AigcPage,
@@ -74,8 +81,12 @@ import type {
   AigcTemplateInstantiateRequest
 } from "@/lib/aigc/types";
 import { ERROR_CODES } from "@/lib/api-types";
+import { canClientMutate } from "@/lib/auth/permissions";
 
 const DEFAULT_BACKEND_BASE_URL = "http://localhost:8000";
+
+export const AUTH_UNAUTHORIZED_EVENT = "ad-auth:unauthorized";
+export const AUTH_FORBIDDEN_EVENT = "ad-auth:forbidden";
 
 const STAGE_ENDPOINTS: Record<GenerationStage, string> = {
   story: "story",
@@ -287,6 +298,138 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const defaultHeaders = options.headers;
 
   return {
+    getSetupStatus(requestOptions?: RequestOptions) {
+      return request<SetupStatusResponse>(
+        fetcher,
+        baseUrl,
+        "/api/auth/setup-status",
+        {
+          ...requestOptions,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+        }
+      );
+    },
+
+    setup(payload: SetupRequest, requestOptions?: RequestOptions) {
+      return request<AuthUser>(fetcher, baseUrl, "/api/auth/setup", {
+        ...requestOptions,
+        body: payload,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+        method: "POST"
+      });
+    },
+
+    login(payload: LoginRequest, requestOptions?: RequestOptions) {
+      return request<AuthUser>(fetcher, baseUrl, "/api/auth/login", {
+        ...requestOptions,
+        body: payload,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+        method: "POST"
+      });
+    },
+
+    logout(requestOptions?: RequestOptions) {
+      return request<void>(fetcher, baseUrl, "/api/auth/logout", {
+        ...requestOptions,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+        method: "POST"
+      });
+    },
+
+    getCurrentUser(requestOptions?: RequestOptions) {
+      return request<AuthUser>(fetcher, baseUrl, "/api/auth/me", {
+        ...requestOptions,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    changePassword(
+      payload: ChangePasswordRequest,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AuthUser>(
+        fetcher,
+        baseUrl,
+        "/api/auth/change-password",
+        {
+          ...requestOptions,
+          body: payload,
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "POST"
+        }
+      );
+    },
+
+    listUsers(requestOptions?: RequestOptions) {
+      return request<AuthUser[]>(fetcher, baseUrl, "/api/admin/users", {
+        ...requestOptions,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    createUser(payload: CreateUserRequest, requestOptions?: RequestOptions) {
+      return request<AuthUser>(fetcher, baseUrl, "/api/admin/users", {
+        ...requestOptions,
+        body: payload,
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+        method: "POST"
+      });
+    },
+
+    updateUserRole(
+      userId: string,
+      role: UserRole,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AuthUser>(
+        fetcher,
+        baseUrl,
+        `/api/admin/users/${encodeURIComponent(userId)}/role`,
+        {
+          ...requestOptions,
+          body: { role },
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "PATCH"
+        }
+      );
+    },
+
+    updateUserStatus(
+      userId: string,
+      isEnabled: boolean,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AuthUser>(
+        fetcher,
+        baseUrl,
+        `/api/admin/users/${encodeURIComponent(userId)}/status`,
+        {
+          ...requestOptions,
+          body: { is_enabled: isEnabled },
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "PATCH"
+        }
+      );
+    },
+
+    resetUserPassword(
+      userId: string,
+      password: string,
+      requestOptions?: RequestOptions
+    ) {
+      return request<AuthUser>(
+        fetcher,
+        baseUrl,
+        `/api/admin/users/${encodeURIComponent(userId)}/reset-password`,
+        {
+          ...requestOptions,
+          body: { password },
+          headers: mergeHeaders(defaultHeaders, requestOptions?.headers),
+          method: "POST"
+        }
+      );
+    },
+
     listProjects(
       keywordOrOptions?: string | RequestOptions,
       options?: RequestOptions
@@ -1899,9 +2042,11 @@ async function requestEventStream<T>(
   onEvent: (event: T) => void
 ): Promise<void> {
   const { body, headers, json = true, method = "POST", ...requestOptions } = config;
+  assertClientWritePermission(path, method);
   const response = await fetcher(buildUrl(baseUrl, path), {
     ...requestOptions,
     body: body === undefined ? undefined : json ? JSON.stringify(body) : body as BodyInit,
+    credentials: requestOptions.credentials ?? "same-origin",
     headers: mergeHeaders(
       { Accept: "text/event-stream" },
       body === undefined || !json ? undefined : { "Content-Type": "application/json" },
@@ -1911,6 +2056,7 @@ async function requestEventStream<T>(
   });
 
   if (!response.ok) {
+    dispatchAuthError(response.status);
     throw await parseApiError(response);
   }
   if (!response.body) {
@@ -2032,9 +2178,11 @@ async function request<T>(
   config: RequestConfig = {}
 ): Promise<T> {
   const { body, headers, json = true, method = "GET", ...requestOptions } = config;
+  assertClientWritePermission(path, method);
   const response = await fetcher(buildUrl(baseUrl, path), {
     ...requestOptions,
     body: body === undefined ? undefined : json ? JSON.stringify(body) : body as BodyInit,
+    credentials: requestOptions.credentials ?? "same-origin",
     headers: mergeHeaders(
       body === undefined || !json ? undefined : { "Content-Type": "application/json" },
       headers
@@ -2043,6 +2191,7 @@ async function request<T>(
   });
 
   if (!response.ok) {
+    dispatchAuthError(response.status);
     throw await parseApiError(response);
   }
 
@@ -2051,6 +2200,39 @@ async function request<T>(
   }
 
   return (await response.json()) as T;
+}
+
+function assertClientWritePermission(
+  path: string,
+  method: RequestConfig["method"]
+): void {
+  if (
+    typeof window === "undefined" ||
+    method === "GET" ||
+    path.startsWith("/api/auth/") ||
+    canClientMutate()
+  ) {
+    return;
+  }
+
+  dispatchAuthError(403);
+  throw new ApiError({
+    code: "permission_denied",
+    message: "当前账号仅支持查看，不能执行写操作。",
+    responseBody: null,
+    status: 403
+  });
+}
+
+function dispatchAuthError(status: number): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (status === 401) {
+    window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT));
+  } else if (status === 403) {
+    window.dispatchEvent(new CustomEvent(AUTH_FORBIDDEN_EVENT));
+  }
 }
 
 async function parseApiError(response: Response): Promise<ApiError> {

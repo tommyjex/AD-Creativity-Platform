@@ -4,27 +4,31 @@ from collections.abc import Callable
 from functools import lru_cache
 from weakref import WeakKeyDictionary
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, Request, status
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.db import init_database
 from backend.app.repositories import MySQLRepository, Repository
-from backend.app.services.generation import (
-    ModelArkGenerationService,
-    get_generation_service,
-)
-from backend.app.services.assets import AssetStorageService, get_asset_storage_service
-from backend.app.services.media_inspector import MediaInspector, get_media_inspector
+from backend.app.schemas.auth import UserRole
+from backend.app.services.aigc_executor import AigcPipelineRuntime
+from backend.app.services.aigc_gateway import AigcModelGateway
 from backend.app.services.aigc_pipeline import AigcPipelineService
 from backend.app.services.aigc_pipeline_thumbnail import (
     AigcPipelineThumbnailService,
 )
-from backend.app.services.aigc_executor import AigcPipelineRuntime
-from backend.app.services.aigc_gateway import AigcModelGateway
+from backend.app.services.assets import AssetStorageService, get_asset_storage_service
+from backend.app.services.auth import AuthService, SessionPrincipal
 from backend.app.services.background import BackgroundTaskRunner
 from backend.app.services.composer import VideoComposer, get_video_composer
+from backend.app.services.generation import (
+    ModelArkGenerationService,
+    get_generation_service,
+)
+from backend.app.services.media_inspector import MediaInspector, get_media_inspector
 from backend.app.services.mediakit import (
     AsrSubtitleClient,
+)
+from backend.app.services.mediakit import (
     get_asr_subtitle_client as create_asr_subtitle_client,
 )
 from backend.app.services.mediakit_face_blur import FaceBlurVideoClient
@@ -36,14 +40,110 @@ from backend.app.services.mediakit_video_ocr import MediaKitVideoOcrClient
 from backend.app.services.video_normalizer import VideoNormalizer, get_video_normalizer
 from backend.app.services.workflow import WorkflowService
 
-
 _aigc_runtimes: WeakKeyDictionary[object, AigcPipelineRuntime] = WeakKeyDictionary()
+_auth_services: WeakKeyDictionary[object, AuthService] = WeakKeyDictionary()
 
 
 @lru_cache
 def get_repository() -> Repository:
     init_database()
     return MySQLRepository()
+
+
+def get_auth_service(
+    repository: Repository = Depends(get_repository),
+    settings: Settings = Depends(get_settings),
+) -> AuthService:
+    service = _auth_services.get(repository)
+    if service is None:
+        service = AuthService(repository, settings)
+        _auth_services[repository] = service
+    return service
+
+
+def get_optional_current_principal(
+    request: Request,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> SessionPrincipal | None:
+    token = request.cookies.get("ad_session")
+    return auth_service.authenticate(token)
+
+
+def require_authenticated(
+    principal: SessionPrincipal | None = Depends(get_optional_current_principal),
+) -> SessionPrincipal:
+    if principal is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "authentication_required",
+                "message": "Authentication is required.",
+            },
+            headers={"X-Auth-Clear-Cookie": "1"},
+        )
+    return principal
+
+
+def require_business_access(
+    request: Request,
+    principal: SessionPrincipal = Depends(require_authenticated),
+) -> SessionPrincipal:
+    if principal.user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "password_change_required",
+                "message": "Password change is required.",
+            },
+        )
+    if request.method not in {"GET", "HEAD", "OPTIONS"} and principal.user.role not in {
+        UserRole.ADMIN,
+        UserRole.CREATOR,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "permission_denied",
+                "message": "You do not have permission to perform this action.",
+            },
+        )
+    return principal
+
+
+def require_creator(
+    principal: SessionPrincipal = Depends(require_business_access),
+) -> SessionPrincipal:
+    if principal.user.role not in {UserRole.ADMIN, UserRole.CREATOR}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "permission_denied",
+                "message": "You do not have permission to perform this action.",
+            },
+        )
+    return principal
+
+
+def require_admin(
+    principal: SessionPrincipal = Depends(require_authenticated),
+) -> SessionPrincipal:
+    if principal.user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "password_change_required",
+                "message": "Password change is required.",
+            },
+        )
+    if principal.user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "permission_denied",
+                "message": "Administrator permission is required.",
+            },
+        )
+    return principal
 
 
 def get_workflow_service(
@@ -100,15 +200,15 @@ def get_aigc_pipeline_runtime(
     video_enhancement_client_factory: Callable[
         [], MediaKitVideoEnhancementClient
     ] = Depends(get_video_enhancement_client_factory),
-    face_blur_client_factory: Callable[
-        [], FaceBlurVideoClient
-    ] = Depends(get_face_blur_video_client_factory),
-    video_ocr_client_factory: Callable[
-        [], MediaKitVideoOcrClient
-    ] = Depends(get_video_ocr_client_factory),
-    multitrack_client_factory: Callable[
-        [], MediaKitMultiTrackClient
-    ] = Depends(get_multitrack_client_factory),
+    face_blur_client_factory: Callable[[], FaceBlurVideoClient] = Depends(
+        get_face_blur_video_client_factory
+    ),
+    video_ocr_client_factory: Callable[[], MediaKitVideoOcrClient] = Depends(
+        get_video_ocr_client_factory
+    ),
+    multitrack_client_factory: Callable[[], MediaKitMultiTrackClient] = Depends(
+        get_multitrack_client_factory
+    ),
     settings: Settings = Depends(get_settings),
 ) -> AigcPipelineRuntime:
     runtime = _aigc_runtimes.get(repository)
@@ -121,9 +221,7 @@ def get_aigc_pipeline_runtime(
                 asset_storage,
                 media_inspector=media_inspector,
                 video_timeout_seconds=settings.aigc_video_timeout_seconds,
-                video_enhancement_client_factory=(
-                    video_enhancement_client_factory
-                ),
+                video_enhancement_client_factory=(video_enhancement_client_factory),
                 video_enhancement_poll_interval_seconds=(
                     settings.mediakit_video_enhancement_poll_interval_seconds
                 ),
@@ -134,16 +232,12 @@ def get_aigc_pipeline_runtime(
                 face_blur_poll_interval_seconds=(
                     settings.mediakit_face_blur_poll_interval_seconds
                 ),
-                face_blur_timeout_seconds=(
-                    settings.mediakit_face_blur_timeout_seconds
-                ),
+                face_blur_timeout_seconds=(settings.mediakit_face_blur_timeout_seconds),
                 video_ocr_client_factory=video_ocr_client_factory,
                 video_ocr_poll_interval_seconds=(
                     settings.mediakit_video_ocr_poll_interval_seconds
                 ),
-                video_ocr_timeout_seconds=(
-                    settings.mediakit_video_ocr_timeout_seconds
-                ),
+                video_ocr_timeout_seconds=(settings.mediakit_video_ocr_timeout_seconds),
                 multitrack_client_factory=multitrack_client_factory,
                 multitrack_poll_interval_seconds=(
                     settings.mediakit_multitrack_poll_interval_seconds
@@ -153,12 +247,8 @@ def get_aigc_pipeline_runtime(
                 ),
             ),
             video_concurrency=settings.aigc_video_concurrency,
-            video_enhancement_concurrency=(
-                settings.aigc_video_enhancement_concurrency
-            ),
-            video_face_blur_concurrency=(
-                settings.aigc_video_face_blur_concurrency
-            ),
+            video_enhancement_concurrency=(settings.aigc_video_enhancement_concurrency),
+            video_face_blur_concurrency=(settings.aigc_video_face_blur_concurrency),
             video_subtitle_extraction_concurrency=(
                 settings.aigc_video_subtitle_extraction_concurrency
             ),

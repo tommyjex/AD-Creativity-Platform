@@ -35,12 +35,14 @@ def test_database_initialization_creates_expected_tables(tmp_path) -> None:
     table_names = set(inspect(engine).get_table_names())
     assert table_names == {
         "assets",
+        "auth_sessions",
         "canvas_layouts",
         "character_cards",
         "generation_tasks",
         "image_layers",
         "image_layer_sets",
         "image_prompt_versions",
+        "login_throttles",
         "pipeline_assets",
         "pipeline_run_nodes",
         "pipeline_runs",
@@ -55,9 +57,23 @@ def test_database_initialization_creates_expected_tables(tmp_path) -> None:
         "text_artifacts",
         "tool_task_input_assets",
         "tool_tasks",
+        "users",
     }
     assert table_names == set(Base.metadata.tables)
     inspector = inspect(engine)
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints("users")
+    } >= {"uq_users_username", "uq_users_initialization_key"}
+    assert {
+        index["name"] for index in inspector.get_indexes("auth_sessions")
+    } >= {
+        "ix_auth_sessions_expiration",
+        "ix_auth_sessions_user_revoked",
+    }
+    assert {
+        index["name"] for index in inspector.get_indexes("login_throttles")
+    } >= {"ix_login_throttles_window"}
     assert "deleted_at" in {
         column["name"] for column in inspector.get_columns("projects")
     }
@@ -71,19 +87,21 @@ def test_database_initialization_creates_expected_tables(tmp_path) -> None:
         index["name"] for index in inspector.get_indexes("pipelines")
     }
     brief_columns = {
-        column["name"]: column
-        for column in inspector.get_columns("project_briefs")
+        column["name"]: column for column in inspector.get_columns("project_briefs")
     }
     target_language = brief_columns["target_language"]
     assert target_language["nullable"] is False
     assert str(target_language["default"]).strip("'\"()") == "zh"
-    assert str(
-        next(
-            column
-            for column in inspector.get_columns("pipeline_templates")
-            if column["name"] == "definition_json"
-        )["type"]
-    ).upper() == "JSON"
+    assert (
+        str(
+            next(
+                column
+                for column in inspector.get_columns("pipeline_templates")
+                if column["name"] == "definition_json"
+            )["type"]
+        ).upper()
+        == "JSON"
+    )
     assert {
         constraint["name"]
         for constraint in inspector.get_unique_constraints("pipeline_tasks")
@@ -122,21 +140,27 @@ def test_pipeline_task_type_migration_preserves_constraints_and_is_idempotent(
         column_name="type",
         column_type="VARCHAR(16)",
     )
-    assert next(
-        column["type"].length
-        for column in inspect(engine).get_columns("pipeline_tasks")
-        if column["name"] == "type"
-    ) == 16
+    assert (
+        next(
+            column["type"].length
+            for column in inspect(engine).get_columns("pipeline_tasks")
+            if column["name"] == "type"
+        )
+        == 16
+    )
 
     init_database(engine)
     init_database(engine)
 
     inspector = inspect(engine)
-    assert next(
-        column["type"].length
-        for column in inspector.get_columns("pipeline_tasks")
-        if column["name"] == "type"
-    ) == 32
+    assert (
+        next(
+            column["type"].length
+            for column in inspector.get_columns("pipeline_tasks")
+            if column["name"] == "type"
+        )
+        == 32
+    )
     assert {
         constraint["name"]
         for constraint in inspector.get_unique_constraints("pipeline_tasks")
@@ -184,7 +208,9 @@ def test_database_initialization_is_idempotent(tmp_path) -> None:
             select(ProjectORM).where(ProjectORM.id == "project-1")
         )
         assert saved_project is not None
-        assert saved_project.brief.prompt == "Create a conversion-focused short video ad."
+        assert (
+            saved_project.brief.prompt == "Create a conversion-focused short video ad."
+        )
         assert saved_project.brief.selling_points == ["fast iteration"]
 
 
@@ -267,21 +293,19 @@ def test_database_initialization_removes_legacy_template_foreign_key(
     assert saved_pipeline.source_template_revision == 3
 
 
-def test_database_initialization_adds_asset_category_to_existing_table(tmp_path) -> None:
+def test_database_initialization_adds_asset_category_to_existing_table(
+    tmp_path,
+) -> None:
     database_url = f"sqlite:///{tmp_path / 'legacy.sqlite'}"
     engine = create_database_engine(database_url)
     with engine.begin() as connection:
-        connection.execute(
-            text("CREATE TABLE assets (id VARCHAR(36) PRIMARY KEY)")
-        )
+        connection.execute(text("CREATE TABLE assets (id VARCHAR(36) PRIMARY KEY)"))
 
     init_database(engine)
     init_database(engine)
 
     inspector = inspect(engine)
-    assert "category" in {
-        column["name"] for column in inspector.get_columns("assets")
-    }
+    assert "category" in {column["name"] for column in inspector.get_columns("assets")}
     assert "ix_assets_category" in {
         index["name"] for index in inspector.get_indexes("assets")
     }
@@ -331,10 +355,7 @@ def test_database_initialization_adds_project_soft_delete_to_legacy_database(
     }
     with engine.connect() as connection:
         saved_project = connection.execute(
-            text(
-                "SELECT id, deleted_at FROM projects "
-                "WHERE id = 'legacy-project'"
-            )
+            text("SELECT id, deleted_at FROM projects WHERE id = 'legacy-project'")
         ).one()
     assert saved_project.id == "legacy-project"
     assert saved_project.deleted_at is None
@@ -456,8 +477,7 @@ def test_database_initialization_adds_merge_snapshot_to_existing_storyboard_tabl
     init_database(engine)
 
     assert "merge_source_shots" in {
-        column["name"]
-        for column in inspect(engine).get_columns("storyboard_shots")
+        column["name"] for column in inspect(engine).get_columns("storyboard_shots")
     }
 
 

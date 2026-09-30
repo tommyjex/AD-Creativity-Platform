@@ -1,18 +1,63 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/layout/app-shell";
 
 const navigationState = vi.hoisted(() => ({
-  pathname: "/workspace/projects"
+  pathname: "/workspace/projects",
+  replace: vi.fn()
+}));
+const authState = vi.hoisted(() => ({
+  clearSession: vi.fn(),
+  user: {
+    created_at: "2026-09-29T00:00:00Z",
+    display_name: "系统管理员",
+    id: "admin-1",
+    is_enabled: true,
+    last_login_at: "2026-09-29T02:30:00Z",
+    must_change_password: false,
+    role: "admin" as "admin" | "creator" | "viewer",
+    updated_at: "2026-09-29T00:00:00Z",
+    username: "admin"
+  }
+}));
+const apiState = vi.hoisted(() => ({
+  logout: vi.fn()
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => navigationState.pathname
+  usePathname: () => navigationState.pathname,
+  useRouter: () => ({ replace: navigationState.replace })
+}));
+
+vi.mock("@/lib/auth/auth-provider", () => ({
+  useAuth: () => authState
+}));
+
+vi.mock("@/lib/api-client", () => ({
+  apiClient: {
+    logout: apiState.logout
+  },
+  getUserFacingErrorMessage: () => "退出失败，请稍后重试。"
 }));
 
 describe("AppShell top navigation", () => {
   beforeEach(() => {
+    apiState.logout.mockReset();
+    apiState.logout.mockResolvedValue(undefined);
+    authState.clearSession.mockReset();
+    authState.user = {
+      ...authState.user,
+      display_name: "系统管理员",
+      role: "admin"
+    };
     navigationState.pathname = "/workspace/projects";
+    navigationState.replace.mockReset();
   });
 
   it("exposes the projects, assets, tools and AIGC workspace entries", () => {
@@ -332,5 +377,85 @@ describe("AppShell top navigation", () => {
     );
 
     expect(screen.queryByTestId("mobile-navigation-menu")).toBeNull();
+  });
+
+  it("shows the current admin, role, user management and logout actions", async () => {
+    render(
+      <AppShell>
+        <div>首页内容</div>
+      </AppShell>
+    );
+
+    expect(screen.getByText("系统管理员")).toBeInTheDocument();
+    expect(screen.getByText("管理员")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "打开账号菜单：系统管理员" })
+    );
+
+    expect(
+      screen.getByRole("link", { name: "用户管理" })
+    ).toHaveAttribute("href", "/workspace/admin/users");
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
+
+    await waitFor(() => {
+      expect(apiState.logout).toHaveBeenCalledTimes(1);
+      expect(authState.clearSession).toHaveBeenCalledTimes(1);
+      expect(navigationState.replace).toHaveBeenCalledWith("/login");
+    });
+  });
+
+  it("hides user management from non-admin accounts", () => {
+    authState.user = {
+      ...authState.user,
+      display_name: "创作用户",
+      role: "creator"
+    };
+    render(
+      <AppShell>
+        <div>首页内容</div>
+      </AppShell>
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "打开账号菜单：创作用户" })
+    );
+    expect(screen.queryByRole("link", { name: "用户管理" })).toBeNull();
+    expect(screen.getByRole("button", { name: "退出登录" })).toBeVisible();
+  });
+
+  it("keeps account and logout actions in the mobile navigation", () => {
+    render(
+      <AppShell>
+        <div>首页内容</div>
+      </AppShell>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开导航菜单" }));
+    const menu = screen.getByTestId("mobile-navigation-menu");
+
+    expect(within(menu).getByText("系统管理员")).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("link", { name: "用户管理" })
+    ).toHaveAttribute("href", "/workspace/admin/users");
+    expect(
+      within(menu).getByRole("button", { name: "退出登录" })
+    ).toBeVisible();
+  });
+
+  it("keeps an accessible account entry in immersive editors", () => {
+    navigationState.pathname = "/workspace/aigc/pipelines/pipeline-1";
+    render(
+      <AppShell>
+        <div>Pipeline 画布内容</div>
+      </AppShell>
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "打开账号菜单：系统管理员" })
+    );
+    expect(
+      screen.getByRole("link", { name: "用户管理" })
+    ).toHaveAttribute("href", "/workspace/admin/users");
+    expect(screen.getByRole("button", { name: "退出登录" })).toBeVisible();
   });
 });

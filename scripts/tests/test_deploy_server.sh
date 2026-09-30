@@ -64,7 +64,11 @@ create_fixture() {
   OUTPUT_LOG="$CASE_ROOT/output.log"
 
   mkdir -p "$APP_ROOT/.venv/bin" "$APP_ROOT/backend" "$APP_ROOT/frontend" "$FAKE_BIN"
-  : >"$APP_ROOT/.env"
+  printf '%s\n' \
+    'APP_ENV=production' \
+    'CORS_ORIGINS=https://ad.example.com' \
+    'SITE_ORIGIN=https://ad.example.com' \
+    'AUTH_COOKIE_SECURE=true' >"$APP_ROOT/.env"
   : >"$APP_ROOT/requirements.txt"
   : >"$APP_ROOT/frontend/package-lock.json"
   printf '{"scripts":{"build":"next build"}}\n' >"$APP_ROOT/frontend/package.json"
@@ -204,10 +208,64 @@ test_old_node_fails_before_install() {
   pass "Node.js version gate"
 }
 
+assert_security_preflight_failure() {
+  local name="$1"
+  local env_contents="$2"
+  local expected_error="$3"
+
+  create_fixture "$name"
+  printf '%b' "$env_contents" >"$APP_ROOT/.env"
+
+  if run_deploy; then
+    fail "$name should return nonzero"
+    return
+  fi
+
+  assert_not_contains "$COMMAND_LOG" "python -m pip install" \
+    "$name must fail before dependency installation"
+  assert_not_contains "$COMMAND_LOG" "systemctl restart" \
+    "$name must not restart services"
+  assert_contains "$OUTPUT_LOG" "$expected_error" \
+    "$name should have a clear error"
+  pass "$name"
+}
+
+test_production_security_env_gate() {
+  assert_security_preflight_failure \
+    missing_app_env \
+    'CORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "APP_ENV must be set to production"
+  assert_security_preflight_failure \
+    missing_cors \
+    'APP_ENV=production\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "CORS_ORIGINS must be set and non-empty"
+  assert_security_preflight_failure \
+    empty_site_origin \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN="   "\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be set and non-empty"
+  assert_security_preflight_failure \
+    wildcard_cors \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com,*\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "CORS_ORIGINS must not contain '*'"
+  assert_security_preflight_failure \
+    invalid_site_origin \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN=http://ad.example.com/path\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be an HTTPS origin without a path"
+  assert_security_preflight_failure \
+    mismatched_origins \
+    'APP_ENV=production\nCORS_ORIGINS=https://api.example.com\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "CORS_ORIGINS must include SITE_ORIGIN"
+  assert_security_preflight_failure \
+    insecure_cookie \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=false\n' \
+    "AUTH_COOKIE_SECURE must be exactly true"
+}
+
 test_successful_deploy
 test_build_failure_does_not_restart
 test_health_failure_prints_diagnostics
 test_old_node_fails_before_install
+test_production_security_env_gate
 
 if [[ "$FAILURES" -ne 0 ]]; then
   printf '%s test assertion(s) failed\n' "$FAILURES" >&2

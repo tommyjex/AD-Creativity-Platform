@@ -35,6 +35,7 @@ from backend.app.services.assets import (
 )
 from backend.app.services.modelark import ModelArkProviderError
 from backend.app.services.workflow import WorkflowService
+from backend.tests.auth_helpers import authenticate_test_client
 
 
 def test_storyboard_shot_video_config_can_be_saved(
@@ -2424,6 +2425,7 @@ def _client_with_generation(
     app.dependency_overrides[get_modelark_generation_service] = lambda: generation_service
 
     with TestClient(app) as test_client:
+        authenticate_test_client(test_client, repository)
         yield test_client
 
     app.dependency_overrides.clear()

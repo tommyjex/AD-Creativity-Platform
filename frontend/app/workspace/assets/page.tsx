@@ -1,9 +1,9 @@
 import { WorkspaceAssetLibrary } from "@/components/workspace/workspace-asset-library";
 import {
-  createApiClient,
   getUserFacingErrorMessage,
   type AssetFilters
 } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 import { ASSET_SECTIONS, type AssetSection } from "@/lib/asset-display";
 import {
   STATUSES,
@@ -27,7 +27,7 @@ export default async function WorkspaceAssetsPage({
   searchParams: SearchParams;
 }) {
   const filters = parseFilters(await searchParams);
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let assets: Asset[] = [];
   let projects: ProjectListItem[] = [];
   let toolTasks: ToolTask[] = [];

@@ -1,12 +1,12 @@
 import { ProjectWorkspace } from "@/components/workspace/project-workspace";
 import {
-  createApiClient,
   getUserFacingErrorMessage
 } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 import type { ProjectListItem } from "@/lib/api-types";
 
 export default async function WorkspaceProjectsPage() {
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let projects: ProjectListItem[] = [];
   let initialError: string | undefined;
 

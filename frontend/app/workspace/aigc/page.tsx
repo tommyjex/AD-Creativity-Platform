@@ -1,8 +1,8 @@
 import { AigcWorkspace } from "@/components/workspace/aigc/aigc-workspace";
 import {
-  createApiClient,
   getUserFacingErrorMessage
 } from "@/lib/api-client";
+import { createServerApiClient } from "@/lib/auth/server-api-client";
 import type {
   AigcPage,
   AigcPipeline,
@@ -32,7 +32,7 @@ export default async function AigcWorkspacePage({
   searchParams: Promise<{ view?: string | string[] }>;
 }) {
   const { view } = await searchParams;
-  const api = createApiClient();
+  const api = await createServerApiClient();
   let initialTemplates = emptyPage<AigcPipelineTemplate>();
   let initialPipelines = emptyPage<AigcPipeline>();
   let initialError: string | undefined;

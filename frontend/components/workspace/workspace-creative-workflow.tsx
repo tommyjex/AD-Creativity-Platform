@@ -146,6 +146,7 @@ interface WorkspaceCreativeWorkflowProps {
   onDetailTabChange?: (tab: DetailTab) => void;
   onProjectUpdated: (project: Project) => void;
   project: Project;
+  readOnly?: boolean;
   textGeneration?: TextGenerationController;
 }
 
@@ -154,6 +155,7 @@ export function WorkspaceCreativeWorkflow({
   onDetailTabChange,
   onProjectUpdated,
   project,
+  readOnly = false,
   textGeneration
 }: WorkspaceCreativeWorkflowProps) {
   const [taskUpdates, setTaskUpdates] = useState<GenerationTask[]>([]);
@@ -256,7 +258,7 @@ export function WorkspaceCreativeWorkflow({
   }, [activeTaskIds, refreshProject]);
 
   async function handleRetry(task: GenerationTask) {
-    if (pendingRetryTaskId !== null) {
+    if (readOnly || pendingRetryTaskId !== null) {
       return;
     }
 
@@ -289,6 +291,9 @@ export function WorkspaceCreativeWorkflow({
   }
 
   async function handleGenerateStage(stage: GenerationStage) {
+    if (readOnly) {
+      return;
+    }
     setNotice(null);
     try {
       if (isTextStreamStage(stage)) {
@@ -316,6 +321,9 @@ export function WorkspaceCreativeWorkflow({
   }
 
   async function handleSkipCharacters() {
+    if (readOnly) {
+      return;
+    }
     setNotice(null);
     try {
       const task = await apiClient.skipCharacters(project.id);
@@ -371,6 +379,7 @@ export function WorkspaceCreativeWorkflow({
               onSkipCharacters={handleSkipCharacters}
               pendingRetry={pendingRetryTaskId === stage.latestTask?.id}
               project={project}
+              readOnly={readOnly}
               showLegacyActions={legacyActionMode}
               stage={stage}
             />
@@ -389,6 +398,7 @@ function StageFlowNode({
   onSkipCharacters,
   pendingRetry,
   project,
+  readOnly,
   showLegacyActions,
   stage
 }: {
@@ -399,6 +409,7 @@ function StageFlowNode({
   onSkipCharacters: () => void;
   pendingRetry: boolean;
   project: Project;
+  readOnly: boolean;
   showLegacyActions: boolean;
   stage: StageViewModel;
 }) {
@@ -510,7 +521,7 @@ function StageFlowNode({
         </div>
       </button>
 
-      {canRetry && stage.latestTask ? (
+      {!readOnly && canRetry && stage.latestTask ? (
         <Button
           className="mt-2 w-full"
           disabled={pendingRetry}
@@ -527,7 +538,7 @@ function StageFlowNode({
           重试本阶段
         </Button>
       ) : null}
-      {showLegacyActions && !canRetry ? (
+      {!readOnly && showLegacyActions && !canRetry ? (
         <div className="mt-2 grid gap-2">
           {skipConfirming ? (
             <div className="rounded-xl border border-warning/25 bg-warning/[0.08] p-3">

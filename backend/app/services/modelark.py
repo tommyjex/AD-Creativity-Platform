@@ -50,6 +50,8 @@ from ..schemas.image_dimensions import (
     parse_seedream_custom_image_size,
 )
 from ..schemas.seedance import (
+    SEEDANCE_DEFAULT_ASPECT_RATIO,
+    SEEDANCE_DEFAULT_DURATION_SECONDS,
     SEEDANCE_DEFAULT_TASK_TYPE,
     SeedanceAspectRatio,
     SeedanceGenerationMode,
@@ -539,14 +541,6 @@ class SeedanceVideoGenerationRequest(SchemaModel):
 
     @model_validator(mode="after")
     def validate_seedance_request(self) -> "SeedanceVideoGenerationRequest":
-        validate_seedance_duration(self.model, self.duration_seconds)
-        validate_seedance_resolution(self.model, self.resolution)
-        validate_seedance_reference_counts(
-            self.model,
-            reference_image_count=len(self.reference_image_urls),
-            reference_video_count=len(self.reference_video_urls),
-            reference_audio_count=len(self.reference_audio_urls),
-        )
         has_references = any(
             (
                 self.reference_image_urls,
@@ -563,6 +557,16 @@ class SeedanceVideoGenerationRequest(SchemaModel):
                 raise ValueError(
                     "edit and extend require at least one reference video"
                 )
+            self.duration_seconds = SEEDANCE_DEFAULT_DURATION_SECONDS
+            self.aspect_ratio = SEEDANCE_DEFAULT_ASPECT_RATIO
+        validate_seedance_duration(self.model, self.duration_seconds)
+        validate_seedance_resolution(self.model, self.resolution)
+        validate_seedance_reference_counts(
+            self.model,
+            reference_image_count=len(self.reference_image_urls),
+            reference_video_count=len(self.reference_video_urls),
+            reference_audio_count=len(self.reference_audio_urls),
+        )
         if self.generation_mode == "text_to_video":
             if not self.prompt:
                 raise ValueError("text_to_video requires prompt")
@@ -1150,7 +1154,6 @@ class BytePlusModelArkAdapter:
         except ModelArkProviderError:
             raise
         except Exception as exc:
-            # #region debug-point A-D:aigc-text-provider-error
             emit_tls_only_event(
                 "aigc.text_generate.provider_exception",
                 outcome="failed",
@@ -1166,47 +1169,6 @@ class BytePlusModelArkAdapter:
                 ),
                 phase="aigc_text_generate",
             )
-            try:
-                import urllib.request
-
-                with open(
-                    ".dbg/aigc-text-attribute.env", encoding="utf-8"
-                ) as debug_env:
-                    debug_url = next(
-                        (
-                            line.split("=", 1)[1].strip()
-                            for line in debug_env
-                            if line.startswith("DEBUG_SERVER_URL=")
-                        ),
-                        "http://127.0.0.1:7778/event",
-                    )
-                await asyncio.to_thread(
-                    urllib.request.urlopen,
-                    urllib.request.Request(
-                        debug_url,
-                        data=json.dumps(
-                            {
-                                "sessionId": "aigc-text-attribute",
-                                "runId": "pre-fix",
-                                "hypothesisId": "A-D",
-                                "location": "modelark.py:generate_aigc_text",
-                                "msg": "[DEBUG] AIGC text provider invocation failed",
-                                "data": {
-                                    "exception_type": type(exc).__name__,
-                                    "exception_message": str(exc)[:500],
-                                    "has_image_input": bool(request.image_url),
-                                    "has_system_prompt": bool(request.system_prompt),
-                                    "model": request.model,
-                                },
-                            }
-                        ).encode(),
-                        headers={"Content-Type": "application/json"},
-                    ),
-                    timeout=1,
-                )
-            except Exception:
-                pass
-            # #endregion
             raise _provider_error_from_exception(
                 exc,
                 phase="aigc_text_generate",
@@ -1513,96 +1475,11 @@ class BytePlusModelArkAdapter:
                 model=self.settings.ark_text_model,
                 operation="prompt_optimization",
             )
-            # #region debug-point A-C:prompt-optimization-parser
-            try:
-                debug_payload = json.loads(output_text)
-                debug_data = {
-                    "json_object": isinstance(debug_payload, dict),
-                    "keys": sorted(debug_payload) if isinstance(debug_payload, dict) else [],
-                    "output_length": len(output_text),
-                    "output_sha256": hashlib.sha256(
-                        output_text.encode("utf-8")
-                    ).hexdigest()[:16],
-                    "parser": (
-                        "seedream"
-                        if request.target_type in {"text_to_image", "image_to_image"}
-                        else "aigc_image"
-                    ),
-                    "target_type": request.target_type,
-                }
-            except Exception as debug_exc:
-                debug_data = {
-                    "json_error": type(debug_exc).__name__,
-                    "output_length": len(output_text),
-                    "target_type": request.target_type,
-                }
-            try:
-                import urllib.request
-
-                with open(".dbg/llm-prompt-parse.env", encoding="utf-8") as debug_env:
-                    debug_url = next(
-                        (
-                            line.split("=", 1)[1].strip()
-                            for line in debug_env
-                            if line.startswith("DEBUG_SERVER_URL=")
-                        ),
-                        "http://127.0.0.1:7777/event",
-                    )
-                await asyncio.to_thread(
-                    urllib.request.urlopen,
-                    urllib.request.Request(
-                        debug_url,
-                        data=json.dumps(
-                            {
-                                "sessionId": "llm-prompt-parse",
-                                "runId": "post-fix",
-                                "hypothesisId": "A-C",
-                                "location": "modelark.py:1459",
-                                "msg": "[DEBUG] prompt optimization parser selection",
-                                "data": debug_data,
-                            }
-                        ).encode(),
-                        headers={"Content-Type": "application/json"},
-                    ),
-                    timeout=1,
-                )
-            except Exception:
-                pass
-            # #endregion
             if request.target_type in {"text_to_image", "image_to_image"}:
                 result = self._parse_seedream_prompt_payload(output_text)
                 return result
             return self._parse_aigc_image_prompt_optimization_payload(output_text)
-        except (ModelArkProviderError, ModelArkTextParseError) as exc:
-            # #region debug-point D:prompt-optimization-parser-error
-            try:
-                import urllib.request
-
-                await asyncio.to_thread(
-                    urllib.request.urlopen,
-                    urllib.request.Request(
-                        "http://127.0.0.1:7777/event",
-                        data=json.dumps(
-                            {
-                                "sessionId": "llm-prompt-parse",
-                                "runId": "post-fix",
-                                "hypothesisId": "D",
-                                "location": "modelark.py:1513",
-                                "msg": "[DEBUG] prompt optimization parser failed",
-                                "data": {
-                                    "error_type": type(exc).__name__,
-                                    "message": str(exc),
-                                    "target_type": request.target_type,
-                                },
-                            }
-                        ).encode(),
-                        headers={"Content-Type": "application/json"},
-                    ),
-                    timeout=1,
-                )
-            except Exception:
-                pass
-            # #endregion
+        except (ModelArkProviderError, ModelArkTextParseError):
             raise
         except ValidationError as exc:
             raise ModelArkTextParseError(

@@ -81,13 +81,13 @@ ad.example.com
 
 将域名 A 记录指向应用服务器公网 IP。建议前后端使用同一域名，避免额外的跨域配置。
 
-### 3.4 当前公开部署风险
+### 3.4 公开部署安全要求
 
 正式开放公网前必须处理：
 
-- 当前应用没有用户登录和接口鉴权。至少先配置 VPN、IP 白名单或 Nginx Basic Auth。
-- 后端 CORS 当前硬编码为 `allow_origins=["*"]`，尚未读取已经定义的
-  `settings.cors_origins`。若采用不同前后端域名，应先修复并限制为正式前端域名。
+- 使用正式 HTTPS 域名配置 `SITE_ORIGIN` 和 `CORS_ORIGINS`，生产环境禁止通配来源。
+- 启用 `AUTH_COOKIE_SECURE`，确保认证 Cookie 只通过 HTTPS 发送。
+- 首次启动后通过 `/setup` 创建首个管理员；仓库、部署脚本和环境样例不得包含默认管理员密码。
 - `.env`、数据库密码、TOS 密钥和 Ark API Key 不得提交到 Git。
 
 ## 4. 安装系统依赖
@@ -97,7 +97,6 @@ ad.example.com
 ```bash
 sudo apt update
 sudo apt install -y \
-  apache2-utils \
   git \
   nginx \
   python3 \
@@ -176,6 +175,15 @@ sudo -u adcreative npm ci
 ```dotenv
 APP_ENV=production
 
+# 认证与同源策略
+CORS_ORIGINS=https://ad.example.com
+SITE_ORIGIN=https://ad.example.com
+AUTH_COOKIE_SECURE=true
+AUTH_SESSION_IDLE_SECONDS=43200
+AUTH_SESSION_ABSOLUTE_SECONDS=604800
+AUTH_LOGIN_WINDOW_SECONDS=900
+AUTH_LOGIN_MAX_FAILURES=5
+
 # 已有云 MySQL
 DB_HOST=<MYSQL_PRIVATE_HOST>
 DB_PORT=3306
@@ -252,6 +260,8 @@ mysql \
 
 当前代码会在应用启动时自动调用 `init_database()`，没有关闭自动迁移的配置项。
 如果生产应用账号没有 DDL 权限且表结构并非当前版本，必须先补齐迁移流程，否则不要启动后端。
+认证升级会新增 `users`、`auth_sessions` 和 `login_throttles` 表及索引，不会
+修改或清空现有项目、资产、任务、Pipeline 和运行数据，也不会自动创建管理员。
 
 ## 10. 发布前检查和构建
 
@@ -373,14 +383,6 @@ sudo systemctl status ad-creativity-frontend --no-pager
 
 ## 12. 配置 Nginx
 
-由于当前应用没有登录鉴权，首次上线默认使用 Nginx Basic Auth：
-
-```bash
-sudo htpasswd -c /etc/nginx/ad-creativity.htpasswd <ADMIN_USERNAME>
-sudo chmod 640 /etc/nginx/ad-creativity.htpasswd
-sudo chown root:www-data /etc/nginx/ad-creativity.htpasswd
-```
-
 创建 `/etc/nginx/sites-available/ad-creativity`：
 
 ```nginx
@@ -390,11 +392,8 @@ server {
     server_name ad.example.com;
 
     client_max_body_size 2g;
-    auth_basic "AD Creativity";
-    auth_basic_user_file /etc/nginx/ad-creativity.htpasswd;
 
     location ^~ /.well-known/acme-challenge/ {
-        auth_basic off;
         root /var/www/html;
     }
 
@@ -479,34 +478,43 @@ sudo ss -lntp | grep -E ':(3000|8000|80|443)\b'
 
 ```bash
 curl --fail http://127.0.0.1:8000/health
-curl --fail --user '<ADMIN_USERNAME>:<PASSWORD>' \
-  https://ad.example.com/health
+curl --fail https://ad.example.com/health
 ```
 
 注意：`/health` 当前只代表 FastAPI 进程可用，不验证 MySQL、TOS 或 Ark。
 预期响应包含 `"status":"ok"`。
 
-### 14.3 数据库链路
+### 14.3 首个管理员初始化
 
-请求一个实际访问数据库的接口：
+首次部署认证版本或升级后尚无用户时，在浏览器打开：
 
-```bash
-curl --fail --user '<ADMIN_USERNAME>:<PASSWORD>' \
-  https://ad.example.com/api/projects
+```text
+https://ad.example.com/setup
 ```
 
-### 14.4 浏览器验收
+页面应显示首次初始化表单。由管理员现场设置用户名、显示名称和密码；密码不得
+写入部署脚本、环境文件、命令历史或日志。初始化成功后该入口永久关闭，并进入
+共享工作区。
+
+### 14.4 数据库链路
+
+登录后在浏览器访问项目列表，并在开发者工具 Network 面板确认
+`GET /api/projects` 返回 `200`。未登录请求应返回 `401`，viewer 的写请求应
+返回 `403`。
+
+### 14.5 浏览器验收
 
 至少检查：
 
-1. 首页可以打开，静态资源没有 404。
-2. 项目列表能够读取。
-3. 创建或打开项目正常。
-4. 上传图片后能够预览。
-5. Ark 文本或图片生成能够完成。
-6. 视频生成和 FFmpeg 相关流程无超时。
-7. 浏览器控制台没有 CORS、Mixed Content 或 5xx 错误。
-8. TLS 中能够查询到核心操作结构化日志。
+1. 未初始化系统跳转 `/setup`，初始化后该入口关闭。
+2. 未登录访问工作区跳转 `/login`，登录后返回原目标页。
+3. 首页可以打开，静态资源没有 404。
+4. 项目列表能够读取，创建或打开项目正常。
+5. 上传图片后能够预览。
+6. Ark 文本或图片生成能够完成。
+7. 视频生成和 FFmpeg 相关流程无超时。
+8. 浏览器控制台没有 CORS、Mixed Content 或 5xx 错误。
+9. TLS 中能够查询到认证审计和核心操作结构化日志。
 
 ## 15. 日志与排障
 
@@ -638,9 +646,9 @@ sudo -u adcreative npm run build
 sudo systemctl start ad-creativity-backend ad-creativity-frontend
 
 curl --fail http://127.0.0.1:8000/health
-curl --fail --user '<ADMIN_USERNAME>:<PASSWORD>' \
-  https://ad.example.com/api/projects
 ```
+
+随后通过浏览器重新登录，并确认 `GET /api/projects` 返回 `200`。
 
 数据库回滚不能简单依赖应用代码回退。若发布包含不兼容的数据库变更，必须按以下顺序处理：
 
@@ -661,12 +669,13 @@ curl --fail --user '<ADMIN_USERNAME>:<PASSWORD>' \
 - [ ] 数据库结构与部署 commit 匹配。
 - [ ] 首次启动前已创建并验证云 MySQL 快照。
 - [ ] `.env` 权限为 `600`，密钥未进入 Git。
+- [ ] `SITE_ORIGIN`、`CORS_ORIGINS` 与正式 HTTPS 域名一致，`AUTH_COOKIE_SECURE=true`。
 - [ ] 同域部署未设置 `NEXT_PUBLIC_BACKEND_BASE_URL`，浏览器 API 请求使用 `/api/`。
 - [ ] 前端服务的 `BACKEND_INTERNAL_BASE_URL` 可访问 FastAPI。
 - [ ] 后端和前端由 systemd 托管并设置自动启动。
 - [ ] Nginx 上传大小和长任务超时已配置。
-- [ ] `/health` 和数据库业务接口验证通过。
+- [ ] `/health`、首次 `/setup` 初始化和登录后的数据库业务接口验证通过。
 - [ ] 图片、视频上传及预览验证通过。
 - [ ] Ark、TOS、MediaKit 和 TLS 链路验证通过。
-- [ ] 已启用 Nginx Basic Auth、VPN、IP 白名单或正式用户认证。
+- [ ] 仓库、部署脚本、环境文件和日志中不存在默认管理员密码。
 - [ ] 已记录当前发布 commit 和回滚目标。
