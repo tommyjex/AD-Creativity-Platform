@@ -6,13 +6,25 @@ import pytest
 from fastapi import Response
 from fastapi.testclient import TestClient
 
+import backend.app.main as main_module
 from backend.app.api.auth_routes import _set_session_cookie
-from backend.app.core.config import Settings
+from backend.app.api.dependencies import get_aigc_pipeline_runtime, get_repository
+from backend.app.core.config import Settings, get_settings
+from backend.app.main import create_app
+from backend.app.repositories import InMemoryRepository
 from backend.app.schemas.auth import AuthSession, UserPublic, UserRole
 from backend.app.schemas.common import utc_now
 from backend.app.services.auth import AuthenticatedSession
 
 ADMIN_PASSWORD = "correct horse battery staple"
+
+
+class _NoopRuntime:
+    async def start(self) -> bool:
+        return True
+
+    async def stop(self) -> None:
+        return None
 
 
 def _setup(client: TestClient, username: str = "admin") -> dict[str, object]:
@@ -369,3 +381,74 @@ def test_production_session_cookie_is_secure() -> None:
     assert "secure" in set_cookie
     assert "httponly" in set_cookie
     assert "samesite=lax" in set_cookie
+
+
+def test_explicit_insecure_production_session_cookie_keeps_safe_attributes() -> None:
+    now = utc_now()
+    response = Response()
+    authenticated = AuthenticatedSession(
+        user=UserPublic(
+            id="user-1",
+            username="admin",
+            display_name="Admin",
+            role=UserRole.ADMIN,
+            is_enabled=True,
+            must_change_password=False,
+            created_at=now,
+            updated_at=now,
+            last_login_at=now,
+        ),
+        token="session-token",
+        session=AuthSession(
+            user_id="user-1",
+            token_digest="d" * 64,
+            idle_expires_at=now + timedelta(hours=12),
+            absolute_expires_at=now + timedelta(days=7),
+        ),
+    )
+    _set_session_cookie(
+        response,
+        authenticated,
+        Settings(
+            environment="production",
+            cors_origins=["*"],
+            allow_insecure_cors=True,
+            allow_insecure_auth_cookie=True,
+            auth_cookie_secure=False,
+        ),
+    )
+
+    set_cookie = response.headers["set-cookie"].lower()
+    assert "secure" not in set_cookie
+    assert "httponly" in set_cookie
+    assert "samesite=lax" in set_cookie
+    assert "path=/" in set_cookie
+
+
+def test_explicit_insecure_mode_clears_invalid_cookie_without_secure_attribute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        environment="production",
+        cors_origins=["*"],
+        allow_insecure_cors=True,
+        allow_insecure_auth_cookie=True,
+        auth_cookie_secure=False,
+    )
+    monkeypatch.setattr(main_module, "get_settings", lambda: settings)
+    app = create_app()
+    app.dependency_overrides[get_aigc_pipeline_runtime] = _NoopRuntime
+    app.dependency_overrides[get_repository] = InMemoryRepository
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    with TestClient(app) as client:
+        client.cookies.set("ad_session", "invalid-token")
+        response = client.get("/api/auth/me")
+
+    assert response.status_code == 401
+    set_cookie = response.headers["set-cookie"].lower()
+    assert 'ad_session=""' in set_cookie
+    assert "secure" not in set_cookie
+    assert "httponly" in set_cookie
+    assert "samesite=lax" in set_cookie
+    assert "path=/" in set_cookie
