@@ -230,6 +230,46 @@ test_wildcard_cors_opt_in_deploys() {
   pass "wildcard CORS deploys only with explicit opt-in"
 }
 
+test_insecure_auth_cookie_opt_in_deploys() {
+  create_fixture insecure_auth_cookie_opt_in
+  printf '%s\n' \
+    'APP_ENV=production' \
+    'CORS_ORIGINS=*' \
+    'ALLOW_INSECURE_CORS=true' \
+    'ALLOW_INSECURE_AUTH_COOKIE=true' \
+    'AUTH_COOKIE_SECURE=false' >"$APP_ROOT/.env"
+
+  if ! run_deploy; then
+    fail "explicit insecure auth cookie opt-in should deploy"
+    return
+  fi
+
+  assert_contains "$OUTPUT_LOG" \
+    "WARNING: insecure authentication cookies are enabled" \
+    "insecure auth cookie deployment should print a security warning"
+  pass "insecure auth cookie deploys only with explicit opt-in"
+}
+
+test_unused_insecure_auth_cookie_opt_in_does_not_warn() {
+  create_fixture unused_insecure_auth_cookie_opt_in
+  printf '%s\n' \
+    'APP_ENV=production' \
+    'CORS_ORIGINS=https://ad.example.com' \
+    'SITE_ORIGIN=https://ad.example.com' \
+    'ALLOW_INSECURE_AUTH_COOKIE=true' \
+    'AUTH_COOKIE_SECURE=true' >"$APP_ROOT/.env"
+
+  if ! run_deploy; then
+    fail "secure cookies should deploy when the opt-in is unused"
+    return
+  fi
+
+  assert_not_contains "$OUTPUT_LOG" \
+    "WARNING: insecure authentication cookies are enabled" \
+    "secure cookie deployment must not print the insecure cookie warning"
+  pass "unused insecure auth cookie opt-in does not warn"
+}
+
 test_comma_separated_wildcard_cors_opt_in_deploys() {
   create_fixture comma_separated_wildcard_cors_opt_in
   printf '%s\n' \
@@ -429,9 +469,29 @@ test_production_security_env_gate() {
     'APP_ENV=production\nCORS_ORIGINS=https://api.example.com\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
     "CORS_ORIGINS must include SITE_ORIGIN"
   assert_security_preflight_failure \
-    insecure_cookie \
-    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=false\n' \
-    "AUTH_COOKIE_SECURE must be exactly true"
+    insecure_cookie_without_opt_in \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nAUTH_COOKIE_SECURE=false\n' \
+    "AUTH_COOKIE_SECURE=false requires ALLOW_INSECURE_AUTH_COOKIE=true"
+  assert_security_preflight_failure \
+    insecure_cookie_false_opt_in \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nALLOW_INSECURE_AUTH_COOKIE=false\nAUTH_COOKIE_SECURE=false\n' \
+    "AUTH_COOKIE_SECURE=false requires ALLOW_INSECURE_AUTH_COOKIE=true"
+  assert_security_preflight_failure \
+    insecure_cookie_uppercase_opt_in \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nALLOW_INSECURE_AUTH_COOKIE=TRUE\nAUTH_COOKIE_SECURE=false\n' \
+    "ALLOW_INSECURE_AUTH_COOKIE must be exactly true or false"
+  assert_security_preflight_failure \
+    missing_auth_cookie_secure \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN=https://ad.example.com\n' \
+    "AUTH_COOKIE_SECURE must be exactly true or false"
+  assert_security_preflight_failure \
+    empty_auth_cookie_secure \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=\n' \
+    "AUTH_COOKIE_SECURE must be exactly true or false"
+  assert_security_preflight_failure \
+    secure_cookie_boolean_alias \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=yes\n' \
+    "AUTH_COOKIE_SECURE must be exactly true or false"
 }
 
 test_successful_deploy
@@ -440,6 +500,8 @@ test_health_failure_prints_diagnostics
 test_old_node_fails_before_install
 test_production_security_env_gate
 test_wildcard_cors_opt_in_deploys
+test_insecure_auth_cookie_opt_in_deploys
+test_unused_insecure_auth_cookie_opt_in_does_not_warn
 test_comma_separated_wildcard_cors_opt_in_deploys
 test_wildcard_cors_opt_in_deploys_without_site_origin
 test_wildcard_cors_opt_in_deploys_with_empty_site_origin

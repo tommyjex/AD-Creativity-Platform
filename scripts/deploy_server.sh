@@ -160,6 +160,7 @@ validate_positive_integer() {
 }
 
 preflight() {
+  local allow_insecure_auth_cookie
   local allow_insecure_cors
   local app_env
   local auth_cookie_secure
@@ -191,10 +192,21 @@ preflight() {
     site_origin=""
   fi
   auth_cookie_secure="$(read_dotenv_value "AUTH_COOKIE_SECURE")" ||
-    die "AUTH_COOKIE_SECURE must be exactly true in $APP_ROOT/.env"
+    die "AUTH_COOKIE_SECURE must be exactly true or false in $APP_ROOT/.env"
+  if ! allow_insecure_auth_cookie="$(
+    read_dotenv_value "ALLOW_INSECURE_AUTH_COOKIE"
+  )"; then
+    allow_insecure_auth_cookie=false
+  fi
   if ! allow_insecure_cors="$(read_dotenv_value "ALLOW_INSECURE_CORS")"; then
     allow_insecure_cors=false
   fi
+  case "$allow_insecure_auth_cookie" in
+    true | false) ;;
+    *)
+      die "ALLOW_INSECURE_AUTH_COOKIE must be exactly true or false in $APP_ROOT/.env"
+      ;;
+  esac
   case "$allow_insecure_cors" in
     true | false) ;;
     *)
@@ -206,8 +218,17 @@ preflight() {
     die "CORS_ORIGINS must be set and non-empty in $APP_ROOT/.env"
   [[ "$app_env" == "production" || "$app_env" == "prod" ]] ||
     die "APP_ENV must be set to production in $APP_ROOT/.env"
-  [[ "$auth_cookie_secure" == "true" ]] ||
-    die "AUTH_COOKIE_SECURE must be exactly true in $APP_ROOT/.env"
+  case "$auth_cookie_secure" in
+    true | false) ;;
+    *)
+      die "AUTH_COOKIE_SECURE must be exactly true or false in $APP_ROOT/.env"
+      ;;
+  esac
+  if [[ "$auth_cookie_secure" == "false" ]]; then
+    [[ "$allow_insecure_auth_cookie" == "true" ]] ||
+      die "AUTH_COOKIE_SECURE=false requires ALLOW_INSECURE_AUTH_COOKIE=true in $APP_ROOT/.env"
+    log "WARNING: insecure authentication cookies are enabled; public HTTP sessions can be intercepted."
+  fi
   IFS=',' read -r -a configured_origins <<<"$cors_origins"
   for cors_origin in "${configured_origins[@]}"; do
     cors_origin="$(trim_whitespace "$cors_origin")"
