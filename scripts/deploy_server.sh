@@ -79,6 +79,44 @@ read_dotenv_value() {
   printf '%s' "$value"
 }
 
+normalize_http_origin() {
+  local value="$1"
+
+  "$APP_ROOT/.venv/bin/python" - "$value" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+value = sys.argv[1].strip()
+if any(character.isspace() for character in value):
+    raise SystemExit(1)
+
+try:
+    parsed = urlsplit(value)
+    port = parsed.port
+except ValueError:
+    raise SystemExit(1)
+
+if (
+    parsed.scheme.casefold() not in {"http", "https"}
+    or parsed.hostname is None
+    or parsed.username is not None
+    or parsed.password is not None
+    or parsed.path not in {"", "/"}
+    or parsed.query
+    or parsed.fragment
+):
+    raise SystemExit(1)
+
+host = parsed.hostname.casefold()
+if ":" in host:
+    host = f"[{host}]"
+scheme = parsed.scheme.casefold()
+default_port = 80 if scheme == "http" else 443
+authority = host if port in {None, default_port} else f"{host}:{port}"
+print(f"{scheme}://{authority}", end="")
+PY
+}
+
 run_privileged() {
   if [[ "$EUID" -eq 0 ]]; then
     "$@"
@@ -128,9 +166,12 @@ preflight() {
   local cors_origins
   local cors_origin
   local cors_contains_site_origin=0
+  local cors_has_wildcard=0
   local -a configured_origins
   local node_version
   local node_major
+  local normalized_cors_origin
+  local normalized_site_origin
   local site_origin
 
   log "Running deployment preflight checks."
@@ -146,8 +187,9 @@ preflight() {
     die "APP_ENV must be set to production in $APP_ROOT/.env"
   cors_origins="$(read_dotenv_value "CORS_ORIGINS")" ||
     die "CORS_ORIGINS must be set and non-empty in $APP_ROOT/.env"
-  site_origin="$(read_dotenv_value "SITE_ORIGIN")" ||
-    die "SITE_ORIGIN must be set and non-empty in $APP_ROOT/.env"
+  if ! site_origin="$(read_dotenv_value "SITE_ORIGIN")"; then
+    site_origin=""
+  fi
   auth_cookie_secure="$(read_dotenv_value "AUTH_COOKIE_SECURE")" ||
     die "AUTH_COOKIE_SECURE must be exactly true in $APP_ROOT/.env"
   if ! allow_insecure_cors="$(read_dotenv_value "ALLOW_INSECURE_CORS")"; then
@@ -162,25 +204,46 @@ preflight() {
 
   [[ -n "$cors_origins" ]] ||
     die "CORS_ORIGINS must be set and non-empty in $APP_ROOT/.env"
-  [[ -n "$site_origin" ]] ||
-    die "SITE_ORIGIN must be set and non-empty in $APP_ROOT/.env"
   [[ "$app_env" == "production" || "$app_env" == "prod" ]] ||
     die "APP_ENV must be set to production in $APP_ROOT/.env"
-  [[ "$site_origin" =~ ^https://[^/?#@[:space:]]+$ ]] ||
-    die "SITE_ORIGIN must be an HTTPS origin without a path in $APP_ROOT/.env"
   [[ "$auth_cookie_secure" == "true" ]] ||
     die "AUTH_COOKIE_SECURE must be exactly true in $APP_ROOT/.env"
-  if [[ "$cors_origins" == *"*"* ]]; then
+  IFS=',' read -r -a configured_origins <<<"$cors_origins"
+  for cors_origin in "${configured_origins[@]}"; do
+    cors_origin="$(trim_whitespace "$cors_origin")"
+    if [[ "$cors_origin" == "*" ]]; then
+      cors_has_wildcard=1
+    fi
+  done
+
+  if [[ "$cors_has_wildcard" -eq 1 ]]; then
     [[ "$allow_insecure_cors" == "true" ]] ||
       die "CORS_ORIGINS='*' requires ALLOW_INSECURE_CORS=true in $APP_ROOT/.env"
-    log "WARNING: wildcard CORS is enabled; cross-origin credentials remain disabled."
-  else
-    IFS=',' read -r -a configured_origins <<<"$cors_origins"
     for cors_origin in "${configured_origins[@]}"; do
       cors_origin="$(trim_whitespace "$cors_origin")"
-      if [[ "$cors_origin" == "$site_origin" ]]; then
+      [[ -z "$cors_origin" || "$cors_origin" == "*" ]] && continue
+      normalize_http_origin "$cors_origin" >/dev/null ||
+        die "CORS_ORIGINS entries must be valid HTTP(S) origins in $APP_ROOT/.env"
+    done
+    if [[ -n "$site_origin" ]]; then
+      normalize_http_origin "$site_origin" >/dev/null ||
+        die "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace in $APP_ROOT/.env"
+    fi
+    log "WARNING: wildcard CORS is enabled; cross-origin credentials remain disabled."
+  else
+    [[ -n "$site_origin" ]] ||
+      die "SITE_ORIGIN must be set and non-empty in $APP_ROOT/.env"
+    normalized_site_origin="$(normalize_http_origin "$site_origin")" ||
+      die "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace in $APP_ROOT/.env"
+    [[ "$normalized_site_origin" == https://* ]] ||
+      die "SITE_ORIGIN must use HTTPS in $APP_ROOT/.env"
+    for cors_origin in "${configured_origins[@]}"; do
+      cors_origin="$(trim_whitespace "$cors_origin")"
+      [[ -n "$cors_origin" ]] || continue
+      normalized_cors_origin="$(normalize_http_origin "$cors_origin")" ||
+        die "CORS_ORIGINS entries must be valid HTTP(S) origins in $APP_ROOT/.env"
+      if [[ "$normalized_cors_origin" == "$normalized_site_origin" ]]; then
         cors_contains_site_origin=1
-        break
       fi
     done
     [[ "$cors_contains_site_origin" -eq 1 ]] ||

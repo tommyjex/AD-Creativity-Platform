@@ -5,6 +5,7 @@ set -u
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEPLOY_SCRIPT="$REPO_ROOT/scripts/deploy_server.sh"
 TEST_ROOT="$(mktemp -d)"
+REAL_PYTHON="$(command -v python3)"
 FAILURES=0
 
 trap 'rm -rf "$TEST_ROOT"' EXIT
@@ -76,6 +77,7 @@ create_fixture() {
 
   write_executable "$APP_ROOT/.venv/bin/python" \
     '#!/usr/bin/env bash' \
+    'if [[ "${1:-}" == "-" ]]; then exec "$REAL_PYTHON" "$@"; fi' \
     'printf "python %s\n" "$*" >>"$COMMAND_LOG"'
 
   write_executable "$FAKE_BIN/node" \
@@ -115,6 +117,7 @@ run_deploy() {
   env \
     APP_ROOT="$APP_ROOT" \
     COMMAND_LOG="$COMMAND_LOG" \
+    REAL_PYTHON="$REAL_PYTHON" \
     DEPLOY_LOCK_FILE="$CASE_ROOT/deploy.lock" \
     HEALTH_CHECK_ATTEMPTS=1 \
     HEALTH_CHECK_INTERVAL_SECONDS=0 \
@@ -227,6 +230,101 @@ test_wildcard_cors_opt_in_deploys() {
   pass "wildcard CORS deploys only with explicit opt-in"
 }
 
+test_comma_separated_wildcard_cors_opt_in_deploys() {
+  create_fixture comma_separated_wildcard_cors_opt_in
+  printf '%s\n' \
+    'APP_ENV=production' \
+    'CORS_ORIGINS=https://ad.example.com, *' \
+    'ALLOW_INSECURE_CORS=true' \
+    'SITE_ORIGIN=http://ad.example.com' \
+    'AUTH_COOKIE_SECURE=true' >"$APP_ROOT/.env"
+
+  if ! run_deploy; then
+    fail "an exact wildcard entry in a CORS origin list should enable opt-in mode"
+    return
+  fi
+
+  pass "comma-separated CORS origins recognize an exact wildcard entry"
+}
+
+test_wildcard_cors_opt_in_deploys_without_site_origin() {
+  create_fixture wildcard_cors_opt_in_without_site_origin
+  printf '%s\n' \
+    'APP_ENV=production' \
+    'CORS_ORIGINS=*' \
+    'ALLOW_INSECURE_CORS=true' \
+    'AUTH_COOKIE_SECURE=true' >"$APP_ROOT/.env"
+
+  if ! run_deploy; then
+    fail "explicit wildcard CORS opt-in should deploy without SITE_ORIGIN"
+    return
+  fi
+
+  assert_contains "$OUTPUT_LOG" "WARNING: wildcard CORS is enabled" \
+    "wildcard deployment without SITE_ORIGIN should print a security warning"
+  pass "wildcard CORS opt-in deploys without SITE_ORIGIN"
+}
+
+test_wildcard_cors_opt_in_deploys_with_empty_site_origin() {
+  local name
+  local site_origin
+
+  for name in empty whitespace; do
+    if [[ "$name" == "empty" ]]; then
+      site_origin='SITE_ORIGIN='
+    else
+      site_origin='SITE_ORIGIN="   "'
+    fi
+    create_fixture "wildcard_cors_opt_in_${name}_site_origin"
+    printf '%s\n' \
+      'APP_ENV=production' \
+      'CORS_ORIGINS=*' \
+      'ALLOW_INSECURE_CORS=true' \
+      "$site_origin" \
+      'AUTH_COOKIE_SECURE=true' >"$APP_ROOT/.env"
+
+    if ! run_deploy; then
+      fail "explicit wildcard CORS opt-in should deploy with $name SITE_ORIGIN"
+      return
+    fi
+  done
+
+  pass "wildcard CORS opt-in deploys with empty SITE_ORIGIN"
+}
+
+test_wildcard_cors_opt_in_accepts_http_site_origin() {
+  create_fixture wildcard_cors_opt_in_http_site_origin
+  printf '%s\n' \
+    'APP_ENV=production' \
+    'CORS_ORIGINS=*' \
+    'ALLOW_INSECURE_CORS=true' \
+    'SITE_ORIGIN=http://ad.example.com' \
+    'AUTH_COOKIE_SECURE=true' >"$APP_ROOT/.env"
+
+  if ! run_deploy; then
+    fail "explicit wildcard CORS opt-in should accept an HTTP SITE_ORIGIN"
+    return
+  fi
+
+  pass "wildcard CORS opt-in accepts an HTTP SITE_ORIGIN"
+}
+
+test_explicit_cors_normalizes_site_origin() {
+  create_fixture explicit_cors_normalized_site_origin
+  printf '%s\n' \
+    'APP_ENV=production' \
+    'CORS_ORIGINS=https://ad.example.com' \
+    'SITE_ORIGIN=HTTPS://AD.EXAMPLE.COM/' \
+    'AUTH_COOKIE_SECURE=true' >"$APP_ROOT/.env"
+
+  if ! run_deploy; then
+    fail "explicit CORS should accept and normalize an uppercase HTTPS scheme"
+    return
+  fi
+
+  pass "explicit CORS normalizes SITE_ORIGIN"
+}
+
 assert_security_preflight_failure() {
   local name="$1"
   local env_contents="$2"
@@ -259,6 +357,10 @@ test_production_security_env_gate() {
     'APP_ENV=production\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
     "CORS_ORIGINS must be set and non-empty"
   assert_security_preflight_failure \
+    missing_site_origin \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be set and non-empty"
+  assert_security_preflight_failure \
     empty_site_origin \
     'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN="   "\nAUTH_COOKIE_SECURE=true\n' \
     "SITE_ORIGIN must be set and non-empty"
@@ -275,6 +377,38 @@ test_production_security_env_gate() {
     'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=TRUE\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
     "ALLOW_INSECURE_CORS must be exactly true or false"
   assert_security_preflight_failure \
+    wildcard_site_origin_with_path \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nSITE_ORIGIN=http://ad.example.com/path\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace"
+  assert_security_preflight_failure \
+    wildcard_site_origin_with_query \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nSITE_ORIGIN=https://ad.example.com?mode=test\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace"
+  assert_security_preflight_failure \
+    wildcard_site_origin_with_fragment \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nSITE_ORIGIN=https://ad.example.com#section\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace"
+  assert_security_preflight_failure \
+    wildcard_site_origin_with_userinfo \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nSITE_ORIGIN=https://user@ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace"
+  assert_security_preflight_failure \
+    wildcard_site_origin_with_whitespace \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nSITE_ORIGIN=https://ad.example.com invalid\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace"
+  assert_security_preflight_failure \
+    wildcard_site_origin_without_host \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nSITE_ORIGIN=https://\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace"
+  assert_security_preflight_failure \
+    wildcard_site_origin_with_invalid_port \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=true\nSITE_ORIGIN=https://ad.example.com:invalid\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace"
+  assert_security_preflight_failure \
+    pseudo_wildcard_path \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com/*\nALLOW_INSECURE_CORS=true\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must be set and non-empty"
+  assert_security_preflight_failure \
     explicit_cors_uppercase_opt_in \
     'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nALLOW_INSECURE_CORS=TRUE\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
     "ALLOW_INSECURE_CORS must be exactly true or false"
@@ -285,7 +419,11 @@ test_production_security_env_gate() {
   assert_security_preflight_failure \
     invalid_site_origin \
     'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN=http://ad.example.com/path\nAUTH_COOKIE_SECURE=true\n' \
-    "SITE_ORIGIN must be an HTTPS origin without a path"
+    "SITE_ORIGIN must be a valid HTTP(S) origin without path, query, userinfo, fragment, or whitespace"
+  assert_security_preflight_failure \
+    insecure_site_origin \
+    'APP_ENV=production\nCORS_ORIGINS=http://ad.example.com\nSITE_ORIGIN=http://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "SITE_ORIGIN must use HTTPS"
   assert_security_preflight_failure \
     mismatched_origins \
     'APP_ENV=production\nCORS_ORIGINS=https://api.example.com\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
@@ -302,6 +440,11 @@ test_health_failure_prints_diagnostics
 test_old_node_fails_before_install
 test_production_security_env_gate
 test_wildcard_cors_opt_in_deploys
+test_comma_separated_wildcard_cors_opt_in_deploys
+test_wildcard_cors_opt_in_deploys_without_site_origin
+test_wildcard_cors_opt_in_deploys_with_empty_site_origin
+test_wildcard_cors_opt_in_accepts_http_site_origin
+test_explicit_cors_normalizes_site_origin
 
 if [[ "$FAILURES" -ne 0 ]]; then
   printf '%s test assertion(s) failed\n' "$FAILURES" >&2
