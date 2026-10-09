@@ -101,9 +101,10 @@ export function AccountMenu({
     <div
       className={cn(
         immersive
-          ? "fixed right-3 top-3 z-[90] sm:right-4 sm:top-4"
+          ? "fixed right-2 top-2 z-[90] sm:right-3"
           : "hidden md:block"
       )}
+      data-testid={immersive ? "immersive-account-menu" : undefined}
     >
       <Popover.Root
         onOpenChange={(nextOpen) => {
@@ -118,13 +119,18 @@ export function AccountMenu({
             className={cn(
               "flex items-center rounded-xl border text-left shadow-lg outline-none transition focus-visible:ring-2",
               immersive
-                ? "h-10 gap-2 border-white/15 bg-[#171a1f]/92 px-2.5 text-zinc-100 shadow-black/35 backdrop-blur-xl hover:border-white/25 focus-visible:ring-blue-500/50"
+                ? "h-10 gap-2 border-white/15 bg-[#171a1f]/92 px-2.5 text-zinc-100 shadow-black/35 backdrop-blur-xl hover:border-white/25 focus-visible:ring-blue-500/50 sm:w-36"
                 : "h-11 gap-2.5 border-[#ffe0a3]/30 bg-[#6b0000]/45 px-2.5 text-[#fff2dc] shadow-[#4a0000]/25 backdrop-blur-xl hover:bg-[#ffe0a3]/10 focus-visible:ring-[#ffe0a3]/50"
             )}
             type="button"
           >
             <Avatar displayName={user.display_name} immersive={immersive} />
-            <span className={cn("min-w-0", immersive && "hidden sm:block")}>
+            <span
+              className={cn(
+                "min-w-0",
+                immersive && "hidden flex-1 sm:block"
+              )}
+            >
               <span className="block max-w-28 truncate text-xs font-semibold">
                 {user.display_name}
               </span>

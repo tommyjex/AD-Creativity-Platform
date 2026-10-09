@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from contextlib import suppress
 from pathlib import Path
 from time import perf_counter
 from typing import Literal
@@ -489,6 +490,11 @@ async def upload_aigc_media(
     video_normalizer: VideoNormalizer = Depends(get_video_normalizer_service),
 ) -> Asset:
     upload_label = media_kind.removesuffix("s")
+    # #region debug-point E,F,H:upload-route-entry
+    with suppress(Exception):
+        import json as _debug_json, urllib.request as _debug_request
+        _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "new-db-stale-pipeline", "runId": "post-fix-upload", "hypothesisId": "E,F,H", "location": "aigc_routes.py:upload_aigc_media:entry", "msg": "[DEBUG] Upload route received complete body", "data": {"mediaKind": media_kind, "sizeBytes": len(content), "mimeType": mime_type, "extension": Path(filename or "").suffix.lower()}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+    # #endregion
     if media_kind == "subtitles":
         try:
             _validate_aigc_subtitle(content, filename=filename, mime_type=mime_type)
@@ -541,6 +547,11 @@ async def upload_aigc_media(
             filename=filename,
             mime_type=mime_type,
         )
+        # #region debug-point E,H:inspection-complete
+        with suppress(Exception):
+            import json as _debug_json, urllib.request as _debug_request
+            _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "new-db-stale-pipeline", "runId": "post-fix-upload", "hypothesisId": "E,H", "location": "aigc_routes.py:upload_aigc_media:inspected", "msg": "[DEBUG] Media inspection completed", "data": {"mediaKind": media_kind, "container": inspection.container, "normalizedMimeType": inspection.mime_type}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+        # #endregion
         normalized_mime_type = inspection.mime_type
         stored_filename = filename
         metadata: dict[str, object] = {
@@ -551,6 +562,11 @@ async def upload_aigc_media(
         }
         if kind == ReferenceAssetKind.VIDEO:
             normalized_video = await video_normalizer.normalize_if_needed(content)
+            # #region debug-point E,H:normalization-complete
+            with suppress(Exception):
+                import json as _debug_json, urllib.request as _debug_request
+                _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "new-db-stale-pipeline", "runId": "post-fix-upload", "hypothesisId": "E,H", "location": "aigc_routes.py:upload_aigc_media:normalized", "msg": "[DEBUG] Video normalization completed", "data": {"normalized": normalized_video.normalized, "sourceFormat": normalized_video.source_format, "sizeBytes": len(normalized_video.content)}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+            # #endregion
             content = normalized_video.content
             if normalized_video.normalized:
                 normalized_mime_type = "video/mp4"
@@ -563,6 +579,11 @@ async def upload_aigc_media(
                     "video_normalized": normalized_video.normalized,
                 }
             )
+        # #region debug-point E,F:storage-start
+        with suppress(Exception):
+            import json as _debug_json, urllib.request as _debug_request
+            _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "new-db-stale-pipeline", "runId": "post-fix-upload", "hypothesisId": "E,F", "location": "aigc_routes.py:upload_aigc_media:storage-start", "msg": "[DEBUG] Starting asset storage upload", "data": {"mediaKind": media_kind, "sizeBytes": len(content)}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+        # #endregion
         asset = asset_storage.upload_asset(
             repository,
             StoredAssetInput(
@@ -580,6 +601,11 @@ async def upload_aigc_media(
             ),
             content=content,
         )
+        # #region debug-point E,F:storage-complete
+        with suppress(Exception):
+            import json as _debug_json, urllib.request as _debug_request
+            _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "new-db-stale-pipeline", "runId": "post-fix-upload", "hypothesisId": "E,F", "location": "aigc_routes.py:upload_aigc_media:storage-complete", "msg": "[DEBUG] Asset storage upload completed", "data": {"mediaKind": media_kind, "assetId": asset.id}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+        # #endregion
         return asset_storage.with_access_url(asset)
     except VideoNormalizationError as exc:
         raise _error(
@@ -600,6 +626,11 @@ async def upload_aigc_media(
             f"AIGC {upload_label} upload is unavailable",
         ) from exc
     except Exception as exc:
+        # #region debug-point E,F,G,H:upload-exception
+        with suppress(Exception):
+            import json as _debug_json, urllib.request as _debug_request
+            _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "new-db-stale-pipeline", "runId": "post-fix-upload", "hypothesisId": "E,F,G,H", "location": "aigc_routes.py:upload_aigc_media:exception", "msg": "[DEBUG] Upload route caught exception", "data": {"mediaKind": media_kind, "exceptionType": type(exc).__name__, "exceptionMessage": str(exc)[:500]}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+        # #endregion
         raise _error(
             status.HTTP_502_BAD_GATEWAY,
             ErrorCode.EXTERNAL_SERVICE_ERROR,

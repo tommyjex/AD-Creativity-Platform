@@ -3082,6 +3082,8 @@ describe("AIGC editor modes", () => {
       "border-[#6f171b]",
       "h-14",
       "overflow-hidden",
+      "pr-[4.5rem]",
+      "sm:pr-44",
       "shadow-[0_3px_12px_rgba(0,0,0,0.22)]"
     );
     expect(

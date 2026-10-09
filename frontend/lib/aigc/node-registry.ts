@@ -191,7 +191,7 @@ const AIGC_MODEL_CONTROL_NODE_REGISTRY = [
   },
   {
     type: "video_subtitle_extraction",
-    label: "视频字幕提取",
+    label: "视频识别字幕",
     category: "model",
     executable: true,
     inputs: [port("video", "视频", "video_asset")],

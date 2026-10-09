@@ -105,6 +105,16 @@ def test_video_probe_accepts_mp4_supported_codecs(codec: str) -> None:
     assert inspected.fps == 30
 
 
+def test_video_probe_accepts_standard_23_976_fps() -> None:
+    inspected = _parse_video_probe(
+        video_probe(fps="24000/1001"),
+        filename="clip.mp4",
+        mime_type="video/mp4",
+    )
+
+    assert inspected.fps == pytest.approx(24_000 / 1_001)
+
+
 def test_video_probe_accepts_mov_pcm_and_rejects_invalid_media() -> None:
     inspected = _parse_video_probe(
         video_probe(audio_codec="pcm_s16le", major_brand="qt  "),

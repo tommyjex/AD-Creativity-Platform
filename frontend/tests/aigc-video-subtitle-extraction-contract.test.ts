@@ -3,7 +3,9 @@ import {
   getAigcConnectionValidationError,
   isValidAigcConnection
 } from "@/components/workspace/aigc/aigc-editor";
+import { migrateAigcDefinitionV2 } from "@/lib/aigc/definition-migration";
 import { createAigcEditorStore } from "@/lib/aigc/editor-store";
+import { deriveAigcNodeDisplayNames } from "@/lib/aigc/node-display-name";
 import {
   AIGC_NODE_REGISTRY,
   isAigcExecutionNodeType
@@ -16,7 +18,7 @@ describe("AIGC video subtitle extraction contract", () => {
         (item) => item.type === "video_subtitle_extraction"
       )
     ).toMatchObject({
-      label: "视频字幕提取",
+      label: "视频识别字幕",
       category: "model",
       executable: true,
       inputs: [
@@ -35,11 +37,57 @@ describe("AIGC video subtitle extraction contract", () => {
   it("creates the node with fixed Subtitle mode", () => {
     const store = createAigcEditorStore();
     store.getState().addNode("video_subtitle_extraction");
+    const node = store.getState().definition.nodes[0];
 
-    expect(store.getState().definition.nodes[0]).toMatchObject({
+    expect(node).toMatchObject({
       type: "video_subtitle_extraction",
+      custom_name: null,
       config: { mode: "Subtitle" }
     });
+    expect(
+      deriveAigcNodeDisplayNames([node]).get(node.id)?.displayName
+    ).toBe("视频识别字幕");
+  });
+
+  it("loads historical nodes without rewriting their type or custom name", () => {
+    const historicalNode = {
+      id: "ocr",
+      type: "video_subtitle_extraction",
+      position: { x: 0, y: 0 },
+      size: { width: 280, height: 200 },
+      config: { mode: "Subtitle" }
+    };
+    const migrate = (customName?: string) =>
+      migrateAigcDefinitionV2({
+        schemaVersion: 2,
+        nodes: [
+          customName === undefined
+            ? historicalNode
+            : { ...historicalNode, custom_name: customName }
+        ],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      });
+
+    const unnamed = migrate();
+    expect(unnamed.nodes[0]).toMatchObject({
+      type: "video_subtitle_extraction",
+      custom_name: null,
+      config: { mode: "Subtitle" }
+    });
+    expect(
+      deriveAigcNodeDisplayNames(unnamed.nodes).get("ocr")?.displayName
+    ).toBe("视频识别字幕");
+
+    const custom = migrate(" 我的字幕 ");
+    expect(custom.nodes[0]).toMatchObject({
+      type: "video_subtitle_extraction",
+      custom_name: "我的字幕",
+      config: { mode: "Subtitle" }
+    });
+    expect(
+      deriveAigcNodeDisplayNames(custom.nodes).get("ocr")?.displayName
+    ).toBe("我的字幕");
   });
 
   it("connects subtitle output only to multi-track subtitles", () => {

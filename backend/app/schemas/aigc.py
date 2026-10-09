@@ -2222,7 +2222,7 @@ AIGC_NODE_REGISTRY: tuple[AigcNodeRegistryItem, ...] = (
     ),
     AigcNodeRegistryItem(
         type=AigcNodeType.VIDEO_SUBTITLE_EXTRACTION,
-        label="视频字幕提取",
+        label="视频识别字幕",
         category=AigcNodeCategory.MODEL,
         executable=True,
         inputs=[_port("video", "视频", AigcPortType.VIDEO_ASSET)],

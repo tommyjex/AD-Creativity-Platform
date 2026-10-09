@@ -1,5 +1,7 @@
-import backend.app.main as main_module
 import pytest
+from fastapi.testclient import TestClient
+
+import backend.app.main as main_module
 from backend.app.api.dependencies import (
     get_aigc_pipeline_runtime,
     get_asset_storage_service,
@@ -7,12 +9,12 @@ from backend.app.api.dependencies import (
     get_modelark_generation_service,
     get_multitrack_client_factory,
     get_repository,
+    get_video_ocr_client_factory,
 )
 from backend.app.core.config import Settings, get_settings
 from backend.app.main import create_app
 from backend.app.repositories import InMemoryRepository
 from backend.app.services.assets import AssetStorageService
-from fastapi.testclient import TestClient
 
 
 class RuntimeLifecycleProbe:
@@ -129,3 +131,25 @@ def test_app_lifespan_resolves_multitrack_client_factory() -> None:
         runtime = app.state.aigc_pipeline_runtime
         assert runtime.gateway.multitrack_client_factory is multitrack_factory
         assert runtime.gateway.multitrack_client_factory() is multitrack_client
+
+
+def test_app_lifespan_resolves_video_ocr_client_factory() -> None:
+    app = create_app()
+    repository = InMemoryRepository()
+    video_ocr_client = object()
+    video_ocr_factory = lambda: video_ocr_client
+    app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_asset_storage_service] = lambda: (
+        AssetStorageService(bucket="test")
+    )
+    app.dependency_overrides[get_modelark_generation_service] = object
+    app.dependency_overrides[get_media_inspector_service] = object
+    app.dependency_overrides[get_video_ocr_client_factory] = lambda: (
+        video_ocr_factory
+    )
+    app.dependency_overrides[get_settings] = Settings
+
+    with TestClient(app):
+        runtime = app.state.aigc_pipeline_runtime
+        assert runtime.gateway.video_ocr_client_factory is video_ocr_factory
+        assert runtime.gateway.video_ocr_client_factory() is video_ocr_client

@@ -167,7 +167,9 @@ function validateInspectedMetadata(
     const pixels = (width ?? 0) * (height ?? 0);
     if (pixels < 407_696 || pixels > 8_295_044) return "视频像素数不符合要求";
     const fps = metadataNumber(asset, "fps");
-    if (!fps || fps < 24 || fps > 60) return "视频帧率需为 24-60 FPS";
+    if (!fps || fps < 23.976 || fps > 60) {
+      return "视频帧率需为 23.976-60 FPS";
+    }
   }
   return null;
 }

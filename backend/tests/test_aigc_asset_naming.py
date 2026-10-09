@@ -70,6 +70,38 @@ def test_build_name_migrates_v1_and_prefers_config_title() -> None:
     ) == "画布-精修结果2-图片3.jpg"
 
 
+def test_build_name_uses_video_subtitle_default_for_historical_canvas() -> None:
+    definition = _definition(
+        [_node("ocr", "video_subtitle_extraction", {"mode": "Subtitle"})],
+        version=1,
+    )
+
+    assert build_aigc_output_asset_name(
+        pipeline_name="历史画布",
+        definition_snapshot=definition,
+        node_id="ocr",
+        mime_type="application/x-subrip",
+        output_ordinal=0,
+    ) == "历史画布-视频识别字幕-字幕1.srt"
+
+
+def test_build_subtitle_name_preserves_historical_custom_name() -> None:
+    node = _node(
+        "ocr",
+        "video_subtitle_extraction",
+        {"mode": "Subtitle"},
+    )
+    node["custom_name"] = " 我的字幕 "
+
+    assert build_aigc_output_asset_name(
+        pipeline_name="历史画布",
+        definition_snapshot=_definition([node]),
+        node_id="ocr",
+        mime_type="application/x-subrip",
+        output_ordinal=0,
+    ) == "历史画布-我的字幕-字幕1.srt"
+
+
 @pytest.mark.parametrize(
     ("operation", "expected"),
     [

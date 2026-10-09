@@ -37,7 +37,7 @@
   - [x] SubTask 5.5: 增加连接、保存重载、顺序、去重、总数上限、无效 SRT、缓存和 Provider 项目映射测试。
 
 - [x] Task 6: 实现节点卡片、结果投影和下载体验。
-  - [x] SubTask 6.1: 在节点面板、React Flow 卡片和 Editor Store 中支持“视频字幕提取”节点及视频模态配色。
+  - [x] SubTask 6.1: 在节点面板、React Flow 卡片和 Editor Store 中支持“视频识别字幕”节点及视频模态配色。
   - [x] SubTask 6.2: 节点卡片展示“硬字幕 OCR · SRT”、连接状态、运行状态和空字幕成功状态；首版不展示无效配置控件。
   - [x] SubTask 6.3: 扩展结果投影，通过受控资产内容接口读取并解析 SRT，展示字幕片段数、源视频时长、按时间排序的字幕预览和脱敏错误阶段。
   - [x] SubTask 6.4: 提供 SRT 下载图标按钮，文件名遵循“节点标题-序号.srt”；不可用资产禁用下载。
@@ -50,6 +50,11 @@
   - [x] SubTask 7.4: 在桌面与窄屏验证节点、结果面板和多轨字幕轨无重叠，视频与文本区域尺寸稳定。
   - [x] SubTask 7.5: 审计浏览器网络请求，确认自动化验收未调用真实计费的 `video-ocr` 接口，并关闭测试浏览器进程。
 
+- [x] Task 8: 将节点用户可见名称统一为“视频识别字幕”。
+  - [x] SubTask 8.1: 更新前端节点注册表和后端资产命名中的默认显示名称，不修改内部类型 `video_subtitle_extraction`。
+  - [x] SubTask 8.2: 更新相关前后端测试断言，覆盖节点面板、默认节点标题、输出资产命名和历史画布兼容。
+  - [x] SubTask 8.3: 运行相关 Vitest、pytest、TypeScript 与 ESLint 校验，并在画布中确认视频输入和 SRT 字幕输出行为不变。
+
 # Task Dependencies
 
 - Task 2 depends on Task 1 的模式与结果契约。
@@ -58,3 +63,4 @@
 - Task 5 depends on Task 1，可与 Task 2、Task 3、Task 4 并行开发。
 - Task 6 depends on Task 1 and Task 4，可与 Task 5 并行开发。
 - Task 7 depends on Task 1 至 Task 6。
+- Task 8 depends on Task 1 至 Task 7 已交付的节点契约，仅调整用户可见命名。

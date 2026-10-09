@@ -246,6 +246,11 @@ class AigcPipelineRuntime:
                 )
                 self._ensure_lease_retry()
                 return False
+            # #region debug-point A:lease-acquisition
+            with suppress(Exception):
+                import json as _debug_json, urllib.request as _debug_request
+                _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A", "location": "aigc_executor.py:start:lease", "msg": "[DEBUG] AIGC runtime attempted worker lease acquisition", "data": {"ownerId": self.owner_id, "acquired": lease is not None, "leaseOwnerId": lease.owner_id if lease is not None else None, "fencingToken": lease.fencing_token if lease is not None else None, "ocrFactoryCallable": callable(self.gateway.video_ocr_client_factory), "ocrFactoryType": type(self.gateway.video_ocr_client_factory).__name__}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+            # #endregion
             if lease is None:
                 self._ensure_lease_retry()
                 return False
@@ -1780,10 +1785,20 @@ class AigcPipelineRuntime:
         while True:
             task_id = await self.queue.get()
             self._enqueued.discard(task_id)
+            # #region debug-point A:worker-dequeue
+            with suppress(Exception):
+                import json as _debug_json, urllib.request as _debug_request
+                _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A", "location": "aigc_executor.py:_worker:dequeue", "msg": "[DEBUG] Worker dequeued task", "data": {"taskId": task_id, "workerIndex": _index}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+            # #endregion
             try:
                 try:
                     await self._process_task(task_id)
-                except Exception:
+                except Exception as exc:
+                    # #region debug-point A,B,C,D:outer-worker-exception
+                    with suppress(Exception):
+                        import json as _debug_json, traceback as _debug_traceback, urllib.request as _debug_request
+                        _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A,B,C,D", "location": "aigc_executor.py:_worker:exception", "msg": "[DEBUG] Worker item failed before normal task handling", "data": {"taskId": task_id, "exceptionType": type(exc).__name__, "exceptionMessage": str(exc)[:500], "traceTail": _debug_traceback.format_exception(type(exc), exc, exc.__traceback__)[-4:]}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+                    # #endregion
                     logger.exception(
                         "Unhandled AIGC worker item error",
                         extra={"aigc_task_id": task_id},
@@ -1827,6 +1842,11 @@ class AigcPipelineRuntime:
         )
         if task is None:
             return
+        # #region debug-point A,D:claimed-task
+        with suppress(Exception):
+            import json as _debug_json, urllib.request as _debug_request
+            _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A,D", "location": "aigc_executor.py:_process_task:claimed", "msg": "[DEBUG] Worker claimed AIGC task", "data": {"taskId": task.task_id, "taskType": task.type.value, "paramKeys": sorted(task.params.keys()), "upstreamCount": len(task.upstream)}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+        # #endregion
         task_context = {
             "pipeline_id": task.pipeline_id,
             "run_id": task.run_id,
@@ -1872,7 +1892,17 @@ class AigcPipelineRuntime:
                         self._load_json_parser_source(task),
                     )
                 else:
+                    # #region debug-point B,C:gateway-dispatch
+                    with suppress(Exception):
+                        import json as _debug_json, urllib.request as _debug_request
+                        _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "B,C", "location": "aigc_executor.py:_process_task:before_gateway", "msg": "[DEBUG] Dispatching task to gateway", "data": {"taskId": task.task_id, "taskType": task.type.value}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+                    # #endregion
                     execution = await self.gateway.execute(task)
+                    # #region debug-point B,C:gateway-return
+                    with suppress(Exception):
+                        import json as _debug_json, urllib.request as _debug_request
+                        _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "B,C", "location": "aigc_executor.py:_process_task:after_gateway", "msg": "[DEBUG] Gateway returned task result", "data": {"taskId": task.task_id, "taskType": task.type.value, "resultKind": execution.result.kind.value}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+                    # #endregion
             if task.type == AigcTaskType.JSON_PARSER:
                 committed, accepted = (
                     self.repository.commit_aigc_json_parser_task_attempt(
@@ -2012,6 +2042,11 @@ class AigcPipelineRuntime:
                 **task_context,
             )
         except Exception as exc:
+            # #region debug-point A,B,C,D:worker-exception
+            with suppress(Exception):
+                import json as _debug_json, traceback as _debug_traceback, urllib.request as _debug_request
+                _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A,B,C,D", "location": "aigc_executor.py:_process_task:exception", "msg": "[DEBUG] Worker caught unhandled task exception", "data": {"taskId": task.task_id, "taskType": task.type.value, "exceptionType": type(exc).__name__, "exceptionMessage": str(exc)[:500], "traceTail": _debug_traceback.format_exception(type(exc), exc, exc.__traceback__)[-4:]}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
+            # #endregion
             self.repository.commit_aigc_task_attempt(
                 task.task_id,
                 fencing_token=token,

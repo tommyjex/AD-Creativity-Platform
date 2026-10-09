@@ -1177,7 +1177,7 @@ function AigcEditorContent({
         data-testid="aigc-editor-shell"
       >
       <header
-        className="relative flex h-14 shrink-0 flex-row items-center gap-1 overflow-hidden border-b border-[#6f171b] bg-[#b61519] bg-[url('/images/navigation-national-day-red.webp')] bg-cover bg-center bg-no-repeat px-2 shadow-[0_3px_12px_rgba(0,0,0,0.22)] sm:px-3"
+        className="relative flex h-14 shrink-0 flex-row items-center gap-1 overflow-hidden border-b border-[#6f171b] bg-[#b61519] bg-[url('/images/navigation-national-day-red.webp')] bg-cover bg-center bg-no-repeat pl-2 pr-[4.5rem] shadow-[0_3px_12px_rgba(0,0,0,0.22)] sm:pl-3 sm:pr-44"
         data-testid="aigc-editor-header"
       >
         <div
@@ -2988,7 +2988,7 @@ const MEDIA_INPUT_OPTIONS = {
   },
   video: {
     accept: AIGC_MEDIA_ACCEPT.video,
-    hint: "MP4 / MOV；H.264 / H.265；24-60 FPS；不超过 200 MB",
+    hint: "MP4 / MOV；H.264 / H.265；23.976-60 FPS；不超过 200 MB",
     kind: "video",
     label: "视频",
     queryKey: "selectable-video-assets"
@@ -3086,6 +3086,9 @@ function MediaInputConfig({
     }
     setIsUploading(true);
     setUploadError(null);
+    // #region debug-point E,G,H:upload-start
+    void fetch("http://127.0.0.1:7777/event", { method: "POST", body: JSON.stringify({ sessionId: "new-db-stale-pipeline", runId: "post-fix-upload", hypothesisId: "E,G,H", location: "aigc-editor.tsx:uploadMedia:start", msg: "[DEBUG] Browser starting AIGC media upload", data: { kind: options.kind, sizeBytes: file.size, mimeType: file.type, extension: file.name.includes(".") ? `.${file.name.split(".").pop()?.toLowerCase()}` : "" } }) }).catch(() => {});
+    // #endregion
     try {
       const asset = await apiClient.uploadAigcMedia(options.kind, file, {
         filename: file.name,
@@ -3104,6 +3107,9 @@ function MediaInputConfig({
         ]
       );
     } catch (error) {
+      // #region debug-point E,G,H:upload-error
+      void fetch("http://127.0.0.1:7777/event", { method: "POST", body: JSON.stringify({ sessionId: "new-db-stale-pipeline", runId: "post-fix-upload", hypothesisId: "E,G,H", location: "aigc-editor.tsx:uploadMedia:error", msg: "[DEBUG] Browser upload failed", data: { kind: options.kind, errorName: error instanceof Error ? error.name : typeof error, errorMessage: error instanceof Error ? error.message : null, isApiError: isApiError(error), status: isApiError(error) ? error.status : null, code: isApiError(error) ? error.code : null } }) }).catch(() => {});
+      // #endregion
       setUploadError(getUserFacingErrorMessage(error));
     } finally {
       setIsUploading(false);

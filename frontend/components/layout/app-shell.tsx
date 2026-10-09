@@ -59,10 +59,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(84,0,0,0.06)_0%,rgba(91,0,0,0.24)_100%),linear-gradient(90deg,rgba(91,0,0,0.78)_0%,rgba(132,5,5,0.38)_22%,rgba(174,12,8,0.14)_52%,rgba(127,3,3,0.34)_74%,rgba(82,0,0,0.70)_100%)]"
         />
         <div
-          className="container relative z-10 flex h-full items-center justify-between gap-6 2xl:max-w-[1600px]"
+          className="relative z-10 flex h-full w-full items-center gap-4 px-4 lg:px-6"
           data-testid="app-shell-navigation-layout"
         >
-          <Link className="group flex items-center gap-3" href="/">
+          <Link className="group flex shrink-0 items-center gap-3" href="/">
             <BrandMark />
             <div className="leading-none">
               <div className="text-sm font-semibold tracking-[0.18em] text-white">
@@ -76,7 +76,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <nav
             aria-label="主导航"
-            className="hidden items-center gap-1 rounded-full border border-[#ffe0a3]/25 bg-[#6b0000]/45 p-1 shadow-[0_8px_24px_rgba(74,0,0,0.24)] backdrop-blur-xl md:flex"
+            className="hidden items-center gap-1 rounded-full border border-[#ffe0a3]/25 bg-[#6b0000]/45 p-1 shadow-[0_8px_24px_rgba(74,0,0,0.24)] backdrop-blur-xl md:absolute md:left-1/2 md:flex md:-translate-x-1/2"
+            data-testid="app-shell-primary-navigation"
           >
             {navItems.map((item) => {
               const isActive =
@@ -100,13 +101,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          <AccountMenu />
+          <div
+            className="ml-auto hidden shrink-0 md:block"
+            data-testid="app-shell-account-slot"
+          >
+            <AccountMenu />
+          </div>
 
           <button
             aria-controls="mobile-navigation-menu"
             aria-expanded={isMobileNavOpen}
             aria-label={isMobileNavOpen ? "关闭导航菜单" : "打开导航菜单"}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-[#ffe0a3]/35 bg-[#6b0000]/35 text-[#fff2dc] transition hover:bg-[#ffe0a3]/10 md:hidden"
+            className="ml-auto grid h-10 w-10 shrink-0 place-items-center rounded-md border border-[#ffe0a3]/35 bg-[#6b0000]/35 text-[#fff2dc] transition hover:bg-[#ffe0a3]/10 md:hidden"
             onClick={() =>
               setMobileNavPathname(isMobileNavOpen ? null : pathname)
             }

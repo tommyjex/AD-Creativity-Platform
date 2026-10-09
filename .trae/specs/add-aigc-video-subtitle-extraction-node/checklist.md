@@ -1,6 +1,6 @@
 # Checklist
 
-- [x] AIGC 节点面板可添加“视频字幕提取”节点，旧 `schemaVersion=1` 画布无需迁移即可加载
+- [x] AIGC 节点面板可添加“视频识别字幕”节点，旧 `schemaVersion=1` 画布无需迁移即可加载
 - [x] 节点固定使用 `mode=Subtitle`，只接受一个 `video_asset` 输入并输出 `subtitle_asset`
 - [x] 前后端节点类型、Task 类型、联合类型、注册表、执行白名单和 DAG 端口契约保持同构
 - [x] 非视频输入、缺失输入、多输入和 `subtitle_asset` 错连在调用供应商前被拒绝
@@ -31,3 +31,8 @@
 - [x] 前端相关 Vitest、typecheck、lint 和 production build 通过
 - [x] 浏览器 Mock 验收覆盖添加、连线、保存重载、执行、预览、下载、空结果、失败重试和多轨接入
 - [x] 自动化测试与浏览器验收未向真实计费的 MediaKit `video-ocr` 接口发起请求，结束后无残留测试浏览器进程
+- [x] 节点面板和新建节点默认标题统一显示“视频识别字幕”
+- [x] 内部类型保持 `video_subtitle_extraction`，历史画布无需迁移且自定义节点名称不被覆盖
+- [x] 节点仍只接受一个 `video_asset` 输入，并输出可预览、下载和下游消费的 SRT `subtitle_asset`
+- [x] 后端生成的默认字幕资产名称与“视频识别字幕”保持一致
+- [x] 相关 Vitest、pytest、TypeScript 和 ESLint 校验通过

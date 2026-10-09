@@ -21,6 +21,7 @@ from .api.dependencies import (
     get_multitrack_client_factory,
     get_repository,
     get_video_enhancement_client_factory,
+    get_video_ocr_client_factory,
 )
 from .api.router import api_router
 from .core.config import ConfigurationError, get_settings, normalize_http_origin
@@ -84,6 +85,10 @@ async def _lifespan(application: FastAPI):
             face_blur_client_factory=await _resolve_dependency(
                 application,
                 get_face_blur_video_client_factory,
+            ),
+            video_ocr_client_factory=await _resolve_dependency(
+                application,
+                get_video_ocr_client_factory,
             ),
             multitrack_client_factory=await _resolve_dependency(
                 application,

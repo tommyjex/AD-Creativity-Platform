@@ -11,6 +11,10 @@ function getInternalBackendBaseUrl() {
 const nextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  experimental: {
+    proxyClientMaxBodySize: "200mb",
+    proxyTimeout: 900_000
+  },
   reactStrictMode: true,
   async rewrites() {
     return [

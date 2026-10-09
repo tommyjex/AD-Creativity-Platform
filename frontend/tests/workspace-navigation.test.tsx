@@ -175,6 +175,11 @@ describe("AppShell top navigation", () => {
       "bg-[#0b0d10]"
     );
     expect(screen.getByTestId("app-shell-content")).not.toHaveClass("pt-16");
+    expect(screen.getByTestId("immersive-account-menu")).toHaveClass(
+      "fixed",
+      "right-2",
+      "top-2"
+    );
   });
 
   it("uses the immersive shell on the template canvas route", () => {
@@ -305,7 +310,7 @@ describe("AppShell top navigation", () => {
     );
   });
 
-  it("uses a wider navigation container on extra-wide screens", () => {
+  it("keeps the primary navigation centered and the account slot at the viewport edge", () => {
     render(
       <AppShell>
         <div>首页内容</div>
@@ -313,8 +318,18 @@ describe("AppShell top navigation", () => {
     );
 
     expect(screen.getByTestId("app-shell-navigation-layout")).toHaveClass(
-      "container",
-      "2xl:max-w-[1600px]"
+      "w-full",
+      "px-4",
+      "lg:px-6"
+    );
+    expect(screen.getByTestId("app-shell-primary-navigation")).toHaveClass(
+      "md:absolute",
+      "md:left-1/2",
+      "md:-translate-x-1/2"
+    );
+    expect(screen.getByTestId("app-shell-account-slot")).toHaveClass(
+      "ml-auto",
+      "shrink-0"
     );
   });
 

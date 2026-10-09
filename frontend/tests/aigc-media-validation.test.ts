@@ -87,6 +87,17 @@ describe("AIGC media validation", () => {
     ).toEqual({ state: "pending", message: "执行前检测" });
     expect(
       aigcMediaCompatibility(
+        asset("film", "uploaded_video", "video/mp4", {
+          inspection_version: 1,
+          width: 1920,
+          height: 1080,
+          fps: 24_000 / 1_001
+        }),
+        "video"
+      )
+    ).toEqual({ state: "available", message: "规格可用" });
+    expect(
+      aigcMediaCompatibility(
         asset("bad", "uploaded_video", "video/mp4", {
           inspection_version: 1,
           width: 1280,
@@ -95,7 +106,10 @@ describe("AIGC media validation", () => {
         }),
         "video"
       )
-    ).toEqual({ state: "incompatible", message: "视频帧率需为 24-60 FPS" });
+    ).toEqual({
+      state: "incompatible",
+      message: "视频帧率需为 23.976-60 FPS"
+    });
   });
 
   it("uses dedicated layer decomposition format, size, ratio, and pixel limits", () => {

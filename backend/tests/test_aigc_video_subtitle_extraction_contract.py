@@ -68,6 +68,7 @@ def test_video_subtitle_extraction_contract_and_defaults() -> None:
         if item.type == AigcNodeType.VIDEO_SUBTITLE_EXTRACTION
     )
     assert ocr.config.mode == "Subtitle"
+    assert registration.label == "视频识别字幕"
     assert registration.inputs[0].type.value == "video_asset"
     assert registration.outputs[0].type.value == "subtitle_asset"
     assert AigcTaskType.VIDEO_SUBTITLE_EXTRACTION.value == (

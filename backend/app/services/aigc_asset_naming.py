@@ -25,6 +25,7 @@ _MIME_NAME_PARTS = {
     "video/mov": ("视频", ".mov"),
     "video/mpeg": ("视频", ".mpeg"),
     "video/webm": ("视频", ".webm"),
+    "application/x-subrip": ("字幕", ".srt"),
 }
 _NODE_BASE_NAMES = {
     "llm": "LLM",
@@ -32,7 +33,7 @@ _NODE_BASE_NAMES = {
     "video_generation": "生视频",
     "video_enhancement": "视频画质增强",
     "video_face_blur": "视频人脸打码",
-    "video_subtitle_extraction": "视频字幕提取",
+    "video_subtitle_extraction": "视频识别字幕",
     "multi_track_edit": "多轨剪辑",
     "layer_canvas": "图层画布",
     "layer_composite": "图层合成",

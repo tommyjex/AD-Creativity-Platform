@@ -6,7 +6,7 @@
 
 ## What Changes
 
-- 新增可执行节点 `video_subtitle_extraction`，显示名称为“视频字幕提取”。
+- 新增可执行节点 `video_subtitle_extraction`，显示名称为“视频识别字幕”。
 - 节点接收一个 `video_asset`，固定使用 MediaKit `mode=Subtitle`，输出一个 `subtitle_asset`。
 - 新增独立 `VIDEO_SUBTITLE_EXTRACTION` AIGC Task 类型和 `MediaKitVideoOcrClient`，调用 `POST /api/v1/tools/video-ocr` 并轮询 `GET /api/v1/tasks/{task_id}`。
 - 复用现有 `MEDIAKIT_API_KEY`、`MEDIAKIT_BASE_URL`、受控临时视频 URL、`SubtitleSegment` 和 `segments_to_srt`。
@@ -45,7 +45,7 @@
 
 ## ADDED Requirements
 
-### Requirement: 视频字幕提取节点契约
+### Requirement: 视频识别字幕节点契约
 
 系统 SHALL 在 AIGC 画布中提供可执行节点 `video_subtitle_extraction`，节点具有一个必填 `video` 输入端口和一个 `subtitle` 输出端口，端口类型分别为 `video_asset` 与 `subtitle_asset`。
 
@@ -56,7 +56,7 @@
 
 #### Scenario: 添加并连接节点
 
-- **WHEN** 用户从节点面板添加“视频字幕提取”节点
+- **WHEN** 用户从节点面板添加“视频识别字幕”节点
 - **THEN** 节点以视频模态配色显示
 - **AND** 节点卡片摘要显示“硬字幕 OCR · SRT”
 - **AND** 节点可接收视频输入、生视频、视频画质增强、视频人脸打码或其他 `video_asset` 输出
@@ -267,6 +267,24 @@
 ### Requirement: AIGC 字幕资产结果
 
 AIGC 结果投影 SHALL 支持 `subtitle_asset`，使视频字幕提取结果可被预览、下载、历史 Run 切换和下游多轨剪辑消费。不可用或已删除的字幕资产 SHALL 显示不可用状态并禁止下载，不得回退到历史签名 URL。
+
+### Requirement: 视频识别字幕节点命名
+
+系统 SHALL 将 `video_subtitle_extraction` 的用户可见名称统一为“视频识别字幕”，同时保持内部节点类型、已保存画布定义、执行记录、缓存和 API 契约不变。
+
+#### Scenario: 新增节点
+
+- **WHEN** 用户打开 AIGC 画布节点面板
+- **THEN** 节点列表显示“视频识别字幕”
+- **AND** 添加后的节点标题默认显示“视频识别字幕”
+- **AND** 节点仍只接受一个 `video_asset` 输入并输出 SRT 格式的 `subtitle_asset`
+
+#### Scenario: 加载历史画布
+
+- **WHEN** 系统加载包含 `video_subtitle_extraction` 的历史画布
+- **THEN** 无需迁移节点类型或配置即可正常加载和执行
+- **AND** 未设置自定义名称的节点显示“视频识别字幕”
+- **AND** 已设置自定义名称的节点保持用户名称不变
 
 ## REMOVED Requirements
 
