@@ -42,6 +42,7 @@ def test_tls_logging_defaults_are_disabled_and_safe() -> None:
     assert settings.tls_max_retries == 3
     assert settings.tls_retry_initial_seconds == 1
     assert settings.tls_timeout_seconds == 5
+    assert settings.tls_shutdown_timeout_seconds == 5
 
 
 def test_auth_security_defaults() -> None:
@@ -340,6 +341,7 @@ def test_tls_logging_settings_read_secret_environment_values(
     monkeypatch.setenv("TLS_MAX_RETRIES", "0")
     monkeypatch.setenv("TLS_RETRY_INITIAL_SECONDS", "2")
     monkeypatch.setenv("TLS_TIMEOUT_SECONDS", "15")
+    monkeypatch.setenv("TLS_SHUTDOWN_TIMEOUT_SECONDS", "7")
 
     settings = Settings.from_env()
 
@@ -357,6 +359,7 @@ def test_tls_logging_settings_read_secret_environment_values(
     assert settings.tls_max_retries == 0
     assert settings.tls_retry_initial_seconds == 2
     assert settings.tls_timeout_seconds == 15
+    assert settings.tls_shutdown_timeout_seconds == 7
     assert "tls-access-secret" not in str(settings)
     assert "tls-secret-secret" not in str(settings)
 

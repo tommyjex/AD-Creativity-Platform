@@ -199,6 +199,7 @@ class Settings(BaseModel):
     tls_max_retries: int = Field(default=3, ge=0)
     tls_retry_initial_seconds: int = Field(default=1, gt=0)
     tls_timeout_seconds: int = Field(default=5, gt=0)
+    tls_shutdown_timeout_seconds: int = Field(default=5, gt=0)
 
     @model_validator(mode="after")
     def validate_auth_security(self) -> "Settings":
@@ -517,6 +518,10 @@ class Settings(BaseModel):
             tls_timeout_seconds=_parse_positive_int_env(
                 "TLS_TIMEOUT_SECONDS",
                 cls.model_fields["tls_timeout_seconds"].default,
+            ),
+            tls_shutdown_timeout_seconds=_parse_positive_int_env(
+                "TLS_SHUTDOWN_TIMEOUT_SECONDS",
+                cls.model_fields["tls_shutdown_timeout_seconds"].default,
             ),
         )
 

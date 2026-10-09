@@ -8,6 +8,7 @@ import hmac
 import json
 import logging
 from collections.abc import Mapping
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -22,6 +23,7 @@ MAX_LOGS_PER_GROUP = 10_000
 _SIGNING_ALGORITHM = "HMAC-SHA256"
 _SIGNING_SERVICE = "TLS"
 _INTERNAL_SKIP_ATTRIBUTE = "tls_skip_delivery"
+_STOP = object()
 
 
 def encode_log_group_list(
@@ -173,13 +175,14 @@ class TlsLogSink:
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self._settings = settings
-        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
+        self._queue: asyncio.Queue[dict[str, Any] | object] = asyncio.Queue(
             maxsize=settings.tls_queue_capacity
         )
         self._client = client or httpx.AsyncClient(timeout=settings.tls_timeout_seconds)
         self._owns_client = client is None
         self._worker: asyncio.Task[None] | None = None
         self._closed = False
+        self._pending_count = 0
         self.dropped_count = 0
         self.retried_count = 0
 
@@ -213,20 +216,37 @@ class TlsLogSink:
             return
         try:
             self._queue.put_nowait(dict(event))
+            self._pending_count += 1
         except asyncio.QueueFull:
             self.dropped_count += 1
             _log_internal("tls.sink.dropped", "skipped", logging.WARNING)
 
     async def aclose(self) -> None:
-        """Stop promptly; shutdown never waits for a pending TLS retry."""
+        """Drain accepted events within the configured shutdown budget."""
 
         self._closed = True
-        if self._worker is not None:
-            self._worker.cancel()
+        worker = self._worker
+        if worker is not None:
+            async def stop_and_wait() -> None:
+                await self._queue.put(_STOP)
+                await worker
+
             try:
-                await self._worker
-            except asyncio.CancelledError:
-                pass
+                await asyncio.wait_for(
+                    stop_and_wait(),
+                    timeout=self._settings.tls_shutdown_timeout_seconds,
+                )
+            except TimeoutError:
+                self.dropped_count += self._pending_count
+                self._pending_count = 0
+                worker.cancel()
+                with suppress(asyncio.CancelledError):
+                    await worker
+                _log_internal(
+                    "tls.sink.shutdown_timeout",
+                    "failed",
+                    logging.ERROR,
+                )
             self._worker = None
         if self._owns_client:
             await self._client.aclose()
@@ -234,34 +254,49 @@ class TlsLogSink:
     async def _run(self) -> None:
         try:
             while True:
-                batch = await self._next_batch()
-                await self._deliver_with_retries(batch)
+                batch, stop_after_batch = await self._next_batch()
+                if batch:
+                    await self._deliver_with_retries(batch)
+                if stop_after_batch:
+                    return
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - sink errors must not stop the service.
+            self.dropped_count += self._pending_count
+            self._pending_count = 0
             _log_internal("tls.sink.worker_failed", "failed", logging.ERROR)
 
-    async def _next_batch(self) -> list[dict[str, Any]]:
+    async def _next_batch(self) -> tuple[list[dict[str, Any]], bool]:
         first = await self._queue.get()
+        if first is _STOP:
+            return [], True
+        assert isinstance(first, dict)
         events = [first]
+        stop_after_batch = False
         deadline = (
             asyncio.get_running_loop().time()
             + self._settings.tls_flush_interval_seconds
         )
         while len(events) < min(self._settings.tls_batch_size, MAX_LOGS_PER_GROUP):
             try:
-                events.append(self._queue.get_nowait())
+                item = self._queue.get_nowait()
             except asyncio.QueueEmpty:
                 remaining = deadline - asyncio.get_running_loop().time()
                 if remaining <= 0:
                     break
                 try:
-                    events.append(
-                        await asyncio.wait_for(self._queue.get(), timeout=remaining)
+                    item = await asyncio.wait_for(
+                        self._queue.get(),
+                        timeout=remaining,
                     )
                 except TimeoutError:
                     break
-        return events
+            if item is _STOP:
+                stop_after_batch = True
+                break
+            assert isinstance(item, dict)
+            events.append(item)
+        return events, stop_after_batch
 
     async def _deliver_with_retries(self, events: list[dict[str, Any]]) -> None:
         for chunk in self._split_events(events):
@@ -284,6 +319,7 @@ class TlsLogSink:
                     await asyncio.sleep(
                         self._settings.tls_retry_initial_seconds * (2**attempt)
                     )
+            self._pending_count -= len(chunk)
 
     def _split_events(self, events: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
         chunks: list[list[dict[str, Any]]] = []
@@ -291,6 +327,7 @@ class TlsLogSink:
         for event in events:
             if len(encode_log_group_list([event], source=self._settings.app_name)) > MAX_LOG_BYTES:
                 self.dropped_count += 1
+                self._pending_count -= 1
                 _log_internal("tls.sink.dropped", "failed", logging.ERROR)
                 continue
             candidate = [*chunk, event]

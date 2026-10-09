@@ -3,6 +3,7 @@ import json
 from datetime import UTC, datetime
 
 import httpx
+
 from backend.app.core.config import Settings
 from backend.app.core.logging import JsonStdoutFormatter
 from backend.app.core.tls_logging import (
@@ -176,6 +177,62 @@ def test_sink_batches_until_the_configured_threshold() -> None:
 
     assert b"first" in captured[0].content
     assert b"second" in captured[0].content
+
+
+def test_sink_close_interrupts_batch_wait_and_drains_pending_events() -> None:
+    captured: list[httpx.Request] = []
+
+    async def run() -> None:
+        async def receive(request: httpx.Request) -> httpx.Response:
+            captured.append(request)
+            return httpx.Response(200)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as client:
+            sink = TlsLogSink(
+                _settings(tls_batch_size=100, tls_flush_interval_seconds=60),
+                client=client,
+            )
+            sink.start()
+            sink.emit({"event": "final-event"})
+            await sink.aclose()
+
+    asyncio.run(run())
+
+    assert len(captured) == 1
+    assert b"final-event" in captured[0].content
+
+
+def test_sink_close_times_out_stuck_delivery_and_counts_pending_events() -> None:
+    async def run() -> tuple[TlsLogSink, float]:
+        delivery_started = asyncio.Event()
+        never_complete = asyncio.Event()
+
+        async def receive(_request: httpx.Request) -> httpx.Response:
+            delivery_started.set()
+            await never_complete.wait()
+            return httpx.Response(200)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as client:
+            sink = TlsLogSink(
+                _settings(
+                    tls_batch_size=1,
+                    tls_shutdown_timeout_seconds=1,
+                ),
+                client=client,
+            )
+            sink.start()
+            sink.emit({"event": "stuck-event"})
+            await delivery_started.wait()
+            started_at = asyncio.get_running_loop().time()
+            await sink.aclose()
+            elapsed = asyncio.get_running_loop().time() - started_at
+            return sink, elapsed
+
+    sink, elapsed = asyncio.run(run())
+
+    assert elapsed < 1.5
+    assert sink.dropped_count == 1
+    assert sink._worker is None
 
 
 def test_disabled_or_incomplete_tls_never_creates_a_sink() -> None:
