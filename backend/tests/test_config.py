@@ -1,6 +1,10 @@
 import pytest
 
-from backend.app.core.config import ConfigurationError, Settings
+from backend.app.core.config import (
+    ConfigurationError,
+    Settings,
+    normalize_http_origin,
+)
 
 
 def test_video_face_blur_limits_have_isolated_defaults() -> None:
@@ -102,6 +106,38 @@ def test_auth_origins_are_validated_and_normalized() -> None:
         Settings(cors_origins=["https://app.example.com/path"])
 
 
+@pytest.mark.parametrize(
+    ("origin", "expected"),
+    [
+        (" \tHTTP://APP.EXAMPLE.COM:80/\n", "http://app.example.com"),
+        ("\nHttps://APP.EXAMPLE.COM:443/ ", "https://app.example.com"),
+    ],
+)
+def test_normalize_http_origin_trims_and_normalizes_valid_origins(
+    origin: str,
+    expected: str,
+) -> None:
+    assert normalize_http_origin(origin, name="TEST_ORIGIN") == expected
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        pytest.param("https://app example.com", id="internal-space"),
+        pytest.param("https://app.\texample.com", id="internal-tab"),
+        pytest.param("https://app.\nexample.com", id="internal-newline"),
+        pytest.param("https://app.example.com/path", id="path"),
+        pytest.param("https://app.example.com?next=/", id="query"),
+        pytest.param("https://user@app.example.com", id="userinfo"),
+        pytest.param("https://app.example.com:70000", id="invalid-port"),
+        pytest.param("https:///", id="empty-host"),
+    ],
+)
+def test_normalize_http_origin_rejects_invalid_origins(origin: str) -> None:
+    with pytest.raises(ConfigurationError, match="TEST_ORIGIN"):
+        normalize_http_origin(origin, name="TEST_ORIGIN")
+
+
 def test_production_requires_https_site_origin_in_cors() -> None:
     with pytest.raises(ValueError, match="HTTPS"):
         Settings(
@@ -147,6 +183,65 @@ def test_production_wildcard_cors_opt_in_is_loaded_from_environment(
 
     assert settings.cors_origins == ["*"]
     assert settings.allow_insecure_cors is True
+
+
+def test_production_wildcard_cors_opt_in_allows_missing_site_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "*")
+    monkeypatch.setenv("ALLOW_INSECURE_CORS", "true")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
+    monkeypatch.delenv("SITE_ORIGIN", raising=False)
+
+    settings = Settings.from_env()
+
+    assert settings.site_origin == "http://localhost:3000"
+    assert settings.cors_origins == ["*"]
+    assert settings.allow_insecure_cors is True
+
+
+@pytest.mark.parametrize("site_origin", ["", " \t "])
+def test_production_wildcard_cors_opt_in_defaults_blank_site_origin(
+    monkeypatch: pytest.MonkeyPatch,
+    site_origin: str,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "*")
+    monkeypatch.setenv("ALLOW_INSECURE_CORS", "true")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
+    monkeypatch.setenv("SITE_ORIGIN", site_origin)
+
+    settings = Settings.from_env()
+
+    assert settings.site_origin == "http://localhost:3000"
+
+
+@pytest.mark.parametrize("site_origin", ["not-a-url", "/"])
+def test_production_wildcard_cors_opt_in_rejects_invalid_nonempty_site_origin(
+    monkeypatch: pytest.MonkeyPatch,
+    site_origin: str,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "*")
+    monkeypatch.setenv("ALLOW_INSECURE_CORS", "true")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
+    monkeypatch.setenv("SITE_ORIGIN", site_origin)
+
+    with pytest.raises(ValueError, match="SITE_ORIGIN"):
+        Settings.from_env()
+
+
+def test_production_explicit_cors_still_rejects_missing_site_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
+    monkeypatch.delenv("SITE_ORIGIN", raising=False)
+
+    with pytest.raises(ValueError, match="SITE_ORIGIN.*HTTPS"):
+        Settings.from_env()
 
 
 @pytest.mark.parametrize("alias", ["1", "yes", "on", "TRUE"])

@@ -10,8 +10,11 @@ class ConfigurationError(ValueError):
 
 
 def normalize_http_origin(value: str, *, name: str) -> str:
+    normalized = value.strip()
+    if any(character.isspace() for character in normalized):
+        raise ConfigurationError(f"{name} must be a valid HTTP(S) origin.")
     try:
-        parsed = urlsplit(value.strip())
+        parsed = urlsplit(normalized)
         port = parsed.port
     except ValueError as exc:
         raise ConfigurationError(f"{name} must be a valid HTTP(S) origin.") from exc
@@ -198,10 +201,6 @@ class Settings(BaseModel):
 
     @model_validator(mode="after")
     def validate_auth_security(self) -> "Settings":
-        self.site_origin = normalize_http_origin(
-            self.site_origin,
-            name="SITE_ORIGIN",
-        )
         self.cors_origins = list(
             dict.fromkeys(
                 origin
@@ -210,12 +209,23 @@ class Settings(BaseModel):
                 for origin in self.cors_origins
             )
         )
+        production = self.environment.casefold() in {"production", "prod"}
+        insecure_wildcard_cors = (
+            production and "*" in self.cors_origins and self.allow_insecure_cors
+        )
+        site_origin = self.site_origin
+        if insecure_wildcard_cors and not site_origin.strip():
+            site_origin = type(self).model_fields["site_origin"].default
+        self.site_origin = normalize_http_origin(
+            site_origin,
+            name="SITE_ORIGIN",
+        )
         if self.auth_session_idle_seconds > self.auth_session_absolute_seconds:
             raise ConfigurationError(
                 "AUTH_SESSION_IDLE_SECONDS must not exceed "
                 "AUTH_SESSION_ABSOLUTE_SECONDS."
             )
-        if self.environment.casefold() in {"production", "prod"}:
+        if production:
             if "*" in self.cors_origins and not self.allow_insecure_cors:
                 raise ConfigurationError(
                     "CORS_ORIGINS='*' in production requires "
@@ -225,17 +235,15 @@ class Settings(BaseModel):
                 raise ConfigurationError(
                     "AUTH_COOKIE_SECURE must be enabled in production."
                 )
-            if not self.site_origin.startswith("https://"):
-                raise ConfigurationError(
-                    "SITE_ORIGIN must use HTTPS in production."
-                )
-            if (
-                "*" not in self.cors_origins
-                and self.site_origin not in self.cors_origins
-            ):
-                raise ConfigurationError(
-                    "CORS_ORIGINS must include SITE_ORIGIN in production."
-                )
+            if not insecure_wildcard_cors:
+                if not self.site_origin.startswith("https://"):
+                    raise ConfigurationError(
+                        "SITE_ORIGIN must use HTTPS in production."
+                    )
+                if self.site_origin not in self.cors_origins:
+                    raise ConfigurationError(
+                        "CORS_ORIGINS must include SITE_ORIGIN in production."
+                    )
         return self
 
     @classmethod
@@ -264,7 +272,7 @@ class Settings(BaseModel):
             site_origin=getenv(
                 "SITE_ORIGIN",
                 cls.model_fields["site_origin"].default,
-            ).rstrip("/"),
+            ),
             auth_cookie_secure=_parse_bool_env(
                 "AUTH_COOKIE_SECURE",
                 cookie_secure_default,
