@@ -52,6 +52,18 @@ async def _lifespan(application: FastAPI):
     tls_sink = application.state.tls_log_sink
     if tls_sink is not None:
         tls_sink.start()
+    settings = application.state.settings
+    if (
+        settings.environment.casefold() in {"production", "prod"}
+        and settings.allow_insecure_auth_cookie
+        and not settings.auth_cookie_secure
+    ):
+        log_event(
+            logger,
+            "security.insecure_auth_cookie_enabled",
+            outcome="started",
+            level=logging.WARNING,
+        )
     log_event(logger, "application.lifecycle", outcome="started", phase="startup")
     repository = None
     runtime_override = application.dependency_overrides.get(

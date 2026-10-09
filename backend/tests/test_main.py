@@ -111,6 +111,65 @@ def test_http_logging_propagates_request_id_and_records_lifecycle(
     )
 
 
+def test_insecure_production_cookie_emits_startup_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[str, dict[str, object]]] = []
+    settings = Settings(
+        environment="production",
+        cors_origins=["*"],
+        allow_insecure_cors=True,
+        allow_insecure_auth_cookie=True,
+        auth_cookie_secure=False,
+    )
+    monkeypatch.setattr(main_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        main_module,
+        "log_event",
+        lambda _logger, event, **context: events.append((event, context)),
+    )
+    app = create_app()
+    app.dependency_overrides[get_aigc_pipeline_runtime] = RuntimeLifecycleProbe
+
+    with TestClient(app):
+        pass
+
+    warnings = [
+        context
+        for event, context in events
+        if event == "security.insecure_auth_cookie_enabled"
+    ]
+    assert len(warnings) == 1
+    assert warnings[0]["outcome"] == "started"
+    assert warnings[0]["level"] == main_module.logging.WARNING
+
+
+def test_secure_production_cookie_does_not_emit_insecure_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    settings = Settings(
+        environment="production",
+        cors_origins=["https://app.example.com"],
+        site_origin="https://app.example.com",
+        allow_insecure_auth_cookie=True,
+        auth_cookie_secure=True,
+    )
+    monkeypatch.setattr(main_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        main_module,
+        "log_event",
+        lambda _logger, event, **_context: events.append(event),
+    )
+    app = create_app()
+    app.dependency_overrides[get_aigc_pipeline_runtime] = RuntimeLifecycleProbe
+
+    with TestClient(app):
+        pass
+
+    assert "security.insecure_auth_cookie_enabled" not in events
+
+
 def test_app_lifespan_resolves_multitrack_client_factory() -> None:
     app = create_app()
     repository = InMemoryRepository()
