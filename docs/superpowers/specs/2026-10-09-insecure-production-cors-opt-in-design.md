@@ -10,7 +10,8 @@
 
 - 允许生产环境通过显式开关使用 `CORS_ORIGINS=*`。
 - 未显式开启时保持现有安全校验。
-- 保留生产环境 HTTPS 站点来源和安全 Cookie 要求。
+- 非通配生产配置保留 HTTPS 站点来源要求；所有生产配置保留安全 Cookie
+  要求。
 - 通配来源下不返回 credentialed CORS 授权，避免浏览器脚本读取带凭证的
   跨域响应。
 
@@ -18,6 +19,7 @@
 
 - 不自动启用通配 CORS。
 - 不允许省略 `CORS_ORIGINS`。
+- 不允许普通生产配置省略 `SITE_ORIGIN`。
 - 不为通配来源返回 credentialed CORS 授权。
 - 不改变本地开发环境的 CORS 行为。
 
@@ -49,10 +51,12 @@ ALLOW_INSECURE_CORS=true
 生产环境配置校验按以下规则执行：
 
 1. `AUTH_COOKIE_SECURE` 仍必须启用。
-2. `SITE_ORIGIN` 仍必须是 HTTPS Origin。
-3. `CORS_ORIGINS` 不含 `*` 时，仍必须包含 `SITE_ORIGIN`。
-4. `CORS_ORIGINS` 含 `*` 时，仅在 `allow_insecure_cors=true` 时通过，
-   且不再要求列表包含 `SITE_ORIGIN`。
+2. `CORS_ORIGINS` 不含 `*` 时，`SITE_ORIGIN` 仍为必填 HTTPS Origin，
+   且必须包含在 `CORS_ORIGINS` 中。
+3. `CORS_ORIGINS` 含 `*` 时，仅在 `allow_insecure_cors=true` 时通过；
+   此时允许环境中不设置 `SITE_ORIGIN`，并跳过生产 HTTPS 和来源包含校验。
+4. 通配显式开关模式下，`Settings` 保留本地默认 `site_origin` 作为内部
+   兜底值，但运行时 Origin guard 不读取该值。
 
 FastAPI 的 `CORSMiddleware` 逻辑保持
 `allow_credentials=false`（通配来源时）。这表示响应不会返回
@@ -72,17 +76,19 @@ credentialed CORS 授权；即使请求包含认证 Cookie，浏览器脚本也�
 `deploy_server.sh` 读取 `ALLOW_INSECURE_CORS`，缺省视为 `false`。
 
 - 非通配来源：保持现有来源包含关系校验。
-- 通配来源且开关为 `true`：允许继续部署，并输出醒目的安全警告。
+- 通配来源且开关为 `true`：允许省略 `SITE_ORIGIN` 并继续部署，同时输出
+  醒目的安全警告。
 - 通配来源且开关缺失、为空或不是精确小写 `true`：部署失败并给出修复
   提示。
 - `CORS_ORIGINS` 缺失或为空：仍然失败，避免隐式扩大访问范围。
+- 非通配来源下 `SITE_ORIGIN` 缺失、为空或不是 HTTPS Origin：仍然失败。
 
 ## 文档与模板
 
 `.env.example` 增加 `ALLOW_INSECURE_CORS=false`。部署文档说明：
 
 - 推荐继续使用正式域名作为唯一来源。
-- 通配模式只用于明确接受风险的部署。
+- 通配模式只用于明确接受风险且暂时没有正式站点来源的部署。
 - 通配模式不返回 credentialed CORS 授权；浏览器脚本不能读取带凭证的
   跨域响应。
 
@@ -90,6 +96,8 @@ credentialed CORS 授权；即使请求包含认证 Cookie，浏览器脚本也�
 
 - 后端配置测试覆盖生产环境通配来源在开关关闭时失败。
 - 后端配置测试覆盖开关开启时通配来源通过。
+- 后端配置测试覆盖通配显式开关模式未设置 `SITE_ORIGIN` 时通过，以及普通
+  生产模式未设置时仍失败。
 - `backend/tests/test_config.py` 覆盖环境值仅接受精确小写 `true`/`false`，
   并拒绝布尔别名和大小写变体。
 - `backend/tests/test_auth_api.py` 覆盖双配置启用后任意 Origin 的 `POST`
@@ -99,6 +107,7 @@ credentialed CORS 授权；即使请求包含认证 Cookie，浏览器脚本也�
   `POST` 仍返回 `403 origin_forbidden`。
 - 保留 HTTPS、Cookie 和非通配来源包含关系的回归测试。
 - 部署脚本测试覆盖通配来源加显式开关成功。
+- 部署脚本测试覆盖通配显式开关模式缺少 `SITE_ORIGIN` 时成功。
 - 部署脚本测试覆盖缺少显式开关、`false` 和大写 `TRUE` 时失败。
 - 运行部署脚本测试、后端配置与认证 API 测试、Ruff 和 shell 语法检查。
 
