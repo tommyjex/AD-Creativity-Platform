@@ -48,6 +48,7 @@ def test_auth_security_defaults() -> None:
     settings = Settings()
 
     assert settings.site_origin == "http://localhost:3000"
+    assert settings.allow_insecure_auth_cookie is False
     assert settings.auth_cookie_secure is False
     assert settings.auth_session_idle_seconds == 12 * 60 * 60
     assert settings.auth_session_absolute_seconds == 7 * 24 * 60 * 60
@@ -79,13 +80,38 @@ def test_production_allows_wildcard_cors_with_explicit_opt_in() -> None:
 
 
 def test_production_rejects_insecure_cookie() -> None:
-    with pytest.raises(ValueError, match="AUTH_COOKIE_SECURE"):
+    with pytest.raises(ValueError, match="ALLOW_INSECURE_AUTH_COOKIE"):
         Settings(
             environment="production",
             cors_origins=["https://app.example.com"],
             site_origin="https://app.example.com",
             auth_cookie_secure=False,
         )
+
+
+def test_production_allows_insecure_cookie_with_explicit_opt_in() -> None:
+    settings = Settings(
+        environment="production",
+        cors_origins=["https://app.example.com"],
+        site_origin="https://app.example.com",
+        allow_insecure_auth_cookie=True,
+        auth_cookie_secure=False,
+    )
+
+    assert settings.allow_insecure_auth_cookie is True
+    assert settings.auth_cookie_secure is False
+
+
+def test_production_allows_unused_insecure_cookie_opt_in() -> None:
+    settings = Settings(
+        environment="production",
+        cors_origins=["https://app.example.com"],
+        site_origin="https://app.example.com",
+        allow_insecure_auth_cookie=True,
+        auth_cookie_secure=True,
+    )
+
+    assert settings.auth_cookie_secure is True
 
 
 def test_auth_origins_are_validated_and_normalized() -> None:
@@ -199,6 +225,47 @@ def test_production_wildcard_cors_opt_in_allows_missing_site_origin(
     assert settings.site_origin == "http://localhost:3000"
     assert settings.cors_origins == ["*"]
     assert settings.allow_insecure_cors is True
+
+
+def test_production_insecure_auth_cookie_opt_in_is_loaded_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "*")
+    monkeypatch.setenv("ALLOW_INSECURE_CORS", "true")
+    monkeypatch.setenv("ALLOW_INSECURE_AUTH_COOKIE", "  true  ")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
+    monkeypatch.delenv("SITE_ORIGIN", raising=False)
+
+    settings = Settings.from_env()
+
+    assert settings.allow_insecure_auth_cookie is True
+    assert settings.auth_cookie_secure is False
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("ALLOW_INSECURE_AUTH_COOKIE", "1"),
+        ("ALLOW_INSECURE_AUTH_COOKIE", "yes"),
+        ("ALLOW_INSECURE_AUTH_COOKIE", "TRUE"),
+        ("AUTH_COOKIE_SECURE", "1"),
+        ("AUTH_COOKIE_SECURE", "on"),
+        ("AUTH_COOKIE_SECURE", "FALSE"),
+    ],
+)
+def test_cookie_security_environment_rejects_boolean_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    value: str,
+) -> None:
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(
+        ConfigurationError,
+        match=rf"{name}.*exactly 'true' or 'false'",
+    ):
+        Settings.from_env()
 
 
 @pytest.mark.parametrize("site_origin", ["", " \t "])

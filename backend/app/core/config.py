@@ -115,6 +115,7 @@ class Settings(BaseModel):
     api_prefix: str = "/api"
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
     allow_insecure_cors: bool = False
+    allow_insecure_auth_cookie: bool = False
     site_origin: str = "http://localhost:3000"
     auth_cookie_secure: bool = False
     auth_session_idle_seconds: int = Field(default=12 * 60 * 60, gt=0)
@@ -231,9 +232,10 @@ class Settings(BaseModel):
                     "CORS_ORIGINS='*' in production requires "
                     "ALLOW_INSECURE_CORS=true."
                 )
-            if not self.auth_cookie_secure:
+            if not self.auth_cookie_secure and not self.allow_insecure_auth_cookie:
                 raise ConfigurationError(
-                    "AUTH_COOKIE_SECURE must be enabled in production."
+                    "AUTH_COOKIE_SECURE=false in production requires "
+                    "ALLOW_INSECURE_AUTH_COOKIE=true."
                 )
             if not insecure_wildcard_cors:
                 if not self.site_origin.startswith("https://"):
@@ -269,11 +271,15 @@ class Settings(BaseModel):
                 "ALLOW_INSECURE_CORS",
                 False,
             ),
+            allow_insecure_auth_cookie=_parse_strict_bool_env(
+                "ALLOW_INSECURE_AUTH_COOKIE",
+                False,
+            ),
             site_origin=getenv(
                 "SITE_ORIGIN",
                 cls.model_fields["site_origin"].default,
             ),
-            auth_cookie_secure=_parse_bool_env(
+            auth_cookie_secure=_parse_strict_bool_env(
                 "AUTH_COOKIE_SECURE",
                 cookie_secure_default,
             ),
