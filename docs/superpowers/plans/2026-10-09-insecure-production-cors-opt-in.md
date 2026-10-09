@@ -551,3 +551,76 @@ AUTH_COOKIE_SECURE=true
 Expected: both pass deployment preflight; removing
 `ALLOW_INSECURE_CORS=true` from the second example fails before dependency
 installation or service restart.
+
+### Task 6: Optional site origin in explicit wildcard mode
+
+**Files:**
+- Modify: `backend/app/core/config.py`
+- Modify: `backend/tests/test_config.py`
+- Modify: `scripts/deploy_server.sh`
+- Modify: `scripts/tests/test_deploy_server.sh`
+- Modify: `.env.example`
+- Modify: `docs/deployment/application-server-first-deployment.md`
+
+- [ ] **Step 1: Specify backend conditional validation**
+
+Add tests proving `Settings.from_env()` succeeds when production uses
+`CORS_ORIGINS=*`, `ALLOW_INSECURE_CORS=true`, secure cookies, and no
+`SITE_ORIGIN`; also prove a non-wildcard production configuration still
+rejects the missing value.
+
+- [ ] **Step 2: Implement backend conditional validation**
+
+Compute the explicit wildcard mode once:
+
+```python
+insecure_wildcard_cors = (
+    "*" in self.cors_origins and self.allow_insecure_cors
+)
+```
+
+Only enforce production HTTPS and `CORS_ORIGINS` membership when
+`insecure_wildcard_cors` is false. Keep secure cookies mandatory in both modes.
+
+- [ ] **Step 3: Specify deployment preflight behavior**
+
+Add a successful fixture with:
+
+```dotenv
+APP_ENV=production
+CORS_ORIGINS=*
+ALLOW_INSECURE_CORS=true
+AUTH_COOKIE_SECURE=true
+```
+
+Keep the existing missing-`SITE_ORIGIN` failure for explicit CORS origins.
+
+- [ ] **Step 4: Implement deployment conditional requirement**
+
+Read `SITE_ORIGIN` as optional. Require a non-empty HTTPS value only in the
+non-wildcard branch. In the explicit wildcard branch, allow it to be absent and
+retain the existing security warning.
+
+- [ ] **Step 5: Update operator documentation**
+
+Document that `SITE_ORIGIN` may be omitted only for the explicit wildcard
+configuration. Keep the recommended same-origin production example unchanged.
+
+- [ ] **Step 6: Run integrated verification**
+
+```bash
+PYTHONPATH=. .venv/bin/pytest \
+  backend/tests/test_config.py \
+  backend/tests/test_auth_api.py \
+  -q
+.venv/bin/ruff check \
+  backend/app/core/config.py \
+  backend/app/main.py \
+  backend/tests/test_config.py \
+  backend/tests/test_auth_api.py
+bash -n scripts/deploy_server.sh scripts/tests/test_deploy_server.sh
+bash scripts/tests/test_deploy_server.sh
+git diff --check
+```
+
+Expected: all tests and static checks pass.
