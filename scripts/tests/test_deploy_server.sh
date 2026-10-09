@@ -208,6 +208,25 @@ test_old_node_fails_before_install() {
   pass "Node.js version gate"
 }
 
+test_wildcard_cors_opt_in_deploys() {
+  create_fixture wildcard_cors_opt_in
+  printf '%s\n' \
+    'APP_ENV=production' \
+    'CORS_ORIGINS=*' \
+    'ALLOW_INSECURE_CORS=true' \
+    'SITE_ORIGIN=https://ad.example.com' \
+    'AUTH_COOKIE_SECURE=true' >"$APP_ROOT/.env"
+
+  if ! run_deploy; then
+    fail "explicit wildcard CORS opt-in should deploy"
+    return
+  fi
+
+  assert_contains "$OUTPUT_LOG" "WARNING: wildcard CORS is enabled" \
+    "wildcard deployment should print a security warning"
+  pass "wildcard CORS deploys only with explicit opt-in"
+}
+
 assert_security_preflight_failure() {
   local name="$1"
   local env_contents="$2"
@@ -244,9 +263,25 @@ test_production_security_env_gate() {
     'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN="   "\nAUTH_COOKIE_SECURE=true\n' \
     "SITE_ORIGIN must be set and non-empty"
   assert_security_preflight_failure \
-    wildcard_cors \
-    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com,*\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
-    "CORS_ORIGINS must not contain '*'"
+    wildcard_cors_without_opt_in \
+    'APP_ENV=production\nCORS_ORIGINS=*\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "CORS_ORIGINS='*' requires ALLOW_INSECURE_CORS=true"
+  assert_security_preflight_failure \
+    wildcard_cors_false_opt_in \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=false\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "CORS_ORIGINS='*' requires ALLOW_INSECURE_CORS=true"
+  assert_security_preflight_failure \
+    wildcard_cors_uppercase_opt_in \
+    'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=TRUE\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "ALLOW_INSECURE_CORS must be exactly true or false"
+  assert_security_preflight_failure \
+    explicit_cors_uppercase_opt_in \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nALLOW_INSECURE_CORS=TRUE\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "ALLOW_INSECURE_CORS must be exactly true or false"
+  assert_security_preflight_failure \
+    explicit_cors_alias_opt_in \
+    'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nALLOW_INSECURE_CORS=yes\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+    "ALLOW_INSECURE_CORS must be exactly true or false"
   assert_security_preflight_failure \
     invalid_site_origin \
     'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nSITE_ORIGIN=http://ad.example.com/path\nAUTH_COOKIE_SECURE=true\n' \
@@ -266,6 +301,7 @@ test_build_failure_does_not_restart
 test_health_failure_prints_diagnostics
 test_old_node_fails_before_install
 test_production_security_env_gate
+test_wildcard_cors_opt_in_deploys
 
 if [[ "$FAILURES" -ne 0 ]]; then
   printf '%s test assertion(s) failed\n' "$FAILURES" >&2

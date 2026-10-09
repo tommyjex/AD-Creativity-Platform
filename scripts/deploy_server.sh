@@ -122,6 +122,7 @@ validate_positive_integer() {
 }
 
 preflight() {
+  local allow_insecure_cors
   local app_env
   local auth_cookie_secure
   local cors_origins
@@ -149,6 +150,15 @@ preflight() {
     die "SITE_ORIGIN must be set and non-empty in $APP_ROOT/.env"
   auth_cookie_secure="$(read_dotenv_value "AUTH_COOKIE_SECURE")" ||
     die "AUTH_COOKIE_SECURE must be exactly true in $APP_ROOT/.env"
+  if ! allow_insecure_cors="$(read_dotenv_value "ALLOW_INSECURE_CORS")"; then
+    allow_insecure_cors=false
+  fi
+  case "$allow_insecure_cors" in
+    true | false) ;;
+    *)
+      die "ALLOW_INSECURE_CORS must be exactly true or false in $APP_ROOT/.env"
+      ;;
+  esac
 
   [[ -n "$cors_origins" ]] ||
     die "CORS_ORIGINS must be set and non-empty in $APP_ROOT/.env"
@@ -156,22 +166,26 @@ preflight() {
     die "SITE_ORIGIN must be set and non-empty in $APP_ROOT/.env"
   [[ "$app_env" == "production" || "$app_env" == "prod" ]] ||
     die "APP_ENV must be set to production in $APP_ROOT/.env"
-  [[ "$cors_origins" != *"*"* ]] ||
-    die "CORS_ORIGINS must not contain '*' in $APP_ROOT/.env"
   [[ "$site_origin" =~ ^https://[^/?#@[:space:]]+$ ]] ||
     die "SITE_ORIGIN must be an HTTPS origin without a path in $APP_ROOT/.env"
   [[ "$auth_cookie_secure" == "true" ]] ||
     die "AUTH_COOKIE_SECURE must be exactly true in $APP_ROOT/.env"
-  IFS=',' read -r -a configured_origins <<<"$cors_origins"
-  for cors_origin in "${configured_origins[@]}"; do
-    cors_origin="$(trim_whitespace "$cors_origin")"
-    if [[ "$cors_origin" == "$site_origin" ]]; then
-      cors_contains_site_origin=1
-      break
-    fi
-  done
-  [[ "$cors_contains_site_origin" -eq 1 ]] ||
-    die "CORS_ORIGINS must include SITE_ORIGIN in $APP_ROOT/.env"
+  if [[ "$cors_origins" == *"*"* ]]; then
+    [[ "$allow_insecure_cors" == "true" ]] ||
+      die "CORS_ORIGINS='*' requires ALLOW_INSECURE_CORS=true in $APP_ROOT/.env"
+    log "WARNING: wildcard CORS is enabled; cross-origin credentials remain disabled."
+  else
+    IFS=',' read -r -a configured_origins <<<"$cors_origins"
+    for cors_origin in "${configured_origins[@]}"; do
+      cors_origin="$(trim_whitespace "$cors_origin")"
+      if [[ "$cors_origin" == "$site_origin" ]]; then
+        cors_contains_site_origin=1
+        break
+      fi
+    done
+    [[ "$cors_contains_site_origin" -eq 1 ]] ||
+      die "CORS_ORIGINS must include SITE_ORIGIN in $APP_ROOT/.env"
+  fi
 
   require_command curl
   require_command env
