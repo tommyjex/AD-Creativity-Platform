@@ -181,6 +181,8 @@ APP_ENV=production
 
 # 认证与同源策略
 CORS_ORIGINS=https://ad.example.com
+ALLOW_INSECURE_CORS=false
+ALLOW_INSECURE_AUTH_COOKIE=false
 SITE_ORIGIN=https://ad.example.com
 AUTH_COOKIE_SECURE=true
 AUTH_SESSION_IDLE_SECONDS=43200
@@ -251,6 +253,34 @@ Origin，不会被视为 wildcard。
 该模式下，服务端不会返回允许携带凭证的 CORS 授权；即使请求包含认证
 Cookie，浏览器脚本也无法读取带凭证的跨域响应。需要跨域登录时，应配置
 明确的 HTTPS 来源，而不是使用通配来源。
+
+当前仅能通过 `http://101.126.86.254/` 访问时，可临时使用以下公网 HTTP
+兼容配置：
+
+```dotenv
+APP_ENV=production
+CORS_ORIGINS=*
+ALLOW_INSECURE_CORS=true
+ALLOW_INSECURE_AUTH_COOKIE=true
+AUTH_COOKIE_SECURE=false
+AUTH_SESSION_IDLE_SECONDS=1800
+AUTH_SESSION_ABSOLUTE_SECONDS=28800
+```
+
+`ALLOW_INSECURE_CORS` 与 `ALLOW_INSECURE_AUTH_COOKIE` 是相互独立的授权
+开关，前者不能替代后者。该配置会让密码、页面、API 响应和会话 Cookie
+通过公网明文传输，可能被监听或篡改，只能作为获得域名和证书前的临时兼容
+模式。部署预检和后端启动日志会分别输出不安全认证 Cookie 告警。
+
+切换到 HTTPS 后，恢复安全配置：
+
+```dotenv
+ALLOW_INSECURE_AUTH_COOKIE=false
+AUTH_COOKIE_SECURE=true
+```
+
+重新部署后，清除浏览器中旧的 `ad_session` Cookie，再重新登录，并确认登录
+请求及紧随其后的 `GET /api/auth/me` 均返回 `200`。
 
 未覆盖 Ark 模型时，不要写入值为空的 `ARK_TEXT_MODEL`、`ARK_IMAGE_MODEL`
 或 `ARK_VIDEO_MODEL`，让应用使用代码中的默认模型。
@@ -706,6 +736,11 @@ curl --fail http://127.0.0.1:8000/health
       `CORS_ORIGINS` 包含的 HTTPS Origin；`AUTH_COOKIE_SECURE=true`。
 - [ ] `CORS_ORIGINS` 使用明确来源；若使用 `*`，已同时设置
       `ALLOW_INSECURE_CORS=true` 并接受任意来源跨域调用风险。
+- [ ] 若临时使用公网 HTTP，已明确授权
+      `ALLOW_INSECURE_AUTH_COOKIE=true` 与 `AUTH_COOKIE_SECURE=false`，
+      并接受密码和会话明文传输风险。
+- [ ] 公网 HTTP 模式部署时已核对部署输出和后端启动日志中的不安全认证
+      Cookie 告警。
 - [ ] 仅在 `CORS_ORIGINS` 包含独立的 `*` 条目且
       `ALLOW_INSECURE_CORS=true` 时让 `SITE_ORIGIN` 缺失或为空；若提供
       非空值，已确认它是合法 HTTP(S) Origin。
