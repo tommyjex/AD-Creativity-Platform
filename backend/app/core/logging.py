@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
 import sys
+import traceback
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 
@@ -21,6 +24,9 @@ Outcome = Literal["started", "succeeded", "failed", "canceled", "retried", "skip
 
 _DEFAULT_MAX_VALUE_LENGTH = 256
 _TLS_RAW_OUTPUT_MAX_BYTES = 32 * 1024
+_TLS_EXCEPTION_MESSAGE_MAX_LENGTH = 500
+_TLS_STACK_FRAME_LIMIT = 3
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _SENSITIVE_FIELD_PATTERN = re.compile(
     r"(?:api[_-]?key|access[_-]?key|secret|authorization|cookie|password|token|"
     r"signature|credential|prompt|request[_-]?body|response[_-]?body|raw|"
@@ -53,6 +59,7 @@ _SAFE_CONTEXT_FIELDS = frozenset(
         "duration_ms",
         "error_type",
         "error_code",
+        "error_stage",
         "actor_user_id",
         "target_user_id",
         "username_digest",
@@ -97,11 +104,64 @@ def get_log_context() -> dict[str, Any]:
 def normalize_exception(exc: BaseException) -> dict[str, str]:
     """Return the safe, stable subset of an exception for an event."""
 
-    result = {"error_type": type(exc).__name__}
+    root = _root_exception(exc)
+    result = {"error_type": type(root).__name__}
     code = getattr(exc, "code", None) or getattr(exc, "error_code", None)
     if isinstance(code, (str, int)) and str(code):
         result["error_code"] = sanitize_value("error_code", str(code))
     return result
+
+
+def _exception_chain(exc: BaseException) -> list[BaseException]:
+    chain: list[BaseException] = []
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    return chain
+
+
+def _root_exception(exc: BaseException) -> BaseException:
+    return _exception_chain(exc)[-1]
+
+
+def _tls_exception_summary(exc: BaseException) -> dict[str, Any]:
+    root = _root_exception(exc)
+    frames: list[dict[str, Any]] = []
+    for frame in traceback.extract_tb(root.__traceback__):
+        path = Path(frame.filename).resolve()
+        try:
+            relative = path.relative_to(_PROJECT_ROOT)
+        except ValueError:
+            continue
+        if not relative.parts or relative.parts[0] != "backend":
+            continue
+        frames.append(
+            {
+                "path": relative.as_posix(),
+                "function": frame.name,
+                "line": frame.lineno,
+            }
+        )
+    frames = frames[-_TLS_STACK_FRAME_LIMIT:]
+    fingerprint_source = json.dumps(
+        {
+            "types": [type(item).__name__ for item in _exception_chain(exc)],
+            "frames": frames,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return {
+        "exception_message": str(root)[:_TLS_EXCEPTION_MESSAGE_MAX_LENGTH],
+        "traceback_fingerprint": hashlib.sha256(
+            fingerprint_source.encode("utf-8")
+        ).hexdigest(),
+        "stack_frames": frames,
+    }
 
 
 def sanitize_value(
@@ -177,16 +237,20 @@ class LogEvent:
     exception: BaseException | None = None
 
     def as_extra(self) -> dict[str, Any]:
-        values = _filter_context(self.context)
+        values: dict[str, Any] = {}
         if self.duration_ms is not None:
             values["duration_ms"] = round(max(self.duration_ms, 0), 3)
         if self.exception is not None:
             values.update(normalize_exception(self.exception))
-        return {
+        values.update(_filter_context(self.context))
+        extra = {
             "structured_event": self.event,
             "structured_outcome": self.outcome,
             "structured_context": values,
         }
+        if self.exception is not None:
+            extra["tls_exception_summary"] = _tls_exception_summary(self.exception)
+        return extra
 
 
 def log_event(
@@ -242,13 +306,24 @@ def emit_tls_only_event(
 class JsonStdoutFormatter(logging.Formatter):
     """Render every logging record as one privacy-safe JSON object."""
 
-    def __init__(self, *, service: str, environment: str) -> None:
+    def __init__(
+        self,
+        *,
+        service: str,
+        environment: str,
+        include_tls_exception_details: bool = False,
+    ) -> None:
         super().__init__()
         self.service = service
         self.environment = environment
+        self.include_tls_exception_details = include_tls_exception_details
 
     def format(self, record: logging.LogRecord) -> str:
         context = get_log_context()
+        exception: BaseException | None = None
+        if record.exc_info is not None and record.exc_info[1] is not None:
+            exception = record.exc_info[1]
+            context.update(normalize_exception(exception))
         context.update(
             _filter_context(getattr(record, "structured_context", {}))
         )
@@ -269,6 +344,12 @@ class JsonStdoutFormatter(logging.Formatter):
             ),
         }
         payload.update(context)
+        if self.include_tls_exception_details:
+            summary = getattr(record, "tls_exception_summary", None)
+            if summary is None and exception is not None:
+                summary = _tls_exception_summary(exception)
+            if isinstance(summary, Mapping):
+                payload.update(summary)
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
@@ -291,7 +372,12 @@ def configure_structured_logging(settings: Settings) -> TlsLogSink | None:
         root_logger.setLevel(logging.INFO)
     tls_sink = TlsLogSink.from_settings(settings)
     if tls_sink is not None:
-        tls_handler = TlsLogHandler(tls_sink, formatter)
+        tls_formatter = JsonStdoutFormatter(
+            service=settings.app_name,
+            environment=settings.environment,
+            include_tls_exception_details=True,
+        )
+        tls_handler = TlsLogHandler(tls_sink, tls_formatter)
         tls_handler._ad_creativity_structured_logging = True  # type: ignore[attr-defined]
         root_logger.addHandler(tls_handler)
     return tls_sink

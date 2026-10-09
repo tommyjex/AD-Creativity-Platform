@@ -94,6 +94,84 @@ def test_exception_logging_keeps_only_safe_exception_metadata() -> None:
     assert "Traceback" not in output.getvalue()
 
 
+def test_tls_formatter_adds_raw_exception_summary_without_leaking_to_stdout() -> None:
+    try:
+        raise RuntimeError("Authorization=raw-provider-value")
+    except RuntimeError as error:
+        record = logging.LogRecord(
+            "test",
+            logging.ERROR,
+            __file__,
+            1,
+            "provider failed",
+            (),
+            (type(error), error, error.__traceback__),
+        )
+
+    stdout_event = json.loads(
+        JsonStdoutFormatter(
+            service="test",
+            environment="test",
+        ).format(record)
+    )
+    tls_event = json.loads(
+        JsonStdoutFormatter(
+            service="test",
+            environment="test",
+            include_tls_exception_details=True,
+        ).format(record)
+    )
+
+    assert stdout_event["error_type"] == "RuntimeError"
+    assert "exception_message" not in stdout_event
+    assert "raw-provider-value" not in json.dumps(stdout_event)
+    assert tls_event["exception_message"] == "Authorization=raw-provider-value"
+    assert len(tls_event["traceback_fingerprint"]) == 64
+    assert len(tls_event["stack_frames"]) <= 3
+
+
+def test_explicit_error_fields_override_inference_and_tls_message_is_bounded() -> None:
+    stdout = StringIO()
+    tls = StringIO()
+    logger = logging.getLogger("structured-logging-dual-channel-test")
+    logger.handlers[:] = []
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    for output, include_tls_details in ((stdout, False), (tls, True)):
+        handler = logging.StreamHandler(output)
+        handler.setFormatter(
+            JsonStdoutFormatter(
+                service="test",
+                environment="test",
+                include_tls_exception_details=include_tls_details,
+            )
+        )
+        logger.addHandler(handler)
+
+    try:
+        raise ValueError("x" * 600)
+    except ValueError as error:
+        log_event(
+            logger,
+            "provider.call.failed",
+            outcome="failed",
+            level=logging.ERROR,
+            exception=error,
+            error_code="provider_rejected",
+            error_stage="provider_response",
+            error_type="GatewayError",
+        )
+
+    stdout_event = json.loads(stdout.getvalue())
+    tls_event = json.loads(tls.getvalue())
+    for event in (stdout_event, tls_event):
+        assert event["error_code"] == "provider_rejected"
+        assert event["error_stage"] == "provider_response"
+        assert event["error_type"] == "GatewayError"
+    assert "exception_message" not in stdout_event
+    assert tls_event["exception_message"] == "x" * 500
+
+
 def test_async_contexts_do_not_cross_contaminate() -> None:
     logger, output = _logger_with_output()
 
