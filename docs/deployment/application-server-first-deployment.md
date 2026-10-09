@@ -85,7 +85,8 @@ ad.example.com
 
 正式开放公网前必须处理：
 
-- 使用正式 HTTPS 域名配置 `SITE_ORIGIN` 和 `CORS_ORIGINS`，生产环境禁止通配来源。
+- 推荐使用正式 HTTPS 域名配置 `SITE_ORIGIN` 和 `CORS_ORIGINS`；生产环境默认拒绝通配来源，
+  仅在明确接受风险时通过双配置显式启用。
 - 启用 `AUTH_COOKIE_SECURE`，确保认证 Cookie 只通过 HTTPS 发送。
 - 首次启动后通过 `/setup` 创建首个管理员；仓库、部署脚本和环境样例不得包含默认管理员密码。
 - `.env`、数据库密码、TOS 密钥和 Ark API Key 不得提交到 Git。
@@ -218,6 +219,21 @@ TLS_TOPIC_ID=<TLS_TOPIC_ID>
 TLS_ACCESS_KEY_ID=<TLS_ACCESS_KEY_ID>
 TLS_SECRET_ACCESS_KEY=<TLS_SECRET_ACCESS_KEY>
 ```
+
+生产环境默认拒绝通配 CORS。只有明确接受任意来源发起跨域请求和非安全
+方法调用的风险时，才同时配置：
+
+```dotenv
+CORS_ORIGINS=*
+ALLOW_INSECURE_CORS=true
+```
+
+`ALLOW_INSECURE_CORS` 去除首尾空白后仅接受精确小写 `true` 或 `false`；
+不要使用 `1`、`yes`、`on`、`TRUE` 等别名或大小写变体。
+
+该模式下，服务端不会返回允许携带凭证的 CORS 授权；即使请求包含认证
+Cookie，浏览器脚本也无法读取带凭证的跨域响应。需要跨域登录时，应配置
+明确的 HTTPS 来源，而不是使用通配来源。
 
 未覆盖 Ark 模型时，不要写入值为空的 `ARK_TEXT_MODEL`、`ARK_IMAGE_MODEL`
 或 `ARK_VIDEO_MODEL`，让应用使用代码中的默认模型。
@@ -669,7 +685,9 @@ curl --fail http://127.0.0.1:8000/health
 - [ ] 数据库结构与部署 commit 匹配。
 - [ ] 首次启动前已创建并验证云 MySQL 快照。
 - [ ] `.env` 权限为 `600`，密钥未进入 Git。
-- [ ] `SITE_ORIGIN`、`CORS_ORIGINS` 与正式 HTTPS 域名一致，`AUTH_COOKIE_SECURE=true`。
+- [ ] `SITE_ORIGIN` 使用正式 HTTPS 域名；`AUTH_COOKIE_SECURE=true`。
+- [ ] `CORS_ORIGINS` 使用明确来源；若使用 `*`，已同时设置
+      `ALLOW_INSECURE_CORS=true` 并接受任意来源跨域调用风险。
 - [ ] 同域部署未设置 `NEXT_PUBLIC_BACKEND_BASE_URL`，浏览器 API 请求使用 `/api/`。
 - [ ] 前端服务的 `BACKEND_INTERNAL_BASE_URL` 可访问 FastAPI。
 - [ ] 后端和前端由 systemd 托管并设置自动启动。

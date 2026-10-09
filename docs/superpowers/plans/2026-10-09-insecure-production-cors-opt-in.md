@@ -4,7 +4,7 @@
 
 **Goal:** Allow production deployments to use `CORS_ORIGINS=*` only when `ALLOW_INSECURE_CORS=true` is explicitly configured.
 
-**Architecture:** Add one boolean security setting shared by backend validation and deployment preflight semantics. Preserve all existing HTTPS and secure-cookie checks, and preserve FastAPI's current behavior of disabling credentialed CORS when wildcard origins are active.
+**Architecture:** Add one strict boolean security setting shared by backend validation and deployment preflight semantics. When wildcard origins and the opt-in are both active, bypass the backend's non-safe-method Origin guard so writes from any origin reach the route; otherwise preserve the existing `403` guard. Keep `CORSMiddleware.allow_credentials=false` for wildcard origins, meaning no credentialed CORS authorization is returned and browser scripts cannot read credentialed cross-origin responses.
 
 **Tech Stack:** Python 3, Pydantic, FastAPI/Starlette CORS middleware, Bash, pytest, shell test harness, Ruff.
 
@@ -14,6 +14,8 @@
 
 - Modify `backend/app/core/config.py`: parse and validate the explicit insecure-CORS opt-in.
 - Modify `backend/tests/test_config.py`: specify backend production behavior and environment parsing.
+- Modify `backend/app/main.py`: bypass the non-safe-method Origin guard only for wildcard plus explicit opt-in.
+- Modify `backend/tests/test_auth_api.py`: cover allowed wildcard writes, retained `403` behavior, and response CORS headers.
 - Modify `scripts/deploy_server.sh`: enforce the same opt-in during deployment preflight.
 - Modify `scripts/tests/test_deploy_server.sh`: cover rejected and accepted wildcard deployments.
 - Modify `.env.example`: document the secure default.
@@ -26,7 +28,7 @@
 - Modify: `backend/app/core/config.py:94-108`
 - Modify: `backend/app/core/config.py:188-245`
 
-- [ ] **Step 1: Write failing model-validation tests**
+- [x] **Step 1: Write failing model-validation tests**
 
 Replace the wildcard portion of
 `test_production_rejects_wildcard_cors_and_insecure_cookie` and add an
@@ -69,9 +71,9 @@ def test_production_rejects_insecure_cookie() -> None:
         )
 ```
 
-- [ ] **Step 2: Write a failing environment-loading test**
+- [x] **Step 2: Write failing environment-loading tests**
 
-Add:
+Add the success case and strict-value rejection coverage:
 
 ```python
 def test_production_wildcard_cors_opt_in_is_loaded_from_environment(
@@ -81,15 +83,32 @@ def test_production_wildcard_cors_opt_in_is_loaded_from_environment(
     monkeypatch.setenv("CORS_ORIGINS", "*")
     monkeypatch.setenv("SITE_ORIGIN", "https://app.example.com")
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
-    monkeypatch.setenv("ALLOW_INSECURE_CORS", "true")
+    monkeypatch.setenv("ALLOW_INSECURE_CORS", "  true  ")
 
     settings = Settings.from_env()
 
     assert settings.cors_origins == ["*"]
     assert settings.allow_insecure_cors is True
+
+
+@pytest.mark.parametrize("alias", ["1", "yes", "on", "TRUE"])
+def test_insecure_cors_environment_rejects_boolean_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+    alias: str,
+) -> None:
+    monkeypatch.setenv("ALLOW_INSECURE_CORS", alias)
+
+    with pytest.raises(
+        ConfigurationError,
+        match=r"ALLOW_INSECURE_CORS.*exactly 'true' or 'false'",
+    ):
+        Settings.from_env()
 ```
 
-- [ ] **Step 3: Run the focused tests and verify they fail**
+The parser trims surrounding whitespace, then accepts only the exact lowercase
+values `true` and `false`. Boolean aliases and case variants are rejected.
+
+- [x] **Step 3: Run the focused tests and verify they fail**
 
 Run:
 
@@ -98,13 +117,14 @@ PYTHONPATH=. .venv/bin/pytest \
   backend/tests/test_config.py::test_production_rejects_wildcard_cors_without_explicit_opt_in \
   backend/tests/test_config.py::test_production_allows_wildcard_cors_with_explicit_opt_in \
   backend/tests/test_config.py::test_production_wildcard_cors_opt_in_is_loaded_from_environment \
+  backend/tests/test_config.py::test_insecure_cors_environment_rejects_boolean_aliases \
   -q
 ```
 
 Expected: failures because `Settings` has no `allow_insecure_cors` field and
 still rejects every production wildcard.
 
-- [ ] **Step 4: Add the setting and production validator**
+- [x] **Step 4: Add the setting and production validator**
 
 Add the field next to `cors_origins`:
 
@@ -134,16 +154,31 @@ if (
     )
 ```
 
-Load the field in `Settings.from_env()`:
+Add a dedicated strict environment parser:
 
 ```python
-allow_insecure_cors=_parse_bool_env(
+def _parse_strict_bool_env(name: str, default: bool) -> bool:
+    raw_value = getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise ConfigurationError(f"{name} must be exactly 'true' or 'false'.")
+```
+
+Load the field in `Settings.from_env()` with that parser:
+
+```python
+allow_insecure_cors=_parse_strict_bool_env(
     "ALLOW_INSECURE_CORS",
     False,
 ),
 ```
 
-- [ ] **Step 5: Run backend tests and static checks**
+- [x] **Step 5: Run backend tests and static checks**
 
 Run:
 
@@ -154,21 +189,105 @@ PYTHONPATH=. .venv/bin/pytest backend/tests/test_config.py -q
 
 Expected: all configuration tests pass and Ruff reports no errors.
 
-- [ ] **Step 6: Commit the backend contract**
+- [x] **Step 6: Commit the backend contract**
 
 ```bash
 git add backend/app/core/config.py backend/tests/test_config.py
 git commit -m "feat(config): allow explicit production wildcard CORS"
 ```
 
-### Task 2: Deployment preflight opt-in
+### Task 2: Backend runtime Origin guard
+
+**Files:**
+- Modify: `backend/tests/test_auth_api.py:184-250`
+- Modify: `backend/app/main.py:172-190`
+
+- [x] **Step 1: Write failing API behavior tests**
+
+Add `test_production_wildcard_cors_allows_cross_origin_write_when_enabled`.
+Configure the test app with production settings, `cors_origins=["*"]`, and
+`allow_insecure_cors=True`, then send a cross-origin `POST /api/auth/setup`.
+Assert:
+
+- the route processes the request and returns `201`;
+- `Access-Control-Allow-Origin` is `*`;
+- `Access-Control-Allow-Credentials` is absent.
+
+Add `test_explicit_cors_origins_still_reject_cross_origin_write`. Configure an
+explicit origin while leaving `allow_insecure_cors=True`, send the same
+cross-origin `POST`, and assert `403 origin_forbidden` with no state change.
+
+- [x] **Step 2: Run the focused API tests and verify they fail**
+
+```bash
+PYTHONPATH=. .venv/bin/pytest \
+  backend/tests/test_auth_api.py::test_production_wildcard_cors_allows_cross_origin_write_when_enabled \
+  backend/tests/test_auth_api.py::test_explicit_cors_origins_still_reject_cross_origin_write \
+  -q
+```
+
+Expected: the wildcard case fails with `403` because the existing Origin guard
+does not yet recognize the opt-in.
+
+- [x] **Step 3: Gate the non-safe-method Origin check**
+
+Update `backend/app/main.py` so the existing Origin/Referer validation is
+skipped only when both conditions are true:
+
+```python
+if request.method not in {"GET", "HEAD", "OPTIONS"} and not (
+    settings.allow_insecure_cors and "*" in settings.cors_origins
+):
+    supplied_origin = request.headers.get("origin")
+    if supplied_origin is None:
+        supplied_origin = request.headers.get("referer")
+    if not _origin_matches(supplied_origin, settings.site_origin):
+        response = JSONResponse(
+            status_code=403,
+            content={
+                "detail": {
+                    "code": "origin_forbidden",
+                    "message": "Request origin is not allowed.",
+                }
+            },
+        )
+        response.headers["X-Request-ID"] = request_id
+        reset_log_context(token)
+        return response
+```
+
+With wildcard plus opt-in, `POST`, `PUT`, `PATCH`, `DELETE`, and other non-safe
+methods from any origin proceed to route handling. In every other configuration,
+the existing mismatch behavior remains `403 origin_forbidden`.
+
+Do not change the `CORSMiddleware` expression:
+
+```python
+allow_credentials="*" not in settings.cors_origins
+```
+
+For wildcard origins this remains `false`: the response does not grant
+credentialed CORS access, and browser scripts cannot read a credentialed
+cross-origin response. This does not guarantee that a browser never sends a
+Cookie.
+
+- [x] **Step 4: Run API tests and static checks**
+
+```bash
+PYTHONPATH=. .venv/bin/pytest backend/tests/test_auth_api.py -q
+.venv/bin/ruff check backend/app/main.py backend/tests/test_auth_api.py
+```
+
+Expected: authentication API tests pass and Ruff reports no errors.
+
+### Task 3: Deployment preflight opt-in
 
 **Files:**
 - Modify: `scripts/tests/test_deploy_server.sh:55-75`
 - Modify: `scripts/tests/test_deploy_server.sh:225-270`
 - Modify: `scripts/deploy_server.sh:124-175`
 
-- [ ] **Step 1: Add a failing wildcard opt-in deployment test**
+- [x] **Step 1: Add a failing wildcard opt-in deployment test**
 
 Add:
 
@@ -196,7 +315,7 @@ test_wildcard_cors_opt_in_deploys() {
 Invoke `test_wildcard_cors_opt_in_deploys` before the final failure-count
 check.
 
-- [ ] **Step 2: Update the wildcard rejection case**
+- [x] **Step 2: Update the wildcard rejection case**
 
 Replace the existing `wildcard_cors` fixture with:
 
@@ -207,16 +326,33 @@ assert_security_preflight_failure \
   "CORS_ORIGINS='*' requires ALLOW_INSECURE_CORS=true"
 ```
 
-Add a second case proving non-`true` values do not opt in:
+Add a wildcard case proving `false` does not opt in, plus invalid-value cases
+for wildcard and explicit origins. The explicit-origin case proves validation
+is unconditional rather than limited to the wildcard branch:
 
 ```bash
 assert_security_preflight_failure \
   wildcard_cors_false_opt_in \
   'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=false\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
   "CORS_ORIGINS='*' requires ALLOW_INSECURE_CORS=true"
+
+assert_security_preflight_failure \
+  wildcard_cors_uppercase_opt_in \
+  'APP_ENV=production\nCORS_ORIGINS=*\nALLOW_INSECURE_CORS=TRUE\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+  "ALLOW_INSECURE_CORS must be exactly true or false"
+
+assert_security_preflight_failure \
+  explicit_cors_uppercase_opt_in \
+  'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nALLOW_INSECURE_CORS=TRUE\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+  "ALLOW_INSECURE_CORS must be exactly true or false"
+
+assert_security_preflight_failure \
+  explicit_cors_alias_opt_in \
+  'APP_ENV=production\nCORS_ORIGINS=https://ad.example.com\nALLOW_INSECURE_CORS=yes\nSITE_ORIGIN=https://ad.example.com\nAUTH_COOKIE_SECURE=true\n' \
+  "ALLOW_INSECURE_CORS must be exactly true or false"
 ```
 
-- [ ] **Step 3: Run the shell tests and verify they fail**
+- [x] **Step 3: Run the shell tests and verify they fail**
 
 Run:
 
@@ -227,7 +363,7 @@ bash scripts/tests/test_deploy_server.sh
 Expected: wildcard opt-in success test fails because preflight still rejects
 `*`.
 
-- [ ] **Step 4: Implement the preflight branch**
+- [x] **Step 4: Implement the preflight branch**
 
 Declare and load the optional value:
 
@@ -237,6 +373,18 @@ local allow_insecure_cors
 allow_insecure_cors="$(read_dotenv_value "ALLOW_INSECURE_CORS" || true)"
 allow_insecure_cors="${allow_insecure_cors:-false}"
 ```
+
+Immediately validate the effective value, regardless of whether
+`CORS_ORIGINS` contains a wildcard:
+
+```bash
+[[ "$allow_insecure_cors" == "true" || "$allow_insecure_cors" == "false" ]] ||
+  die "ALLOW_INSECURE_CORS must be exactly true or false in $APP_ROOT/.env"
+```
+
+Only exact lowercase `true` and `false` are accepted. A missing or empty value
+uses the secure default `false`; aliases and case variants fail preflight even
+when `CORS_ORIGINS` lists an explicit source.
 
 Replace the unconditional wildcard rejection and source-membership block with:
 
@@ -261,7 +409,7 @@ fi
 
 Keep the production, HTTPS, non-empty, and secure-cookie checks unchanged.
 
-- [ ] **Step 5: Run deployment tests and shell syntax validation**
+- [x] **Step 5: Run deployment tests and shell syntax validation**
 
 Run:
 
@@ -272,21 +420,21 @@ bash scripts/tests/test_deploy_server.sh
 
 Expected: syntax validation succeeds and all deployment tests pass.
 
-- [ ] **Step 6: Commit deployment preflight support**
+- [x] **Step 6: Commit deployment preflight support**
 
 ```bash
 git add scripts/deploy_server.sh scripts/tests/test_deploy_server.sh
 git commit -m "feat(deploy): gate wildcard CORS behind explicit opt-in"
 ```
 
-### Task 3: Environment template and operator documentation
+### Task 4: Environment template and operator documentation
 
 **Files:**
 - Modify: `.env.example:1-9`
 - Modify: `docs/deployment/application-server-first-deployment.md:168-190`
 - Modify: `docs/deployment/application-server-first-deployment.md:665-678`
 
-- [ ] **Step 1: Document the secure default in the environment template**
+- [x] **Step 1: Document the secure default in the environment template**
 
 Add immediately after `CORS_ORIGINS`:
 
@@ -294,34 +442,36 @@ Add immediately after `CORS_ORIGINS`:
 ALLOW_INSECURE_CORS=false
 ```
 
-- [ ] **Step 2: Add the production opt-in example**
+- [x] **Step 2: Add the production opt-in example**
 
 After the recommended same-origin environment block, add:
 
 ````markdown
-生产环境默认拒绝通配 CORS。只有明确接受任意来源访问无凭证接口时，
-才同时配置：
+生产环境默认拒绝通配 CORS。只有明确接受任意来源发起跨域请求和非安全
+方法调用的风险时，才同时配置：
 
 ```dotenv
 CORS_ORIGINS=*
 ALLOW_INSECURE_CORS=true
 ```
 
-该模式不会允许浏览器在跨域请求中携带认证 Cookie。需要跨域登录时，应
-配置明确的 HTTPS 来源，而不是使用通配来源。
+`ALLOW_INSECURE_CORS` 去除首尾空白后仅接受精确小写 `true` 或 `false`。
+该模式下服务端不会返回 credentialed CORS 授权；即使请求包含认证 Cookie，
+浏览器脚本也无法读取带凭证的跨域响应。需要跨域登录时，应配置明确的
+HTTPS 来源，而不是使用通配来源。
 ````
 
-- [ ] **Step 3: Update the deployment checklist**
+- [x] **Step 3: Update the deployment checklist**
 
 Replace the CORS checklist item with:
 
 ```markdown
-- [ ] `SITE_ORIGIN` 使用正式 HTTPS 域名；`AUTH_COOKIE_SECURE=true`。
-- [ ] `CORS_ORIGINS` 使用明确来源；若使用 `*`，已同时设置
-      `ALLOW_INSECURE_CORS=true` 并接受跨域无凭证访问风险。
+- [x] `SITE_ORIGIN` 使用正式 HTTPS 域名；`AUTH_COOKIE_SECURE=true`。
+- [x] `CORS_ORIGINS` 使用明确来源；若使用 `*`，已同时设置
+      `ALLOW_INSECURE_CORS=true` 并接受任意来源跨域调用风险。
 ```
 
-- [ ] **Step 4: Validate documentation formatting**
+- [x] **Step 4: Validate documentation formatting**
 
 Run:
 
@@ -332,43 +482,52 @@ git diff --check -- .env.example \
 
 Expected: no whitespace errors.
 
-- [ ] **Step 5: Commit documentation**
+- [x] **Step 5: Commit documentation**
 
 ```bash
 git add .env.example docs/deployment/application-server-first-deployment.md
 git commit -m "docs(deploy): document wildcard CORS opt-in"
 ```
 
-### Task 4: Integrated verification
+### Task 5: Integrated verification
 
 **Files:**
 - Verify: `backend/app/core/config.py`
 - Verify: `backend/tests/test_config.py`
+- Verify: `backend/app/main.py`
+- Verify: `backend/tests/test_auth_api.py`
 - Verify: `scripts/deploy_server.sh`
 - Verify: `scripts/tests/test_deploy_server.sh`
 - Verify: `.env.example`
 - Verify: `docs/deployment/application-server-first-deployment.md`
 
-- [ ] **Step 1: Run all focused tests**
+- [x] **Step 1: Run all focused tests**
 
 ```bash
-PYTHONPATH=. .venv/bin/pytest backend/tests/test_config.py -q
+PYTHONPATH=. .venv/bin/pytest \
+  backend/tests/test_config.py \
+  backend/tests/test_auth_api.py \
+  -q
 bash scripts/tests/test_deploy_server.sh
 ```
 
 Expected: all tests pass.
 
-- [ ] **Step 2: Run static validation**
+- [x] **Step 2: Run static validation**
 
 ```bash
-.venv/bin/ruff check backend/app/core/config.py backend/tests/test_config.py
+.venv/bin/ruff check \
+  backend/app/core/config.py \
+  backend/app/main.py \
+  backend/tests/test_config.py \
+  backend/tests/test_auth_api.py
 bash -n scripts/deploy_server.sh scripts/tests/test_deploy_server.sh
-git diff --check HEAD~3..HEAD
+git diff --check
 ```
 
 Expected: no Ruff, shell syntax, or whitespace failures.
 
-- [ ] **Step 3: Verify secure and insecure production examples**
+- [x] **Step 3: Verify secure and insecure production examples**
 
 Secure example:
 
