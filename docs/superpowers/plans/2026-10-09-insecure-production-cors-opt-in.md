@@ -561,15 +561,16 @@ installation or service restart.
 - Modify: `scripts/tests/test_deploy_server.sh`
 - Modify: `.env.example`
 - Modify: `docs/deployment/application-server-first-deployment.md`
+- Modify: `docs/superpowers/specs/2026-10-09-insecure-production-cors-opt-in-design.md`
 
-- [ ] **Step 1: Specify backend conditional validation**
+- [x] **Step 1: Specify backend conditional validation**
 
 Add tests proving `Settings.from_env()` succeeds when production uses
 `CORS_ORIGINS=*`, `ALLOW_INSECURE_CORS=true`, secure cookies, and no
 `SITE_ORIGIN`; also prove a non-wildcard production configuration still
 rejects the missing value.
 
-- [ ] **Step 2: Implement backend conditional validation**
+- [x] **Step 2: Implement backend conditional validation**
 
 Compute the explicit wildcard mode once:
 
@@ -582,9 +583,10 @@ insecure_wildcard_cors = (
 Only enforce production HTTPS and `CORS_ORIGINS` membership when
 `insecure_wildcard_cors` is false. Keep secure cookies mandatory in both modes.
 
-- [ ] **Step 3: Specify deployment preflight behavior**
+- [x] **Step 3: Specify deployment preflight behavior**
 
-Add a successful fixture with:
+Add successful fixtures proving that missing, empty, and whitespace-only
+`SITE_ORIGIN` values are accepted with:
 
 ```dotenv
 APP_ENV=production
@@ -593,20 +595,35 @@ ALLOW_INSECURE_CORS=true
 AUTH_COOKIE_SECURE=true
 ```
 
-Keep the existing missing-`SITE_ORIGIN` failure for explicit CORS origins.
+Also prove a valid non-empty HTTP origin and an uppercase HTTPS scheme succeed
+after normalization. Prove values containing a path, query, userinfo,
+fragment, whitespace, an empty host, or an invalid port fail before dependency
+installation. Add comma-separated cases proving only an independently trimmed
+entry exactly equal to `*` enables wildcard mode; `*` inside a URL path does
+not. Keep the existing missing-`SITE_ORIGIN` failure for explicit CORS origins.
 
-- [ ] **Step 4: Implement deployment conditional requirement**
+- [x] **Step 4: Implement deployment conditional requirement**
 
 Read `SITE_ORIGIN` as optional. Require a non-empty HTTPS value only in the
-non-wildcard branch. In the explicit wildcard branch, allow it to be absent and
-retain the existing security warning.
+non-wildcard branch. In the explicit wildcard branch, allow it to be missing,
+empty, or whitespace-only. Parse `CORS_ORIGINS` into independently trimmed
+comma-separated entries and treat only an entry exactly equal to `*` as a
+wildcard. Validate and normalize non-empty `SITE_ORIGIN` values with Python
+stdlib `urlsplit`, matching backend `normalize_http_origin`: case-insensitive
+HTTP/HTTPS scheme, required host, legal port, no userinfo/query/fragment or
+internal whitespace, and only an empty or `/` path. Require normalized HTTPS
+outside wildcard mode, but allow normalized HTTP in wildcard mode. Compare
+explicit origins after normalization and retain the existing security warning.
 
-- [ ] **Step 5: Update operator documentation**
+- [x] **Step 5: Update operator documentation**
 
-Document that `SITE_ORIGIN` may be omitted only for the explicit wildcard
-configuration. Keep the recommended same-origin production example unchanged.
+Document that `SITE_ORIGIN` may be missing or empty only for the explicit
+wildcard configuration, that wildcard detection is exact per comma-separated
+entry, and the structured HTTP(S)-origin validation and normalization applied
+to non-empty values. Keep the recommended same-origin production example
+unchanged.
 
-- [ ] **Step 6: Run integrated verification**
+- [x] **Step 6: Run integrated verification**
 
 ```bash
 PYTHONPATH=. .venv/bin/pytest \

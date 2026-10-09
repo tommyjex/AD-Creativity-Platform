@@ -40,8 +40,9 @@ ALLOW_INSECURE_CORS=true
 
 默认值为 `false`。环境值去除首尾空白后仅接受精确小写 `true` 或
 `false`；`1`、`yes`、`on`、`TRUE` 等别名或大小写变体均无效。当
-`CORS_ORIGINS` 包含 `*` 且开关不是精确小写 `true` 时，部署预检和
-后端启动均失败。
+`CORS_ORIGINS` 按逗号拆分并去除各条目首尾空白；仅独立条目精确等于
+`*` 时视为通配来源，URL path 中出现 `*` 不属于通配。存在通配条目且
+开关不是精确小写 `true` 时，部署预检和后端启动均失败。
 
 ## 后端行为
 
@@ -76,12 +77,17 @@ credentialed CORS 授权；即使请求包含认证 Cookie，浏览器脚本也�
 `deploy_server.sh` 读取 `ALLOW_INSECURE_CORS`，缺省视为 `false`。
 
 - 非通配来源：保持现有来源包含关系校验。
-- 通配来源且开关为 `true`：允许省略 `SITE_ORIGIN` 并继续部署，同时输出
-  醒目的安全警告。
+- 通配来源且开关为 `true`：允许 `SITE_ORIGIN` 缺失、为空或仅包含空白。
+  若提供非空值，则使用 Python 标准库 `urlsplit` 做与后端
+  `normalize_http_origin` 一致的结构化校验：HTTP/HTTPS scheme
+  不区分大小写并归一化，host 必须存在，端口必须合法，不允许 userinfo、
+  query、fragment 或内部空白，path 仅允许为空或 `/`。该模式不强制
+  HTTPS。校验通过后继续部署并输出醒目的安全警告。
 - 通配来源且开关缺失、为空或不是精确小写 `true`：部署失败并给出修复
   提示。
 - `CORS_ORIGINS` 缺失或为空：仍然失败，避免隐式扩大访问范围。
-- 非通配来源下 `SITE_ORIGIN` 缺失、为空或不是 HTTPS Origin：仍然失败。
+- 非通配来源下 `SITE_ORIGIN` 缺失、为空或不是 HTTPS Origin：仍然失败；
+  校验与比较均使用上述结构化归一化结果。
 
 ## 文档与模板
 
@@ -107,7 +113,12 @@ credentialed CORS 授权；即使请求包含认证 Cookie，浏览器脚本也�
   `POST` 仍返回 `403 origin_forbidden`。
 - 保留 HTTPS、Cookie 和非通配来源包含关系的回归测试。
 - 部署脚本测试覆盖通配来源加显式开关成功。
-- 部署脚本测试覆盖通配显式开关模式缺少 `SITE_ORIGIN` 时成功。
+- 部署脚本测试覆盖通配显式开关模式下 `SITE_ORIGIN` 缺失、为空、仅含空白
+  以及合法 HTTP Origin 时成功。
+- 部署脚本测试覆盖通配显式开关模式下非空 `SITE_ORIGIN` 含 path、query、
+  userinfo、fragment、空白、空 host 或非法端口时失败。
+- 部署脚本测试覆盖 scheme 大小写归一化，以及 URL path 中的 `*` 不会被
+  误判为 wildcard。
 - 部署脚本测试覆盖缺少显式开关、`false` 和大写 `TRUE` 时失败。
 - 运行部署脚本测试、后端配置与认证 API 测试、Ruff 和 shell 语法检查。
 

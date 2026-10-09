@@ -87,6 +87,9 @@ ad.example.com
 
 - 推荐使用正式 HTTPS 域名配置 `SITE_ORIGIN` 和 `CORS_ORIGINS`；生产环境默认拒绝通配来源，
   仅在明确接受风险时通过双配置显式启用。
+- 普通生产配置必须设置 `SITE_ORIGIN`；仅当 `CORS_ORIGINS` 包含独立的
+  `*` 条目且 `ALLOW_INSECURE_CORS=true` 时可以缺失、为空或仅包含空白。
+  若该模式下设置非空值，则必须是结构合法的 HTTP(S) Origin。
 - 启用 `AUTH_COOKIE_SECURE`，确保认证 Cookie 只通过 HTTPS 发送。
 - 首次启动后通过 `/setup` 创建首个管理员；仓库、部署脚本和环境样例不得包含默认管理员密码。
 - `.env`、数据库密码、TOS 密钥和 Ark API Key 不得提交到 Git。
@@ -226,10 +229,24 @@ TLS_SECRET_ACCESS_KEY=<TLS_SECRET_ACCESS_KEY>
 ```dotenv
 CORS_ORIGINS=*
 ALLOW_INSECURE_CORS=true
+SITE_ORIGIN=https://ad.example.com
 ```
 
 `ALLOW_INSECURE_CORS` 去除首尾空白后仅接受精确小写 `true` 或 `false`；
 不要使用 `1`、`yes`、`on`、`TRUE` 等别名或大小写变体。
+
+即使启用通配模式，正式部署仍推荐配置正式 HTTPS `SITE_ORIGIN`。只有
+`CORS_ORIGINS` 包含独立的 `*` 条目且 `ALLOW_INSECURE_CORS=true` 时，
+`SITE_ORIGIN` 才可以缺失、为空或仅包含空白。若在该模式下提供非空值，
+部署预检仍要求它是结构合法的 HTTP(S) Origin，但不强制使用 HTTPS：scheme
+不区分大小写并会归一化，host 必须存在，端口必须合法，不允许 userinfo、
+query、fragment 或内部空白，path 仅允许为空或 `/`。其他生产配置中，
+该变量继续必填，归一化后必须使用 HTTPS，并包含在归一化后的
+`CORS_ORIGINS` 中。
+
+`CORS_ORIGINS` 按逗号拆分并去除每个条目的首尾空白。只有独立条目精确为
+`*` 时才进入通配模式；例如 `https://ad.example.com/*` 是带 path 的非法
+Origin，不会被视为 wildcard。
 
 该模式下，服务端不会返回允许携带凭证的 CORS 授权；即使请求包含认证
 Cookie，浏览器脚本也无法读取带凭证的跨域响应。需要跨域登录时，应配置
@@ -685,9 +702,15 @@ curl --fail http://127.0.0.1:8000/health
 - [ ] 数据库结构与部署 commit 匹配。
 - [ ] 首次启动前已创建并验证云 MySQL 快照。
 - [ ] `.env` 权限为 `600`，密钥未进入 Git。
-- [ ] `SITE_ORIGIN` 使用正式 HTTPS 域名；`AUTH_COOKIE_SECURE=true`。
+- [ ] 推荐 `SITE_ORIGIN` 使用正式 HTTPS 域名；普通生产配置已将其设为
+      `CORS_ORIGINS` 包含的 HTTPS Origin；`AUTH_COOKIE_SECURE=true`。
 - [ ] `CORS_ORIGINS` 使用明确来源；若使用 `*`，已同时设置
       `ALLOW_INSECURE_CORS=true` 并接受任意来源跨域调用风险。
+- [ ] 仅在 `CORS_ORIGINS` 包含独立的 `*` 条目且
+      `ALLOW_INSECURE_CORS=true` 时让 `SITE_ORIGIN` 缺失或为空；若提供
+      非空值，已确认它是合法 HTTP(S) Origin。
+- [ ] `CORS_ORIGINS` 中仅使用独立的 `*` 条目表达 wildcard，未在 URL
+      path 中使用伪 wildcard。
 - [ ] 同域部署未设置 `NEXT_PUBLIC_BACKEND_BASE_URL`，浏览器 API 请求使用 `/api/`。
 - [ ] 前端服务的 `BACKEND_INTERNAL_BASE_URL` 可访问 FastAPI。
 - [ ] 后端和前端由 systemd 托管并设置自动启动。
