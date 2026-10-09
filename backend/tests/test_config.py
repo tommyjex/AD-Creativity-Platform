@@ -51,13 +51,35 @@ def test_auth_security_defaults() -> None:
     assert settings.auth_login_max_failures == 5
 
 
-def test_production_rejects_wildcard_cors_and_insecure_cookie() -> None:
-    with pytest.raises(ValueError, match="CORS_ORIGINS"):
-        Settings(environment="production", cors_origins=["*"])
+def test_production_rejects_wildcard_cors_without_explicit_opt_in() -> None:
+    with pytest.raises(ValueError, match="ALLOW_INSECURE_CORS"):
+        Settings(
+            environment="production",
+            cors_origins=["*"],
+            site_origin="https://app.example.com",
+            auth_cookie_secure=True,
+        )
+
+
+def test_production_allows_wildcard_cors_with_explicit_opt_in() -> None:
+    settings = Settings(
+        environment="production",
+        cors_origins=["*"],
+        site_origin="https://app.example.com",
+        auth_cookie_secure=True,
+        allow_insecure_cors=True,
+    )
+
+    assert settings.cors_origins == ["*"]
+    assert settings.allow_insecure_cors is True
+
+
+def test_production_rejects_insecure_cookie() -> None:
     with pytest.raises(ValueError, match="AUTH_COOKIE_SECURE"):
         Settings(
             environment="production",
             cors_origins=["https://app.example.com"],
+            site_origin="https://app.example.com",
             auth_cookie_secure=False,
         )
 
@@ -110,6 +132,35 @@ def test_production_auth_settings_are_loaded_from_environment(
     assert settings.cors_origins == ["https://app.example.com"]
     assert settings.site_origin == "https://app.example.com"
     assert settings.auth_cookie_secure is True
+
+
+def test_production_wildcard_cors_opt_in_is_loaded_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "*")
+    monkeypatch.setenv("SITE_ORIGIN", "https://app.example.com")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
+    monkeypatch.setenv("ALLOW_INSECURE_CORS", "  true  ")
+
+    settings = Settings.from_env()
+
+    assert settings.cors_origins == ["*"]
+    assert settings.allow_insecure_cors is True
+
+
+@pytest.mark.parametrize("alias", ["1", "yes", "on", "TRUE"])
+def test_insecure_cors_environment_rejects_boolean_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+    alias: str,
+) -> None:
+    monkeypatch.setenv("ALLOW_INSECURE_CORS", alias)
+
+    with pytest.raises(
+        ConfigurationError,
+        match=r"ALLOW_INSECURE_CORS.*exactly 'true' or 'false'",
+    ):
+        Settings.from_env()
 
 
 def test_tls_logging_settings_read_secret_environment_values(

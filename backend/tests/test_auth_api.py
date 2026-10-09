@@ -202,6 +202,57 @@ def test_state_changing_request_rejects_cross_origin(
     }
 
 
+def test_production_wildcard_cors_allows_cross_origin_write_when_enabled(
+    anonymous_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = anonymous_client.app.state.settings
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "cors_origins", ["*"])
+    monkeypatch.setattr(settings, "allow_insecure_cors", True)
+    monkeypatch.setattr(settings, "site_origin", "https://app.example.com")
+    monkeypatch.setattr(settings, "auth_cookie_secure", True)
+
+    response = anonymous_client.post(
+        "/api/auth/setup",
+        headers={"Origin": "https://attacker.example"},
+        json={
+            "username": "admin",
+            "display_name": "Admin",
+            "password": ADMIN_PASSWORD,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.headers["access-control-allow-origin"] == "*"
+    assert "access-control-allow-credentials" not in response.headers
+
+
+def test_explicit_cors_origins_still_reject_cross_origin_write(
+    anonymous_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = anonymous_client.app.state.settings
+    monkeypatch.setattr(settings, "cors_origins", ["http://localhost:3000"])
+    monkeypatch.setattr(settings, "allow_insecure_cors", True)
+
+    response = anonymous_client.post(
+        "/api/auth/setup",
+        headers={"Origin": "https://attacker.example"},
+        json={
+            "username": "admin",
+            "display_name": "Admin",
+            "password": ADMIN_PASSWORD,
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "origin_forbidden"
+    assert anonymous_client.get("/api/auth/setup-status").json() == {
+        "initialized": False
+    }
+
+
 def test_state_changing_request_requires_origin_or_referer(
     anonymous_client: TestClient,
 ) -> None:

@@ -172,7 +172,9 @@ def create_app() -> FastAPI:
         token = bind_log_context(request_id=request_id)
         logger = logging.getLogger(__name__)
         route = request.url.path
-        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and not (
+            settings.allow_insecure_cors and "*" in settings.cors_origins
+        ):
             supplied_origin = request.headers.get("origin")
             if supplied_origin is None:
                 referer = request.headers.get("referer")

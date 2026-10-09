@@ -76,6 +76,18 @@ def _parse_bool_env(name: str, default: bool) -> bool:
     raise ConfigurationError(f"{name} must be a boolean.")
 
 
+def _parse_strict_bool_env(name: str, default: bool) -> bool:
+    raw_value = getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise ConfigurationError(f"{name} must be exactly 'true' or 'false'.")
+
+
 def _get_env_first(*names: str) -> str | None:
     for name in names:
         value = getenv(name)
@@ -99,6 +111,7 @@ class Settings(BaseModel):
     environment: str = "local"
     api_prefix: str = "/api"
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    allow_insecure_cors: bool = False
     site_origin: str = "http://localhost:3000"
     auth_cookie_secure: bool = False
     auth_session_idle_seconds: int = Field(default=12 * 60 * 60, gt=0)
@@ -203,9 +216,10 @@ class Settings(BaseModel):
                 "AUTH_SESSION_ABSOLUTE_SECONDS."
             )
         if self.environment.casefold() in {"production", "prod"}:
-            if "*" in self.cors_origins:
+            if "*" in self.cors_origins and not self.allow_insecure_cors:
                 raise ConfigurationError(
-                    "CORS_ORIGINS must not contain '*' in production."
+                    "CORS_ORIGINS='*' in production requires "
+                    "ALLOW_INSECURE_CORS=true."
                 )
             if not self.auth_cookie_secure:
                 raise ConfigurationError(
@@ -215,7 +229,10 @@ class Settings(BaseModel):
                 raise ConfigurationError(
                     "SITE_ORIGIN must use HTTPS in production."
                 )
-            if self.site_origin not in self.cors_origins:
+            if (
+                "*" not in self.cors_origins
+                and self.site_origin not in self.cors_origins
+            ):
                 raise ConfigurationError(
                     "CORS_ORIGINS must include SITE_ORIGIN in production."
                 )
@@ -239,6 +256,10 @@ class Settings(BaseModel):
                 [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
                 if cors_origins
                 else ["*"]
+            ),
+            allow_insecure_cors=_parse_strict_bool_env(
+                "ALLOW_INSECURE_CORS",
+                False,
             ),
             site_origin=getenv(
                 "SITE_ORIGIN",
