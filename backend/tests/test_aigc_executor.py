@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -23,9 +24,9 @@ from backend.app.schemas import (
     AigcPipelineRunMode,
     AigcPipelineRunNode,
     AigcPipelineRunStatus,
-    AigcPipelineUpdate,
-    AigcPipelineTaskAttempt,
     AigcPipelineTaskAssetReference,
+    AigcPipelineTaskAttempt,
+    AigcPipelineUpdate,
     AigcResultAsset,
     AigcResultKind,
     AigcRunNodeStatus,
@@ -52,8 +53,8 @@ from backend.app.services.aigc_executor import (
 )
 from backend.app.services.aigc_gateway import (
     AIGC_IMAGE_EXECUTOR_VERSION,
-    AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION,
     AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION,
+    AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION,
     AigcGatewayError,
     AigcGatewayExecution,
 )
@@ -811,6 +812,157 @@ def test_runtime_executes_dependency_chain_and_projects_output(
         event == "aigc.run" and context["outcome"] == "succeeded"
         for event, context in events
     )
+
+
+def test_gateway_failure_event_has_uniform_error_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        executor_module,
+        "log_event",
+        lambda _logger, event, **context: events.append((event, context)),
+    )
+
+    class ProviderFailureGateway(FakeGateway):
+        async def execute(self, task) -> AigcGatewayExecution:
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="provider_error",
+                    message="provider failed",
+                    stage="provider_call",
+                    request_id="provider-1",
+                )
+            )
+
+    async def scenario() -> None:
+        repository = InMemoryRepository()
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(
+                name="provider failure",
+                definition=chain_definition(),
+            )
+        )
+        runtime = AigcPipelineRuntime(
+            repository,
+            ProviderFailureGateway(),  # type: ignore[arg-type]
+        )
+        try:
+            await runtime.submit_run(
+                pipeline.id,
+                AigcPipelineRunCreate(expected_revision=0, mode="full"),
+                idempotency_key="provider-failure-log",
+            )
+            await runtime.wait_until_idle()
+        finally:
+            await runtime.stop()
+
+    run_runtime_scenario(scenario)
+
+    failures = [
+        context
+        for event, context in events
+        if event == "aigc.task" and context["outcome"] == "failed"
+    ]
+    assert failures
+    assert all(context["error_code"] for context in failures)
+    assert all(context["error_stage"] for context in failures)
+    assert all(context["error_type"] for context in failures)
+    assert failures[0]["provider_request_id"] == "provider-1"
+
+
+def test_worker_cancellation_failure_event_has_uniform_error_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        executor_module,
+        "log_event",
+        lambda _logger, event, **context: events.append((event, context)),
+    )
+
+    async def scenario() -> None:
+        repository = InMemoryRepository()
+        pipeline = repository.create_aigc_pipeline(
+            AigcPipelineCreate(
+                name="worker cancellation",
+                definition=chain_definition(),
+            )
+        )
+        gateway = BlockingGateway()
+        runtime = AigcPipelineRuntime(
+            repository,
+            gateway,  # type: ignore[arg-type]
+            worker_count=1,
+        )
+        await runtime.submit_run(
+            pipeline.id,
+            AigcPipelineRunCreate(expected_revision=0, mode="full"),
+            idempotency_key="worker-cancellation-log",
+        )
+        await asyncio.wait_for(gateway.started.wait(), timeout=1)
+        await runtime.stop()
+
+    run_runtime_scenario(scenario)
+
+    failures = [
+        context
+        for event, context in events
+        if event == "aigc.task" and context["outcome"] == "failed"
+    ]
+    assert len(failures) == 1
+    assert failures[0]["error_code"] == "worker_interrupted"
+    assert failures[0]["error_stage"] == "worker"
+    assert failures[0]["error_type"] == "CancelledError"
+
+
+def test_recovery_failure_event_has_uniform_error_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        executor_module,
+        "log_event",
+        lambda _logger, event, **context: events.append((event, context)),
+    )
+
+    async def scenario() -> None:
+        repository = InMemoryRepository()
+        for asset_id in ("base-asset", "layer-asset"):
+            create_image_asset(repository, asset_id)
+        task = _create_layer_canvas_task(
+            repository,
+            AigcLayerSet.model_validate(layer_set_payload()),
+        )
+        repository.update_aigc_task_attempt(
+            task.task_id,
+            status=AigcTaskStatus.RUNNING,
+        )
+        runtime = AigcPipelineRuntime(
+            repository,
+            FakeGateway(),  # type: ignore[arg-type]
+        )
+        await runtime._recover_interrupted_tasks()
+
+    run_runtime_scenario(scenario)
+
+    failures = [
+        context
+        for event, context in events
+        if event == "aigc.task" and context["outcome"] == "failed"
+    ]
+    assert len(failures) == 1
+    assert failures[0]["error_code"] == "worker_interrupted"
+    assert failures[0]["error_stage"] == "recovery"
+    assert failures[0]["error_type"] == "WorkerInterrupted"
+
+
+def test_aigc_executor_has_no_temporary_debug_reporting() -> None:
+    source = Path(executor_module.__file__).read_text(encoding="utf-8")
+
+    assert "127.0.0.1:7777" not in source
+    assert "video-ocr-worker-error" not in source
+    assert "#region debug-point" not in source
 
 
 def test_llm_resolves_local_and_upstream_image_assets_without_urls() -> None:
@@ -3465,7 +3617,7 @@ def test_runtime_retries_initial_lease_acquisition_and_drains_queue() -> None:
 def test_runtime_start_drains_task_queued_before_process_start() -> None:
     async def scenario():
         repository = InMemoryRepository()
-        for asset_id in {"base-asset", "layer-asset"}:
+        for asset_id in ("base-asset", "layer-asset"):
             create_image_asset(repository, asset_id)
         task = _create_layer_canvas_task(
             repository,
@@ -4559,7 +4711,10 @@ def test_worker_isolates_unhandled_item_error_and_keeps_consuming() -> None:
             if task_id == "broken":
                 raise RuntimeError("unexpected scheduling failure")
 
-        async def isolated(_task_id: str) -> None:
+        async def isolated(
+            _task_id: str,
+            _exception: BaseException,
+        ) -> None:
             return None
 
         runtime._process_task = unstable_process  # type: ignore[method-assign]
@@ -5050,7 +5205,7 @@ def test_layer_input_hash_and_cache_availability_cover_snapshot_assets() -> None
     assert first_hash != new_identity_hash
     assert first_hash != configured_hash
     assert runtime._result_available(source_run_node.result) is False
-    for asset_id in {"base-asset", "layer-asset"}:
+    for asset_id in ("base-asset", "layer-asset"):
         create_image_asset(repository, asset_id)
     assert runtime._result_available(source_run_node.result) is True
 
@@ -5078,7 +5233,7 @@ def test_structured_result_cache_rejects_unavailable_required_assets(
         kind=AigcResultKind.LAYER_SET,
         layer_set=AigcLayerSet.model_validate(layer_set_payload()),
     )
-    for required_id in {"base-asset", "layer-asset"}:
+    for required_id in ("base-asset", "layer-asset"):
         if case == "missing" and required_id == asset_id:
             continue
         create_image_asset(repository, required_id)
@@ -5135,7 +5290,7 @@ def _create_layer_canvas_task(
 
 def test_layer_canvas_records_complete_input_and_output_asset_trace() -> None:
     repository = InMemoryRepository()
-    for asset_id in {"base-asset", "layer-asset"}:
+    for asset_id in ("base-asset", "layer-asset"):
         create_image_asset(repository, asset_id)
     layer_set = AigcLayerSet.model_validate(layer_set_payload())
     task = _create_layer_canvas_task(repository, layer_set)
@@ -5167,7 +5322,7 @@ def test_layer_canvas_records_complete_input_and_output_asset_trace() -> None:
 def test_layer_canvas_cancellation_cleanup_preserves_shared_assets() -> None:
     async def scenario() -> None:
         repository = InMemoryRepository()
-        for asset_id in {"base-asset", "layer-asset"}:
+        for asset_id in ("base-asset", "layer-asset"):
             create_image_asset(repository, asset_id)
             repository.update_asset(
                 asset_id,

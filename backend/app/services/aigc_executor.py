@@ -28,8 +28,8 @@ from backend.app.schemas import (
     AigcPipelineRunMode,
     AigcPipelineRunNode,
     AigcPipelineRunStatus,
-    AigcPipelineTaskAttempt,
     AigcPipelineTaskAssetReference,
+    AigcPipelineTaskAttempt,
     AigcResultAsset,
     AigcResultKind,
     AigcRunNodeStatus,
@@ -39,27 +39,24 @@ from backend.app.schemas import (
     AigcTaskStatus,
     AigcTaskType,
     AigcVideoGenerationMode,
-    AudioNode,
     AssetType,
+    AudioNode,
     ImageNode,
     ImageToImageNode,
     JsonParserNode,
     LayerCanvasNode,
     LayerCompositeNode,
     LlmNode,
-    MultiTrackAudioElement,
     MultiTrackEditConfig,
     MultiTrackEditNode,
-    MultiTrackImageElement,
     MultiTrackSubtitleElement,
     MultiTrackTextElement,
-    MultiTrackVideoElement,
     Status,
     TextNode,
-    VideoNode,
     VideoEnhancementNode,
     VideoFaceBlurNode,
     VideoGenerationNode,
+    VideoNode,
     VideoSubtitleExtractionNode,
     validate_multi_track_edit_config,
 )
@@ -85,11 +82,11 @@ from backend.app.services.aigc_gateway import (
     AIGC_LLM_EXECUTOR_VERSION,
     AIGC_MULTITRACK_EXECUTOR_VERSION,
     AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION,
+    AIGC_VIDEO_EXECUTOR_VERSION,
     AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION,
     AIGC_VIDEO_SUBTITLE_EXTRACTION_EXECUTOR_VERSION,
-    AIGC_VIDEO_EXECUTOR_VERSION,
-    AigcGatewayExecution,
     AigcGatewayError,
+    AigcGatewayExecution,
     AigcModelGateway,
 )
 from backend.app.services.aigc_json_parser import (
@@ -99,6 +96,55 @@ from backend.app.services.aigc_json_parser import (
 from backend.app.services.aigc_pipeline import canonicalize_aigc_definition
 
 logger = logging.getLogger(__name__)
+
+
+def _task_log_context(task: AigcPipelineTaskAttempt) -> dict[str, str]:
+    return {
+        "pipeline_id": task.pipeline_id,
+        "run_id": task.run_id,
+        "node_id": task.node_id,
+        "task_id": task.task_id,
+        "attempt_id": str(task.attempt),
+        "task_type": task.type.value,
+    }
+
+
+def _root_error_type(
+    exception: BaseException,
+    *,
+    fallback: str,
+) -> str:
+    current = exception
+    seen: set[int] = set()
+    while id(current) not in seen:
+        seen.add(id(current))
+        next_exception = current.__cause__ or current.__context__
+        if next_exception is None:
+            break
+        current = next_exception
+    return fallback if current is exception else type(current).__name__
+
+
+def _log_task_failure(
+    task: AigcPipelineTaskAttempt,
+    error: AigcTaskError,
+    *,
+    exception: BaseException | None = None,
+    error_type: str,
+    level: int = logging.WARNING,
+) -> None:
+    log_event(
+        logger,
+        "aigc.task",
+        outcome="failed",
+        level=level,
+        exception=exception,
+        error_code=error.code,
+        error_stage=error.stage or "worker",
+        error_type=error_type,
+        provider_request_id=error.request_id,
+        **_task_log_context(task),
+    )
 
 
 class AigcResolvedInputError(ValueError):
@@ -246,11 +292,6 @@ class AigcPipelineRuntime:
                 )
                 self._ensure_lease_retry()
                 return False
-            # #region debug-point A:lease-acquisition
-            with suppress(Exception):
-                import json as _debug_json, urllib.request as _debug_request
-                _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A", "location": "aigc_executor.py:start:lease", "msg": "[DEBUG] AIGC runtime attempted worker lease acquisition", "data": {"ownerId": self.owner_id, "acquired": lease is not None, "leaseOwnerId": lease.owner_id if lease is not None else None, "fencingToken": lease.fencing_token if lease is not None else None, "ocrFactoryCallable": callable(self.gateway.video_ocr_client_factory), "ocrFactoryType": type(self.gateway.video_ocr_client_factory).__name__}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-            # #endregion
             if lease is None:
                 self._ensure_lease_retry()
                 return False
@@ -812,7 +853,7 @@ class AigcPipelineRuntime:
                     ),
                     idempotency_key=f"{run_id}:{node_id}:attempt:1",
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - converge scheduling failures.
                 self._record_scheduling_failure(run_id, node_id, exc)
                 run_node_by_id = {
                     item.node_id: item
@@ -1521,7 +1562,9 @@ class AigcPipelineRuntime:
     ) -> str:
         raw_sources = params.get("resolved_sources")
         if not isinstance(raw_sources, dict):
-            raise ValueError("multi-track resolved sources are invalid")
+            raise ValueError(  # noqa: TRY004 - preserve validation error contract.
+                "multi-track resolved sources are invalid"
+            )
         target_handles = {
             "video": "videos",
             "image": "images",
@@ -1538,7 +1581,7 @@ class AigcPipelineRuntime:
                     continue
                 resolved = raw_sources.get(element.id)
                 if not isinstance(resolved, dict):
-                    raise ValueError(
+                    raise ValueError(  # noqa: TRY004 - preserve validation contract.
                         f"multi-track element '{element.id}' source is unresolved"
                     )
                 if element.type == "text":
@@ -1678,15 +1721,21 @@ class AigcPipelineRuntime:
         for task in self.repository.list_aigc_task_attempts(
             statuses={AigcTaskStatus.RUNNING}
         ):
+            error = AigcTaskError(
+                code="worker_interrupted",
+                message="AIGC worker stopped before completing the task",
+                stage="recovery",
+            )
             self.repository.update_aigc_task_attempt(
                 task.task_id,
                 status=AigcTaskStatus.FAILED,
-                error=AigcTaskError(
-                    code="worker_interrupted",
-                    message="AIGC worker stopped before completing the task",
-                    stage="recovery",
-                ),
+                error=error,
                 finished_at=utc_now(),
+            )
+            _log_task_failure(
+                task,
+                error,
+                error_type="WorkerInterrupted",
             )
             affected_run_ids.add(task.run_id)
         for run_id in affected_run_ids:
@@ -1775,7 +1824,7 @@ class AigcPipelineRuntime:
                 await asyncio.sleep(self.lease_retry_seconds)
                 if await self.start():
                     return
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # noqa: TRY203 - explicit cancellation path.
             raise
         finally:
             if self._lease_retry is asyncio.current_task():
@@ -1785,44 +1834,46 @@ class AigcPipelineRuntime:
         while True:
             task_id = await self.queue.get()
             self._enqueued.discard(task_id)
-            # #region debug-point A:worker-dequeue
-            with suppress(Exception):
-                import json as _debug_json, urllib.request as _debug_request
-                _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A", "location": "aigc_executor.py:_worker:dequeue", "msg": "[DEBUG] Worker dequeued task", "data": {"taskId": task_id, "workerIndex": _index}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-            # #endregion
             try:
                 try:
                     await self._process_task(task_id)
                 except Exception as exc:
-                    # #region debug-point A,B,C,D:outer-worker-exception
-                    with suppress(Exception):
-                        import json as _debug_json, traceback as _debug_traceback, urllib.request as _debug_request
-                        _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A,B,C,D", "location": "aigc_executor.py:_worker:exception", "msg": "[DEBUG] Worker item failed before normal task handling", "data": {"taskId": task_id, "exceptionType": type(exc).__name__, "exceptionMessage": str(exc)[:500], "traceTail": _debug_traceback.format_exception(type(exc), exc, exc.__traceback__)[-4:]}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-                    # #endregion
                     logger.exception(
                         "Unhandled AIGC worker item error",
                         extra={"aigc_task_id": task_id},
                     )
-                    await self._isolate_worker_item_failure(task_id)
+                    await self._isolate_worker_item_failure(task_id, exc)
             finally:
                 self.queue.task_done()
 
-    async def _isolate_worker_item_failure(self, task_id: str) -> None:
+    async def _isolate_worker_item_failure(
+        self,
+        task_id: str,
+        exception: BaseException,
+    ) -> None:
         try:
             task = self.repository.get_aigc_task_attempt(task_id)
             if task.status in {
                 AigcTaskStatus.QUEUED,
                 AigcTaskStatus.RUNNING,
             }:
+                error = AigcTaskError(
+                    code="worker_error",
+                    message="AIGC worker failed",
+                    stage="worker",
+                )
                 self.repository.update_aigc_task_attempt(
                     task_id,
                     status=AigcTaskStatus.FAILED,
-                    error=AigcTaskError(
-                        code="worker_error",
-                        message="AIGC worker failed",
-                        stage="worker",
-                    ),
+                    error=error,
                     finished_at=utc_now(),
+                )
+                _log_task_failure(
+                    task,
+                    error,
+                    exception=exception,
+                    error_type=type(exception).__name__,
+                    level=logging.ERROR,
                 )
             await self._schedule_ready_nodes(task.run_id)
             await self._finalize_run(task.run_id)
@@ -1842,20 +1893,14 @@ class AigcPipelineRuntime:
         )
         if task is None:
             return
-        # #region debug-point A,D:claimed-task
-        with suppress(Exception):
-            import json as _debug_json, urllib.request as _debug_request
-            _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A,D", "location": "aigc_executor.py:_process_task:claimed", "msg": "[DEBUG] Worker claimed AIGC task", "data": {"taskId": task.task_id, "taskType": task.type.value, "paramKeys": sorted(task.params.keys()), "upstreamCount": len(task.upstream)}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-        # #endregion
-        task_context = {
-            "pipeline_id": task.pipeline_id,
-            "run_id": task.run_id,
-            "node_id": task.node_id,
-            "task_id": task.task_id,
-            "attempt_id": str(task.attempt),
-            "task_type": task.type.value,
-        }
-        log_event(logger, "aigc.task", outcome="started", phase="execution", **task_context)
+        task_context = _task_log_context(task)
+        log_event(
+            logger,
+            "aigc.task",
+            outcome="started",
+            phase="execution",
+            **task_context,
+        )
         semaphore = (
             self._llm_semaphore
             if task.type == AigcTaskType.LLM
@@ -1892,19 +1937,9 @@ class AigcPipelineRuntime:
                         self._load_json_parser_source(task),
                     )
                 else:
-                    # #region debug-point B,C:gateway-dispatch
-                    with suppress(Exception):
-                        import json as _debug_json, urllib.request as _debug_request
-                        _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "B,C", "location": "aigc_executor.py:_process_task:before_gateway", "msg": "[DEBUG] Dispatching task to gateway", "data": {"taskId": task.task_id, "taskType": task.type.value}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-                    # #endregion
                     execution = await self.gateway.execute(task)
-                    # #region debug-point B,C:gateway-return
-                    with suppress(Exception):
-                        import json as _debug_json, urllib.request as _debug_request
-                        _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "B,C", "location": "aigc_executor.py:_process_task:after_gateway", "msg": "[DEBUG] Gateway returned task result", "data": {"taskId": task.task_id, "taskType": task.type.value, "resultKind": execution.result.kind.value}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-                    # #endregion
             if task.type == AigcTaskType.JSON_PARSER:
-                committed, accepted = (
+                _committed, accepted = (
                     self.repository.commit_aigc_json_parser_task_attempt(
                         task.task_id,
                         fencing_token=token,
@@ -1913,7 +1948,7 @@ class AigcPipelineRuntime:
                     )
                 )
             elif execution.result.naming is not None:
-                committed, accepted = (
+                _committed, accepted = (
                     self.repository.commit_aigc_generated_media_task_attempt(
                         task.task_id,
                         fencing_token=token,
@@ -1922,7 +1957,7 @@ class AigcPipelineRuntime:
                     )
                 )
             else:
-                committed, accepted = self.repository.commit_aigc_task_attempt(
+                _committed, accepted = self.repository.commit_aigc_task_attempt(
                     task.task_id,
                     fencing_token=token,
                     status=AigcTaskStatus.SUCCEEDED,
@@ -1940,55 +1975,53 @@ class AigcPipelineRuntime:
                 phase="execution",
                 **task_context,
             )
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as exc:
+            error = AigcTaskError(
+                code="worker_interrupted",
+                message="AIGC worker stopped before completing the task",
+                stage="worker",
+            )
             _, accepted = self.repository.commit_aigc_task_attempt(
                 task.task_id,
                 fencing_token=token,
                 status=AigcTaskStatus.FAILED,
                 result=AigcTaskResult(),
-                error=AigcTaskError(
-                    code="worker_interrupted",
-                    message="AIGC worker stopped before completing the task",
-                    stage="worker",
-                ),
+                error=error,
                 metrics=AigcTaskMetrics(),
             )
             if accepted:
+                _log_task_failure(
+                    task,
+                    error,
+                    exception=exc,
+                    error_type="CancelledError",
+                )
                 await self._schedule_ready_nodes(task.run_id)
                 await self._finalize_run(task.run_id)
-            log_event(
-                logger,
-                "aigc.task",
-                outcome="canceled",
-                phase="execution",
-                **task_context,
-            )
             raise
         except AigcJsonParserError as exc:
-            self.repository.commit_aigc_task_attempt(
+            error = AigcTaskError(
+                code=exc.code,
+                message=exc.message,
+                stage="execution",
+            )
+            _, accepted = self.repository.commit_aigc_task_attempt(
                 task.task_id,
                 fencing_token=token,
                 status=AigcTaskStatus.FAILED,
                 result=AigcTaskResult(),
-                error=AigcTaskError(
-                    code=exc.code,
-                    message=exc.message,
-                    stage="execution",
-                ),
+                error=error,
                 metrics=AigcTaskMetrics(),
             )
-            log_event(
-                logger,
-                "aigc.task",
-                outcome="failed",
-                level=logging.WARNING,
-                phase="execution",
-                exception=exc,
-                error_code=exc.code,
-                **task_context,
-            )
+            if accepted:
+                _log_task_failure(
+                    task,
+                    error,
+                    exception=exc,
+                    error_type=type(exc).__name__,
+                )
         except AigcGatewayError as exc:
-            committed, accepted = self.repository.commit_aigc_task_attempt(
+            _committed, accepted = self.repository.commit_aigc_task_attempt(
                 task.task_id,
                 fencing_token=token,
                 status=(
@@ -2016,7 +2049,7 @@ class AigcPipelineRuntime:
                         ),
                         retry_of_task_id=task.task_id,
                     )
-                except Exception as create_exc:
+                except Exception as create_exc:  # noqa: BLE001
                     self._record_scheduling_failure(
                         task.run_id,
                         task.node_id,
@@ -2032,43 +2065,39 @@ class AigcPipelineRuntime:
                         error_code=exc.error.code,
                         **task_context,
                     )
-            log_event(
-                logger,
-                "aigc.task",
-                outcome="failed",
-                level=logging.WARNING,
-                phase=exc.error.stage,
-                error_code=exc.error.code,
-                **task_context,
+            if accepted:
+                _log_task_failure(
+                    task,
+                    exc.error,
+                    exception=exc,
+                    error_type=_root_error_type(
+                        exc,
+                        fallback="AigcGatewayError",
+                    ),
+                )
+        except Exception as exc:  # noqa: BLE001 - isolate unknown worker failures.
+            error = AigcTaskError(
+                code="worker_error",
+                message="AIGC worker failed",
+                stage="worker",
             )
-        except Exception as exc:
-            # #region debug-point A,B,C,D:worker-exception
-            with suppress(Exception):
-                import json as _debug_json, traceback as _debug_traceback, urllib.request as _debug_request
-                _debug_request.urlopen(_debug_request.Request("http://127.0.0.1:7777/event", data=_debug_json.dumps({"sessionId": "video-ocr-worker-error", "runId": "post-fix", "hypothesisId": "A,B,C,D", "location": "aigc_executor.py:_process_task:exception", "msg": "[DEBUG] Worker caught unhandled task exception", "data": {"taskId": task.task_id, "taskType": task.type.value, "exceptionType": type(exc).__name__, "exceptionMessage": str(exc)[:500], "traceTail": _debug_traceback.format_exception(type(exc), exc, exc.__traceback__)[-4:]}}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-            # #endregion
-            self.repository.commit_aigc_task_attempt(
+            _, accepted = self.repository.commit_aigc_task_attempt(
                 task.task_id,
                 fencing_token=token,
                 status=AigcTaskStatus.FAILED,
                 result=AigcTaskResult(),
-                error=AigcTaskError(
-                    code="worker_error",
-                    message="AIGC worker failed",
-                    stage="worker",
-                ),
+                error=error,
                 metrics=AigcTaskMetrics(),
             )
             await self._cleanup_task_outputs(task.task_id)
-            log_event(
-                logger,
-                "aigc.task",
-                outcome="failed",
-                level=logging.ERROR,
-                phase="worker",
-                exception=exc,
-                **task_context,
-            )
+            if accepted:
+                _log_task_failure(
+                    task,
+                    error,
+                    exception=exc,
+                    error_type=type(exc).__name__,
+                    level=logging.ERROR,
+                )
         await self._schedule_ready_nodes(task.run_id)
         await self._finalize_run(task.run_id)
 
@@ -2345,7 +2374,9 @@ def _execute_layer_canvas(
     ordered_layers = list(layer_set.layers)
     for patch_payload in patch_payloads:
         if not isinstance(patch_payload, dict):
-            raise ValueError("layer transform patch must be an object")
+            raise ValueError(  # noqa: TRY004 - preserve validation error contract.
+                "layer transform patch must be an object"
+            )
         layer_id = str(patch_payload["layer_id"])
         if patch_payload.get("deleted") is True:
             ordered_layers = [
@@ -2597,10 +2628,8 @@ def _compile_bbox_prompt(
     segments = [source.config.text.strip()]
     for reference in source.config.bbox_references:
         image = node_by_id[reference.source_node_id]
-        if (
-            not isinstance(image, ImageNode)
-        ):
-            raise ValueError(
+        if not isinstance(image, ImageNode):
+            raise ValueError(  # noqa: TRY004 - preserve validation error contract.
                 f"bbox reference source is unavailable: {reference.source_node_id}"
             )
         if _node_has_upstream(image.id, edges):
