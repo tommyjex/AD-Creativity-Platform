@@ -202,6 +202,19 @@ def create_app() -> FastAPI:
                     },
                 )
                 response.headers["X-Request-ID"] = request_id
+                log_event(
+                    logger,
+                    "http.request",
+                    outcome="failed",
+                    level=logging.WARNING,
+                    duration_ms=(perf_counter() - started_at) * 1000,
+                    method=request.method,
+                    route=route,
+                    status_code=403,
+                    error_code="origin_forbidden",
+                    error_stage="origin_guard",
+                    error_type="OriginForbidden",
+                )
                 reset_log_context(token)
                 return response
         log_event(
@@ -238,10 +251,12 @@ def create_app() -> FastAPI:
                 )
             response.headers["X-Request-ID"] = request_id
             response.headers["X-Process-Time"] = f"{duration_seconds:.6f}"
+            outcome, level = _http_completion(response.status_code)
             log_event(
                 logger,
                 "http.request",
-                outcome="succeeded",
+                outcome=outcome,
+                level=level,
                 duration_ms=duration_seconds * 1000,
                 method=request.method,
                 route=route,
@@ -265,6 +280,14 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+def _http_completion(status_code: int) -> tuple[str, int]:
+    if status_code >= 500:
+        return "failed", logging.ERROR
+    if status_code >= 400:
+        return "failed", logging.WARNING
+    return "succeeded", logging.INFO
 
 
 def _origin_matches(candidate: str | None, expected: str) -> bool:

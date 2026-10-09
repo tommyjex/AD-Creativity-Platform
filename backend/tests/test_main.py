@@ -1,4 +1,5 @@
 import pytest
+from fastapi import Response
 from fastapi.testclient import TestClient
 
 import backend.app.main as main_module
@@ -109,6 +110,85 @@ def test_http_logging_propagates_request_id_and_records_lifecycle(
         event == "application.lifecycle" and context["outcome"] == "started"
         for event, context in events
     )
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_outcome", "expected_level"),
+    [
+        (302, "succeeded", main_module.logging.INFO),
+        (404, "failed", main_module.logging.WARNING),
+        (503, "failed", main_module.logging.ERROR),
+    ],
+)
+def test_http_logging_classifies_completed_responses(
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
+    expected_outcome: str,
+    expected_level: int,
+) -> None:
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        main_module,
+        "log_event",
+        lambda _logger, event, **context: events.append((event, context)),
+    )
+    app = create_app()
+    app.dependency_overrides[get_aigc_pipeline_runtime] = RuntimeLifecycleProbe
+
+    @app.get(f"/status-{status_code}")
+    async def status_route() -> Response:
+        return Response(status_code=status_code)
+
+    with TestClient(app) as client:
+        response = client.get(f"/status-{status_code}", follow_redirects=False)
+
+    assert response.status_code == status_code
+    completed = [
+        context
+        for event, context in events
+        if event == "http.request" and context["outcome"] != "started"
+    ]
+    assert len(completed) == 1
+    assert completed[0]["outcome"] == expected_outcome
+    assert completed[0]["level"] == expected_level
+    assert completed[0]["status_code"] == status_code
+
+
+def test_origin_guard_logs_forbidden_request_as_completed_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[str, dict[str, object]]] = []
+    settings = Settings(
+        cors_origins=["https://app.example.com"],
+        site_origin="https://app.example.com",
+    )
+    monkeypatch.setattr(main_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        main_module,
+        "log_event",
+        lambda _logger, event, **context: events.append((event, context)),
+    )
+    app = create_app()
+    app.dependency_overrides[get_aigc_pipeline_runtime] = RuntimeLifecycleProbe
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/blocked",
+            headers={"Origin": "https://untrusted.example.com"},
+        )
+
+    assert response.status_code == 403
+    completed = [
+        context
+        for event, context in events
+        if event == "http.request" and context["outcome"] == "failed"
+    ]
+    assert len(completed) == 1
+    assert completed[0]["level"] == main_module.logging.WARNING
+    assert completed[0]["status_code"] == 403
+    assert completed[0]["error_code"] == "origin_forbidden"
+    assert completed[0]["error_stage"] == "origin_guard"
+    assert completed[0]["error_type"] == "OriginForbidden"
 
 
 def test_insecure_production_cookie_emits_startup_warning(
