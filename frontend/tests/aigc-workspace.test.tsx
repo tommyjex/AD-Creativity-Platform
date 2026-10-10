@@ -107,11 +107,21 @@ function page<T>(items: T[]): AigcPage<T> {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 function renderWorkspace({
+  initialError,
   initialPipelines = page([pipeline]),
   initialTemplates = page([template]),
   initialView
 }: {
+  initialError?: string;
   initialPipelines?: AigcPage<AigcPipeline>;
   initialTemplates?: AigcPage<AigcPipelineTemplate>;
   initialView?: "templates" | "pipelines";
@@ -119,6 +129,7 @@ function renderWorkspace({
   return render(
     <AigcQueryProvider>
       <AigcWorkspace
+        initialError={initialError}
         initialPipelines={initialPipelines}
         initialTemplates={initialTemplates}
         initialView={initialView}
@@ -324,6 +335,69 @@ describe("AIGC workspace list", () => {
     expect(
       screen.getByRole("button", { name: "打开画布：秋季活动画布" })
     ).toBeInTheDocument();
+  });
+
+  it("shows a retryable request error", () => {
+    renderWorkspace({ initialError: "请求失败" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("请求失败");
+    expect(screen.getByRole("alert")).toHaveClass(
+      "rounded-lg",
+      "border-red-400/30"
+    );
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+  });
+
+  it("distinguishes an empty list from an empty search result", async () => {
+    apiMocks.listAigcTemplates.mockResolvedValue(page([]));
+    renderWorkspace({ initialTemplates: page([]) });
+
+    const emptyHeading = screen.getByRole("heading", {
+      name: "暂无画布模板"
+    });
+    expect(emptyHeading).toBeInTheDocument();
+    expect(emptyHeading.closest("div.mt-6")).toHaveClass("rounded-lg");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "按名称筛选" }), {
+      target: { value: "不存在" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "筛选" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "没有匹配的画布" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "清空筛选" })
+    ).toHaveLength(2);
+  });
+
+  it("renders pagination for more than one page", () => {
+    renderWorkspace({
+      initialTemplates: {
+        items: [template],
+        page: 1,
+        page_size: 20,
+        total: 21
+      }
+    });
+
+    expect(
+      screen.getByRole("navigation", { name: "画布分页" })
+    ).toHaveTextContent("1 / 2");
+    expect(
+      screen.getByRole("navigation", { name: "画布分页" })
+    ).toHaveClass("border-white/10");
+    expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "下一页" })).toBeEnabled();
+  });
+
+  it("shows the loading state while the selected view is pending", () => {
+    const templatesRequest = deferred<AigcPage<AigcPipelineTemplate>>();
+    apiMocks.listAigcTemplates.mockReturnValue(templatesRequest.promise);
+    renderWorkspace({ initialError: "初始加载失败" });
+
+    expect(screen.getByRole("status")).toHaveTextContent("正在加载画布");
+    expect(screen.getByRole("status")).toHaveClass("rounded-lg", "mt-6");
   });
 
   it("starts on my pipelines when requested by the URL view", () => {

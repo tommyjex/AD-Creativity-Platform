@@ -328,16 +328,17 @@ export function AigcWorkspace({
           </div>
         </section>
 
-      {errorMessage ? (
-        <div
-          className="mt-5 flex items-center justify-between gap-4 border border-red-400/35 bg-red-500/10 px-4 py-3 text-sm text-red-300"
-          role="alert"
-        >
-          <span className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {errorMessage}
-          </span>
+        {errorMessage ? (
+          <div
+            className="mt-5 flex items-center justify-between gap-4 rounded-lg border border-red-400/30 bg-red-500/[0.08] px-4 py-3 text-sm text-red-300"
+            role="alert"
+          >
+            <span className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {errorMessage}
+            </span>
             <Button
+              className="border-red-300/25 bg-transparent text-red-200 hover:bg-red-400/10 hover:text-red-100"
               onClick={() => {
                 setFeedback(null);
                 void activeQuery.refetch();
@@ -348,64 +349,70 @@ export function AigcWorkspace({
             >
               重试
             </Button>
-        </div>
-      ) : null}
-
-      {activeQuery.isPending ? (
-        <LoadingState />
-      ) : activeData && activeData.items.length > 0 ? (
-        <>
-          <div
-            className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-            data-testid="aigc-card-grid"
-          >
-            {activeData.items.map((item) => (
-              <AigcCard
-                busy={
-                  view === "templates" &&
-                  instantiateMutation.isPending &&
-                  instantiateMutation.variables?.id === item.id
-                }
-                item={item}
-                canWrite={canWrite}
-                key={item.id}
-                kind={view === "templates" ? "template" : "pipeline"}
-                onDelete={requestDelete}
-                onSelectThumbnail={(pipeline) => setThumbnailPipeline(pipeline)}
-                onOpen={() => {
-                  setFeedback(null);
-                  if (view === "templates") {
-                    if (canWrite) {
-                      instantiateMutation.mutate(item as AigcPipelineTemplate);
-                    } else {
-                      router.push(`/workspace/aigc/templates/${item.id}` as Route);
-                    }
-                  } else {
-                    router.push(pipelineRoute(item.id));
-                  }
-                }}
-              />
-            ))}
           </div>
-          <Pagination
-            onPageChange={setPage}
-            page={activeData.page}
-            total={activeData.total}
-            totalPages={totalPages}
-          />
-        </>
-      ) : (
-        <EmptyState
-          hasQuery={query.length > 0}
-          onCreate={() => setIsCreateOpen(true)}
-          onReset={clearSearch}
-          canWrite={canWrite}
-          view={view}
-        />
-      )}
+        ) : null}
 
-      <Dialog onOpenChange={setIsCreateOpen} open={isCreateOpen}>
-        <DialogContent className="max-w-lg p-6 sm:p-7">
+        {activeQuery.isPending ? (
+          <LoadingState />
+        ) : activeData && activeData.items.length > 0 ? (
+          <>
+            <div
+              className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              data-testid="aigc-card-grid"
+            >
+              {activeData.items.map((item) => (
+                <AigcCard
+                  busy={
+                    view === "templates" &&
+                    instantiateMutation.isPending &&
+                    instantiateMutation.variables?.id === item.id
+                  }
+                  item={item}
+                  canWrite={canWrite}
+                  key={item.id}
+                  kind={view === "templates" ? "template" : "pipeline"}
+                  onDelete={requestDelete}
+                  onSelectThumbnail={(pipeline) =>
+                    setThumbnailPipeline(pipeline)
+                  }
+                  onOpen={() => {
+                    setFeedback(null);
+                    if (view === "templates") {
+                      if (canWrite) {
+                        instantiateMutation.mutate(
+                          item as AigcPipelineTemplate
+                        );
+                      } else {
+                        router.push(
+                          `/workspace/aigc/templates/${item.id}` as Route
+                        );
+                      }
+                    } else {
+                      router.push(pipelineRoute(item.id));
+                    }
+                  }}
+                />
+              ))}
+            </div>
+            <Pagination
+              onPageChange={setPage}
+              page={activeData.page}
+              total={activeData.total}
+              totalPages={totalPages}
+            />
+          </>
+        ) : (
+          <EmptyState
+            hasQuery={query.length > 0}
+            onCreate={() => setIsCreateOpen(true)}
+            onReset={clearSearch}
+            canWrite={canWrite}
+            view={view}
+          />
+        )}
+
+        <Dialog onOpenChange={setIsCreateOpen} open={isCreateOpen}>
+          <DialogContent className="max-w-lg rounded-lg border-white/10 bg-[#111714] p-6 text-slate-100 sm:p-7">
           <form onSubmit={submitNewPipeline}>
             <DialogHeader>
               <DialogTitle>新建空白画布</DialogTitle>
@@ -417,7 +424,7 @@ export function AigcWorkspace({
               <Label htmlFor="aigc-pipeline-name">画布名称</Label>
               <Input
                 autoFocus
-                className="mt-2"
+                className="mt-2 border-white/10 bg-black/20 focus-visible:ring-emerald-400"
                 id="aigc-pipeline-name"
                 maxLength={120}
                 onChange={(event) => setNewPipelineName(event.target.value)}
@@ -427,6 +434,7 @@ export function AigcWorkspace({
             </div>
             <DialogFooter>
               <Button
+                className="text-slate-400 hover:bg-white/[0.06] hover:text-white"
                 onClick={() => setIsCreateOpen(false)}
                 type="button"
                 variant="ghost"
@@ -434,6 +442,7 @@ export function AigcWorkspace({
                 取消
               </Button>
               <Button
+                className="bg-emerald-400 text-[#06100c] hover:bg-emerald-300"
                 disabled={!newPipelineName.trim() || createMutation.isPending}
                 type="submit"
               >
@@ -446,14 +455,14 @@ export function AigcWorkspace({
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
 
-      <Dialog
-        onOpenChange={changeDeleteDialog}
-        open={deleteTarget !== null}
-      >
-        <DialogContent className="max-w-md p-6">
+        <Dialog
+          onOpenChange={changeDeleteDialog}
+          open={deleteTarget !== null}
+        >
+          <DialogContent className="max-w-md rounded-lg border-white/10 bg-[#111714] p-6 text-slate-100">
           <DialogHeader>
             <DialogTitle>
               删除{deleteTarget?.kind === "template" ? "画布模板" : "画布"}？
@@ -466,7 +475,7 @@ export function AigcWorkspace({
           </DialogHeader>
           {deleteError ? (
             <div
-              className="mt-4 flex items-start gap-2 border border-red-400/35 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+              className="mt-4 flex items-start gap-2 rounded-lg border border-red-400/30 bg-red-500/[0.08] px-3 py-2 text-sm text-red-300"
               role="alert"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -475,6 +484,7 @@ export function AigcWorkspace({
           ) : null}
           <DialogFooter className="mt-6">
             <Button
+              className="text-slate-400 hover:bg-white/[0.06] hover:text-white"
               disabled={deleteMutation.isPending}
               onClick={() => changeDeleteDialog(false)}
               type="button"
@@ -498,17 +508,19 @@ export function AigcWorkspace({
               确认删除
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
 
-      {canWrite ? <AigcThumbnailDialog
-        onOpenChange={(open) => {
-          if (!open) setThumbnailPipeline(null);
-        }}
-        onUpdated={() => undefined}
-        open={thumbnailPipeline !== null}
-        pipeline={thumbnailPipeline}
-      /> : null}
+        {canWrite ? (
+          <AigcThumbnailDialog
+            onOpenChange={(open) => {
+              if (!open) setThumbnailPipeline(null);
+            }}
+            onUpdated={() => undefined}
+            open={thumbnailPipeline !== null}
+            pipeline={thumbnailPipeline}
+          />
+        ) : null}
       </div>
     </main>
   );
@@ -851,7 +863,7 @@ function StatusBadge({ status }: { status: AigcPipelineRunStatus | null }) {
 function LoadingState() {
   return (
     <div
-      className="mt-5 grid min-h-64 place-items-center border border-slate-700 bg-slate-950/70"
+      className="mt-6 grid min-h-64 place-items-center rounded-lg border border-white/10 bg-white/[0.025]"
       role="status"
     >
       <span className="flex items-center gap-2 text-sm text-slate-400">
@@ -876,9 +888,9 @@ function EmptyState({
   view: AigcView;
 }) {
   return (
-    <div className="mt-5 grid min-h-72 place-items-center border border-dashed border-slate-700 bg-slate-950/70 px-6 text-center">
+    <div className="mt-6 grid min-h-72 place-items-center rounded-lg border border-dashed border-white/15 bg-white/[0.025] px-6 text-center">
       <div>
-        <Workflow className="mx-auto h-8 w-8 text-sky-400" />
+        <Workflow className="mx-auto h-8 w-8 text-emerald-400" />
         <h2 className="mt-4 text-base font-semibold text-slate-100">
           {hasQuery
             ? "没有匹配的画布"
@@ -889,15 +901,21 @@ function EmptyState({
         <p className="mt-2 text-sm text-slate-400">
           {hasQuery ? "调整名称关键词后重新筛选。" : "从空白画布开始建立生成流程。"}
         </p>
-        {hasQuery || canWrite ? <Button
-          className="mt-5 border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
-          onClick={hasQuery ? onReset : onCreate}
-          type="button"
-          variant="outline"
-        >
-          {hasQuery ? <Eraser className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-          {hasQuery ? "清空筛选" : "新建空白画布"}
-        </Button> : null}
+        {hasQuery || canWrite ? (
+          <Button
+            className="mt-5 border-white/10 bg-white/[0.04] text-slate-100 hover:bg-white/[0.08]"
+            onClick={hasQuery ? onReset : onCreate}
+            type="button"
+            variant="outline"
+          >
+            {hasQuery ? (
+              <Eraser className="h-4 w-4" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            {hasQuery ? "清空筛选" : "新建空白画布"}
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -918,7 +936,7 @@ function Pagination({
   return (
     <nav
       aria-label="画布分页"
-      className="mt-5 flex items-center justify-between border-t border-slate-700 pt-4"
+      className="mt-6 flex items-center justify-between border-t border-white/10 pt-5"
     >
       <span className="text-xs text-slate-400">共 {total} 项</span>
       <div className="flex items-center gap-2">
