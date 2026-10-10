@@ -178,7 +178,7 @@ describe("AIGC workspace list", () => {
     );
   });
 
-  it("defaults to templates and uses a five-column wide layout", () => {
+  it("defaults to templates and uses the approved responsive grid", () => {
     renderWorkspace();
 
     expect(
@@ -186,9 +186,10 @@ describe("AIGC workspace list", () => {
     ).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("商品主图模板")).toBeInTheDocument();
     expect(screen.getByTestId("aigc-card-grid")).toHaveClass(
-      "grid-cols-2",
-      "md:grid-cols-4",
-      "xl:grid-cols-5"
+      "grid-cols-1",
+      "sm:grid-cols-2",
+      "lg:grid-cols-3",
+      "xl:grid-cols-4"
     );
     expect(
       screen.getByRole("link", { name: "编辑模板：商品主图模板" })
@@ -253,6 +254,76 @@ describe("AIGC workspace list", () => {
     expect(screen.getByText(/1 模型/)).toBeInTheDocument();
     expect(screen.getByTestId("aigc-topology-preview")).toBeInTheDocument();
     expect(screen.getByTestId("aigc-preview-node-image")).toBeInTheDocument();
+  });
+
+  it("prefers a contained pipeline image thumbnail", () => {
+    renderWorkspace({
+      initialView: "pipelines",
+      initialPipelines: page([
+        {
+          ...pipeline,
+          thumbnail_asset_id: "asset-image-1",
+          thumbnail: {
+            asset_id: "asset-image-1",
+            kind: "image",
+            mime_type: "image/png",
+            source: "pinned",
+            url: "https://example.test/preview.png"
+          }
+        }
+      ])
+    });
+
+    expect(screen.getByRole("img", { name: "画布缩略图" })).toHaveClass(
+      "aspect-[16/10]",
+      "object-contain"
+    );
+    expect(screen.queryByTestId("aigc-topology-preview")).toBeNull();
+  });
+
+  it("falls back to topology when a pipeline thumbnail fails", () => {
+    renderWorkspace({
+      initialView: "pipelines",
+      initialPipelines: page([
+        {
+          ...pipeline,
+          thumbnail_asset_id: "asset-image-1",
+          thumbnail: {
+            asset_id: "asset-image-1",
+            kind: "image",
+            mime_type: "image/png",
+            source: "pinned",
+            url: "https://example.test/broken.png"
+          }
+        }
+      ])
+    });
+
+    fireEvent.error(screen.getByRole("img", { name: "画布缩略图" }));
+
+    expect(screen.getByTestId("aigc-topology-preview")).toBeInTheDocument();
+  });
+
+  it("keeps card tool actions isolated from the primary open action", () => {
+    renderWorkspace({ initialView: "pipelines" });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择缩略图：秋季活动画布" })
+    );
+
+    expect(navigationMocks.push).not.toHaveBeenCalled();
+    expect(apiMocks.instantiateAigcTemplate).not.toHaveBeenCalled();
+  });
+
+  it("hides pipeline mutation tools from read-only viewers", () => {
+    permissionMocks.canWrite = false;
+    renderWorkspace({ initialView: "pipelines" });
+
+    expect(screen.queryByRole("button", { name: /选择缩略图/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /删除画布/ })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "打开画布：秋季活动画布" })
+    ).toBeInTheDocument();
   });
 
   it("starts on my pipelines when requested by the URL view", () => {

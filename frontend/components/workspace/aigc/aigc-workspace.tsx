@@ -356,7 +356,7 @@ export function AigcWorkspace({
       ) : activeData && activeData.items.length > 0 ? (
         <>
           <div
-            className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5"
+            className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
             data-testid="aigc-card-grid"
           >
             {activeData.items.map((item) => (
@@ -590,12 +590,12 @@ function AigcCard({
 
   return (
     <article
-      className="group min-w-0 overflow-hidden border border-slate-700 bg-slate-950/90 shadow-[0_12px_28px_rgba(0,0,0,0.2)] transition hover:border-sky-400/65 hover:shadow-[0_16px_36px_rgba(14,165,233,0.16)] focus-within:border-sky-400/65"
+      className="group min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#101613] shadow-[0_14px_32px_rgba(0,0,0,0.22)] transition duration-200 hover:-translate-y-0.5 hover:border-emerald-400/45 hover:shadow-[0_18px_38px_rgba(0,0,0,0.3)] focus-within:border-emerald-400/55 focus-within:shadow-[0_0_0_1px_rgba(52,211,153,0.18)]"
       data-testid="aigc-card"
     >
       <button
         aria-label={`${kind === "template" ? "使用模板" : "打开画布"}：${item.name}`}
-        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-400"
+        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400"
         disabled={busy}
         onClick={onOpen}
         type="button"
@@ -609,15 +609,15 @@ function AigcCard({
           />
         )}
       </button>
-      <div className="border-t border-slate-700 px-3 py-3">
-        <div className="flex min-w-0 items-start justify-between gap-2">
+      <div className="border-t border-white/10 px-4 py-4">
+        <div className="flex min-w-0 items-start justify-between gap-3">
           <button
-            className="min-w-0 text-left"
+            className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
             disabled={busy}
             onClick={onOpen}
             type="button"
           >
-            <span className="block truncate text-sm font-semibold text-slate-100 group-hover:text-sky-300">
+            <span className="block truncate text-sm font-semibold text-white transition-colors group-hover:text-emerald-300">
               {item.name}
             </span>
           </button>
@@ -626,6 +626,7 @@ function AigcCard({
               <Button
                 asChild
                 aria-label={`编辑模板：${item.name}`}
+                className="text-slate-500 hover:bg-white/[0.06] hover:text-emerald-300 focus-visible:ring-emerald-400"
                 size="icon"
                 title="编辑模板"
                 variant="ghost"
@@ -639,6 +640,7 @@ function AigcCard({
                 <StatusBadge status={pipeline?.latest_run_status ?? null} />
                 {canWrite ? <Button
                   aria-label={`选择缩略图：${item.name}`}
+                  className="text-slate-500 hover:bg-white/[0.06] hover:text-emerald-300 focus-visible:ring-emerald-400"
                   disabled={busy}
                   onClick={handleThumbnail}
                   size="icon"
@@ -652,7 +654,7 @@ function AigcCard({
             ) : null}
             {canWrite ? <Button
               aria-label={`删除${typeLabel}：${item.name}`}
-              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              className="text-slate-500 hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive"
               disabled={busy}
               onClick={handleDelete}
               size="icon"
@@ -664,10 +666,10 @@ function AigcCard({
             </Button> : null}
           </div>
         </div>
-        <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-slate-400">
+        <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-slate-400">
           {item.description || "未填写说明"}
         </p>
-        <div className="mt-3 flex flex-col gap-1 border-t border-slate-800 pt-2 text-[0.68rem] text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3 text-[0.68rem] text-slate-500">
           <span className="flex items-center gap-1 whitespace-nowrap">
             <GitFork className="h-3.5 w-3.5" />
             {item.definition.nodes.length} 节点 · {modelCount} 模型
@@ -682,10 +684,10 @@ function AigcCard({
         </div>
         <Button
           className={cn(
-            "mt-3 w-full",
+            "mt-4 w-full",
             kind === "template"
-              ? "bg-sky-500 text-slate-950 hover:bg-sky-400"
-              : "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+              ? "bg-emerald-400 text-[#06100c] hover:bg-emerald-300"
+              : "border-white/10 bg-white/[0.04] text-slate-100 hover:bg-white/[0.08]"
           )}
           disabled={busy}
           onClick={onOpen}
@@ -713,7 +715,7 @@ function PipelineThumbnailPreview({
     return (
       <video
         aria-label="画布缩略图视频"
-        className="aspect-[16/10] w-full bg-[#101821] object-contain"
+        className="aspect-[16/10] w-full bg-[#0b100e] object-contain"
         muted
         onError={onError}
         playsInline
@@ -728,7 +730,7 @@ function PipelineThumbnailPreview({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         alt="画布缩略图"
-        className="aspect-[16/10] w-full bg-[#101821] object-contain"
+        className="aspect-[16/10] w-full bg-[#0b100e] object-contain"
         onError={onError}
         src={thumbnail.url}
       />
@@ -748,12 +750,12 @@ function TopologyPreview({
 
   return (
     <div
-      className="relative aspect-[16/10] overflow-hidden bg-[#101821]"
+      className="relative aspect-[16/10] overflow-hidden bg-[#0b100e]"
       data-testid="aigc-topology-preview"
     >
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-[linear-gradient(to_right,rgba(100,145,185,0.14)_1px,transparent_1px),linear-gradient(to_bottom,rgba(100,145,185,0.14)_1px,transparent_1px)] bg-[size:20px_20px]"
+        className="absolute inset-0 bg-[linear-gradient(to_right,rgba(94,145,118,0.13)_1px,transparent_1px),linear-gradient(to_bottom,rgba(94,145,118,0.13)_1px,transparent_1px)] bg-[size:20px_20px]"
       />
       {definition.nodes.length === 0 ? (
         <div className="absolute inset-0 grid place-items-center text-slate-500">
@@ -771,7 +773,7 @@ function TopologyPreview({
               if (!source || !target) return null;
               return (
                 <line
-                  className="stroke-sky-400/35"
+                  className="stroke-emerald-400/35"
                   key={edge.id}
                   strokeWidth="1.5"
                   x1={`${source.x}%`}
