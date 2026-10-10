@@ -320,14 +320,18 @@ describe("AppShell top navigation", () => {
       "lg:px-6"
     );
     expect(screen.getByTestId("app-shell-primary-navigation")).toHaveClass(
-      "md:absolute",
-      "md:left-1/2",
-      "md:-translate-x-1/2"
+      "lg:absolute",
+      "lg:left-1/2",
+      "lg:-translate-x-1/2"
     );
     expect(screen.getByTestId("app-shell-account-slot")).toHaveClass(
       "ml-auto",
-      "shrink-0"
+      "shrink-0",
+      "lg:block"
     );
+    expect(
+      screen.getByRole("button", { name: "打开导航菜单" })
+    ).toHaveClass("lg:hidden");
   });
 
   it("opens and closes the mobile navigation menu", () => {

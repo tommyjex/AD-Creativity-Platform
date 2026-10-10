@@ -63,7 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <nav
             aria-label="主导航"
-            className="hidden items-center gap-1 border border-white/10 bg-white/[0.035] p-1 shadow-[0_8px_24px_rgba(0,0,0,0.2)] md:absolute md:left-1/2 md:flex md:-translate-x-1/2"
+            className="hidden items-center gap-1 border border-white/10 bg-white/[0.035] p-1 shadow-[0_8px_24px_rgba(0,0,0,0.2)] lg:absolute lg:left-1/2 lg:flex lg:-translate-x-1/2"
             data-testid="app-shell-primary-navigation"
           >
             {navItems.map((item) => {
@@ -89,7 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div
-            className="ml-auto hidden shrink-0 md:block"
+            className="ml-auto hidden shrink-0 lg:block"
             data-testid="app-shell-account-slot"
           >
             <AccountMenu />
@@ -99,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-controls="mobile-navigation-menu"
             aria-expanded={isMobileNavOpen}
             aria-label={isMobileNavOpen ? "关闭导航菜单" : "打开导航菜单"}
-            className="ml-auto grid h-10 w-10 shrink-0 place-items-center border border-white/15 bg-white/[0.04] text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 md:hidden"
+            className="ml-auto grid h-10 w-10 shrink-0 place-items-center border border-white/15 bg-white/[0.04] text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 lg:hidden"
             onClick={() =>
               setMobileNavPathname(isMobileNavOpen ? null : pathname)
             }
@@ -116,7 +116,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {isMobileNavOpen ? (
           <nav
             aria-label="移动导航"
-            className="absolute inset-x-4 top-[calc(100%+0.5rem)] grid gap-1 border border-white/10 bg-[#0d1311]/98 p-2 shadow-2xl backdrop-blur-xl md:hidden"
+            className="absolute inset-x-4 top-[calc(100%+0.5rem)] grid gap-1 border border-white/10 bg-[#0d1311]/98 p-2 shadow-2xl backdrop-blur-xl lg:hidden"
             data-testid="mobile-navigation-menu"
             id="mobile-navigation-menu"
           >
