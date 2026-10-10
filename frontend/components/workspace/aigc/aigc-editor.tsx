@@ -1183,12 +1183,12 @@ function AigcEditorContent({
         data-testid="aigc-editor-shell"
       >
       <header
-        className="relative flex h-14 shrink-0 flex-row items-center gap-1 overflow-hidden border-b border-[#6f171b] bg-[#b61519] bg-[url('/images/navigation-national-day-red.webp')] bg-cover bg-center bg-no-repeat pl-2 pr-[4.5rem] shadow-[0_3px_12px_rgba(0,0,0,0.22)] sm:pl-3 sm:pr-44"
+        className="relative flex h-14 shrink-0 flex-row items-center gap-1 overflow-hidden border-b border-white/10 bg-[#080c0b]/95 pl-2 pr-[4.5rem] shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-xl sm:pl-3 sm:pr-44"
         data-testid="aigc-editor-header"
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(180deg,rgba(82,0,4,0.18)_0%,rgba(78,0,4,0.48)_100%)]"
+          className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(180deg,rgba(52,211,153,0.025)_0%,rgba(8,12,11,0.18)_100%)]"
           data-testid="aigc-toolbar-background-overlay"
         />
         <div

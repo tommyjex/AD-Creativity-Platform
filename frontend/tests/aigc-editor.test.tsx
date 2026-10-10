@@ -3074,17 +3074,18 @@ describe("AIGC editor modes", () => {
       "[--card:220_13%_11%]"
     );
     expect(screen.getByTestId("aigc-editor-header")).toHaveClass(
-      "bg-[#b61519]",
-      "bg-[url('/images/navigation-national-day-red.webp')]",
-      "bg-cover",
-      "bg-center",
-      "bg-no-repeat",
-      "border-[#6f171b]",
+      "bg-[#080c0b]/95",
+      "border-white/10",
+      "backdrop-blur-xl",
       "h-14",
       "overflow-hidden",
       "pr-[4.5rem]",
       "sm:pr-44",
-      "shadow-[0_3px_12px_rgba(0,0,0,0.22)]"
+      "shadow-[0_8px_28px_rgba(0,0,0,0.28)]"
+    );
+    expect(screen.getByTestId("aigc-editor-header")).not.toHaveClass(
+      "bg-[#b61519]",
+      "bg-[url('/images/navigation-national-day-red.webp')]"
     );
     expect(
       screen.getByTestId("aigc-toolbar-background-overlay")
@@ -3093,7 +3094,7 @@ describe("AIGC editor modes", () => {
       "absolute",
       "inset-0",
       "z-0",
-      "bg-[linear-gradient(180deg,rgba(82,0,4,0.18)_0%,rgba(78,0,4,0.48)_100%)]"
+      "bg-[linear-gradient(180deg,rgba(52,211,153,0.025)_0%,rgba(8,12,11,0.18)_100%)]"
     );
     expect(
       screen.getByTestId("aigc-toolbar-background-overlay")
