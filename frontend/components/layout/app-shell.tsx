@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Route } from "next";
-import { Menu, X } from "lucide-react";
+import { Menu, Workflow, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { AccountMenu } from "@/components/layout/account-menu";
 import { cn } from "@/lib/utils";
@@ -14,9 +14,6 @@ const navItems = [
   { label: "工具", href: "/workspace/tools" },
   { label: "AIGC工作台", href: "/workspace/aigc" }
 ] as const;
-
-const navigationBackgroundUrl =
-  "/images/navigation-national-day-red.webp";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -43,23 +40,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden bg-background text-foreground"
+      className="relative min-h-screen overflow-hidden bg-[#090d0c] text-foreground"
       data-testid="app-shell"
     >
       <AtmosphereLayer />
-      <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-[#ffe0a3]/20 bg-[#b61519] text-white">
+      <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-white/10 bg-[#080c0b]/95 text-white shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-xl">
         <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-cover bg-center"
-          data-testid="app-shell-navigation-background"
-          style={{ backgroundImage: `url("${navigationBackgroundUrl}")` }}
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(84,0,0,0.06)_0%,rgba(91,0,0,0.24)_100%),linear-gradient(90deg,rgba(91,0,0,0.78)_0%,rgba(132,5,5,0.38)_22%,rgba(174,12,8,0.14)_52%,rgba(127,3,3,0.34)_74%,rgba(82,0,0,0.70)_100%)]"
-        />
-        <div
-          className="relative z-10 flex h-full w-full items-center gap-4 px-4 lg:px-6"
+          className="relative mx-auto flex h-full w-full max-w-[1440px] items-center gap-4 px-4 lg:px-6"
           data-testid="app-shell-navigation-layout"
         >
           <Link className="group flex shrink-0 items-center gap-3" href="/">
@@ -68,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="text-sm font-semibold tracking-[0.18em] text-white">
                 AD CREATIVITY
               </div>
-              <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.24em] text-[#ffe0a3]/70">
+              <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.24em] text-white/45">
                 Campaign generation deck
               </div>
             </div>
@@ -76,7 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <nav
             aria-label="主导航"
-            className="hidden items-center gap-1 rounded-full border border-[#ffe0a3]/25 bg-[#6b0000]/45 p-1 shadow-[0_8px_24px_rgba(74,0,0,0.24)] backdrop-blur-xl md:absolute md:left-1/2 md:flex md:-translate-x-1/2"
+            className="hidden items-center gap-1 border border-white/10 bg-white/[0.035] p-1 shadow-[0_8px_24px_rgba(0,0,0,0.2)] md:absolute md:left-1/2 md:flex md:-translate-x-1/2"
             data-testid="app-shell-primary-navigation"
           >
             {navItems.map((item) => {
@@ -87,10 +74,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "rounded-full px-4 py-2 text-xs font-medium transition",
+                    "px-4 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
                     isActive
-                      ? "bg-[linear-gradient(180deg,#ffe0a3_0%,#f0b433_100%)] text-[#6f110b] shadow-sm"
-                      : "text-[#fff2dc]/85 hover:bg-[#ffe0a3]/10 hover:text-white"
+                      ? "bg-emerald-400/10 text-emerald-300"
+                      : "text-white/60 hover:bg-white/[0.055] hover:text-white"
                   )}
                   href={item.href as Route}
                   key={item.href}
@@ -112,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-controls="mobile-navigation-menu"
             aria-expanded={isMobileNavOpen}
             aria-label={isMobileNavOpen ? "关闭导航菜单" : "打开导航菜单"}
-            className="ml-auto grid h-10 w-10 shrink-0 place-items-center rounded-md border border-[#ffe0a3]/35 bg-[#6b0000]/35 text-[#fff2dc] transition hover:bg-[#ffe0a3]/10 md:hidden"
+            className="ml-auto grid h-10 w-10 shrink-0 place-items-center border border-white/15 bg-white/[0.04] text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 md:hidden"
             onClick={() =>
               setMobileNavPathname(isMobileNavOpen ? null : pathname)
             }
@@ -129,7 +116,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {isMobileNavOpen ? (
           <nav
             aria-label="移动导航"
-            className="absolute inset-x-4 top-[calc(100%+0.5rem)] grid gap-1 rounded-md border border-[#ffe0a3]/25 bg-[#7a0809]/95 p-2 shadow-2xl backdrop-blur-xl md:hidden"
+            className="absolute inset-x-4 top-[calc(100%+0.5rem)] grid gap-1 border border-white/10 bg-[#0d1311]/98 p-2 shadow-2xl backdrop-blur-xl md:hidden"
             data-testid="mobile-navigation-menu"
             id="mobile-navigation-menu"
           >
@@ -141,10 +128,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "rounded px-3 py-2.5 text-sm transition",
+                    "px-3 py-2.5 text-sm transition-colors",
                     isActive
-                      ? "bg-[linear-gradient(180deg,#ffe0a3_0%,#f0b433_100%)] text-[#6f110b]"
-                      : "text-[#fff2dc]/85 hover:bg-[#ffe0a3]/10 hover:text-white"
+                      ? "bg-emerald-400/10 text-emerald-300"
+                      : "text-white/65 hover:bg-white/[0.055] hover:text-white"
                   )}
                   href={item.href as Route}
                   key={item.href}
@@ -172,11 +159,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 function AtmosphereLayer() {
   return (
     <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0">
-      <div className="ad-noise absolute inset-0" />
-      <div className="ad-shell-grid absolute inset-0 opacity-70" />
-      <div className="absolute left-1/2 top-[-22rem] h-[34rem] w-[58rem] -translate-x-1/2 rounded-full bg-primary/[0.055] blur-3xl" />
-      <div className="absolute right-[-12rem] top-24 h-[24rem] w-[24rem] rounded-full bg-accent/[0.04] blur-3xl" />
-      <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-background via-background/70 to-transparent" />
+      <div className="ad-noise absolute inset-0 opacity-50" />
+      <div className="ad-shell-grid absolute inset-0 opacity-35" />
+      <div className="absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-emerald-400/[0.035] to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-[#090d0c] via-[#090d0c]/70 to-transparent" />
     </div>
   );
 }
@@ -184,11 +170,10 @@ function AtmosphereLayer() {
 function BrandMark() {
   return (
     <div
-      className="relative grid h-10 w-10 place-items-center rounded-xl border border-[#ffc348]/60 bg-[#8c0000]/35"
+      className="relative grid h-10 w-10 place-items-center border border-emerald-400/40 bg-emerald-400/10"
       data-testid="app-shell-brand-mark"
     >
-      <div className="absolute inset-1 rounded-lg border border-[#ffc348]/25" />
-      <div className="h-3 w-3 rounded bg-[#ffc348] shadow-[0_0_16px_rgba(255,195,72,0.55)]" />
+      <Workflow aria-hidden="true" className="h-5 w-5 text-emerald-300" />
     </div>
   );
 }

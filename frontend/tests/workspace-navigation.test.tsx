@@ -281,32 +281,27 @@ describe("AppShell top navigation", () => {
     ).toBeNull();
   });
 
-  it("renders the decorative National Day navigation theme", () => {
+  it("renders the persistent dark workspace navigation theme", () => {
     render(
       <AppShell>
         <div>首页内容</div>
       </AppShell>
     );
 
-    const background = screen.getByTestId(
-      "app-shell-navigation-background"
+    expect(
+      screen.queryByTestId("app-shell-navigation-background")
+    ).toBeNull();
+    expect(screen.getByRole("banner")).toHaveClass(
+      "border-white/10",
+      "bg-[#080c0b]/95"
     );
-    expect(background).toHaveAttribute("aria-hidden", "true");
-    expect(background.style.backgroundImage).toContain(
-      "/images/navigation-national-day-red.webp"
-    );
-    expect(background.style.backgroundImage).not.toContain(
-      "copilot-cn.bytedance.net"
-    );
-    expect(background).toHaveClass("bg-cover", "bg-center");
-    expect(screen.getByRole("banner")).toHaveClass("bg-[#b61519]");
     expect(screen.getByTestId("app-shell-brand-mark")).toHaveClass(
-      "border-[#ffc348]/60",
-      "bg-[#8c0000]/35"
+      "border-emerald-400/40",
+      "bg-emerald-400/10"
     );
     expect(screen.getByRole("link", { name: "项目" })).toHaveClass(
-      "bg-[linear-gradient(180deg,#ffe0a3_0%,#f0b433_100%)]",
-      "text-[#6f110b]"
+      "bg-emerald-400/10",
+      "text-emerald-300"
     );
   });
 
@@ -318,7 +313,9 @@ describe("AppShell top navigation", () => {
     );
 
     expect(screen.getByTestId("app-shell-navigation-layout")).toHaveClass(
+      "mx-auto",
       "w-full",
+      "max-w-[1440px]",
       "px-4",
       "lg:px-6"
     );
