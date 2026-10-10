@@ -10,6 +10,7 @@ from backend.app.core.config import (
 def test_video_face_blur_limits_have_isolated_defaults() -> None:
     settings = Settings()
 
+    assert settings.aigc_video_transfer_max_bytes == 200 * 1024 * 1024
     assert settings.aigc_video_face_blur_concurrency == 1
     assert settings.mediakit_face_blur_poll_interval_seconds == 3
     assert settings.mediakit_face_blur_timeout_seconds == 1800
@@ -428,6 +429,7 @@ def test_settings_reads_modelark_alias_and_download_limits(
     monkeypatch.setenv("ARK_VIDEO_POLL_INTERVAL_SECONDS", "5")
     monkeypatch.setenv("AIGC_VIDEO_CONCURRENCY", "2")
     monkeypatch.setenv("AIGC_VIDEO_TIMEOUT_SECONDS", "1200")
+    monkeypatch.setenv("AIGC_VIDEO_TRANSFER_MAX_BYTES", "209715200")
     monkeypatch.setenv("AIGC_VIDEO_ENHANCEMENT_CONCURRENCY", "3")
     monkeypatch.setenv(
         "MEDIAKIT_VIDEO_ENHANCEMENT_POLL_INTERVAL_SECONDS",
@@ -469,6 +471,7 @@ def test_settings_reads_modelark_alias_and_download_limits(
     assert settings.ark_video_poll_interval_seconds == 5
     assert settings.aigc_video_concurrency == 2
     assert settings.aigc_video_timeout_seconds == 1200
+    assert settings.aigc_video_transfer_max_bytes == 209715200
     assert settings.aigc_video_enhancement_concurrency == 3
     assert settings.mediakit_video_enhancement_poll_interval_seconds == 7
     assert settings.mediakit_video_enhancement_timeout_seconds == 2400

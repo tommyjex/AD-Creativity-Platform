@@ -2179,6 +2179,12 @@ async function request<T>(
 ): Promise<T> {
   const { body, headers, json = true, method = "GET", ...requestOptions } = config;
   assertClientWritePermission(path, method);
+  // #region debug-point A,B,C:auth-request
+  if (typeof window !== "undefined" && ["/api/auth/login", "/api/auth/me"].includes(path)) {
+    const debugRequestUrl = new URL(buildUrl(baseUrl, path), window.location.href);
+    void fetch("http://127.0.0.1:7777/event", { method: "POST", body: JSON.stringify({ sessionId: "production-auth-cookie", runId: "pre-fix", hypothesisId: "A,B,C", location: "frontend/lib/api-client.ts:auth-request", msg: "[DEBUG] Browser auth request", data: { pageOrigin: window.location.origin, pageProtocol: window.location.protocol, requestUrl: debugRequestUrl.href, requestOrigin: debugRequestUrl.origin, crossOrigin: debugRequestUrl.origin !== window.location.origin, credentialMode: requestOptions.credentials ?? "same-origin", cookieEnabled: navigator.cookieEnabled }, ts: Date.now() }) }).catch(() => {});
+  }
+  // #endregion
   const response = await fetcher(buildUrl(baseUrl, path), {
     ...requestOptions,
     body: body === undefined ? undefined : json ? JSON.stringify(body) : body as BodyInit,
@@ -2190,6 +2196,11 @@ async function request<T>(
     method
   });
 
+  // #region debug-point A,B,C:auth-response
+  if (typeof window !== "undefined" && ["/api/auth/login", "/api/auth/me"].includes(path)) {
+    void fetch("http://127.0.0.1:7777/event", { method: "POST", body: JSON.stringify({ sessionId: "production-auth-cookie", runId: "pre-fix", hypothesisId: "A,B,C", location: "frontend/lib/api-client.ts:auth-response", msg: "[DEBUG] Browser auth response", data: { path, status: response.status, ok: response.ok, responseUrl: response.url, responseType: response.type, redirected: response.redirected }, ts: Date.now() }) }).catch(() => {});
+  }
+  // #endregion
   if (!response.ok) {
     dispatchAuthError(response.status);
     throw await parseApiError(response);

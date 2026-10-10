@@ -238,6 +238,9 @@ class HttpRemoteAssetDownloader:
                                 "generated asset response has invalid content length"
                             )
                         if declared_size > self.max_bytes:
+                            # #region debug-point A:declared-size-limit
+                            import json as _debug_json, urllib.request as _debug_request; _debug_url, _debug_session = "http://127.0.0.1:7777/event", "video-generation-invalid-input"; exec("try:\n with open('.dbg/video-generation-invalid-input.env') as _f:\n  _debug_env=_f.read(); _debug_url=next((_l.split('=',1)[1] for _l in _debug_env.splitlines() if _l.startswith('DEBUG_SERVER_URL=')),_debug_url); _debug_session=next((_l.split('=',1)[1] for _l in _debug_env.splitlines() if _l.startswith('DEBUG_SESSION_ID=')),_debug_session)\nexcept Exception: pass"); exec("try:\n _debug_request.urlopen(_debug_request.Request(_debug_url,data=_debug_json.dumps({'sessionId':_debug_session,'runId':'post-fix','hypothesisId':'A','location':'backend/app/services/assets.py:declared-size-limit','msg':'[DEBUG] Generated asset declared size exceeds downloader limit','data':{'declaredSize':declared_size,'maxBytes':self.max_bytes}}).encode(),headers={'Content-Type':'application/json'}),timeout=0.25).read()\nexcept Exception: pass")
+                            # #endregion
                             raise ValueError(
                                 "generated asset exceeds maximum size"
                             )
@@ -246,6 +249,9 @@ class HttpRemoteAssetDownloader:
                     async for chunk in response.aiter_bytes():
                         size += len(chunk)
                         if size > self.max_bytes:
+                            # #region debug-point A:stream-size-limit
+                            import json as _debug_json, urllib.request as _debug_request; _debug_url, _debug_session = "http://127.0.0.1:7777/event", "video-generation-invalid-input"; exec("try:\n with open('.dbg/video-generation-invalid-input.env') as _f:\n  _debug_env=_f.read(); _debug_url=next((_l.split('=',1)[1] for _l in _debug_env.splitlines() if _l.startswith('DEBUG_SERVER_URL=')),_debug_url); _debug_session=next((_l.split('=',1)[1] for _l in _debug_env.splitlines() if _l.startswith('DEBUG_SESSION_ID=')),_debug_session)\nexcept Exception: pass"); exec("try:\n _debug_request.urlopen(_debug_request.Request(_debug_url,data=_debug_json.dumps({'sessionId':_debug_session,'runId':'post-fix','hypothesisId':'A','location':'backend/app/services/assets.py:stream-size-limit','msg':'[DEBUG] Generated asset streamed size exceeds downloader limit','data':{'observedSize':size,'maxBytes':self.max_bytes}}).encode(),headers={'Content-Type':'application/json'}),timeout=0.25).read()\nexcept Exception: pass")
+                            # #endregion
                             raise ValueError(
                                 "generated asset exceeds maximum size"
                             )
@@ -388,12 +394,14 @@ class AssetStorageService:
         public_endpoint: str | None = None,
         client: ObjectStorageClient | None = None,
         downloader: RemoteAssetDownloader | None = None,
+        video_generation_downloader: RemoteAssetDownloader | None = None,
         video_enhancement_downloader: RemoteAssetDownloader | None = None,
         face_blur_downloader: RemoteAssetDownloader | None = None,
         multitrack_downloader: RemoteAssetDownloader | None = None,
         key_prefix: str = "projects",
         download_timeout_seconds: float = 30,
         download_max_bytes: int = 30 * 1024 * 1024,
+        video_generation_transfer_max_bytes: int = 200 * 1024 * 1024,
         video_enhancement_transfer_timeout_seconds: float | None = None,
         video_enhancement_transfer_max_bytes: int | None = None,
         face_blur_transfer_timeout_seconds: float | None = None,
@@ -406,6 +414,9 @@ class AssetStorageService:
         self.client = client
         self.download_timeout_seconds = download_timeout_seconds
         self.download_max_bytes = download_max_bytes
+        self.video_generation_transfer_max_bytes = (
+            video_generation_transfer_max_bytes
+        )
         self.video_enhancement_transfer_timeout_seconds = (
             video_enhancement_transfer_timeout_seconds
             if video_enhancement_transfer_timeout_seconds is not None
@@ -439,6 +450,17 @@ class AssetStorageService:
         self.downloader = downloader or HttpRemoteAssetDownloader(
             timeout_seconds=download_timeout_seconds,
             max_bytes=download_max_bytes,
+        )
+        self.video_generation_downloader = (
+            video_generation_downloader
+            or (
+                HttpRemoteAssetDownloader(
+                    timeout_seconds=download_timeout_seconds,
+                    max_bytes=video_generation_transfer_max_bytes,
+                )
+                if downloader is None
+                else self.downloader
+            )
         )
         self.video_enhancement_downloader = (
             video_enhancement_downloader
@@ -498,6 +520,9 @@ class AssetStorageService:
             client=client,
             download_timeout_seconds=settings.asset_download_timeout_seconds,
             download_max_bytes=settings.asset_download_max_bytes,
+            video_generation_transfer_max_bytes=(
+                settings.aigc_video_transfer_max_bytes
+            ),
             video_enhancement_transfer_timeout_seconds=(
                 settings.mediakit_video_enhancement_transfer_timeout_seconds
             ),
@@ -950,7 +975,12 @@ class AssetStorageService:
         for item in items:
             if not item.source_url:
                 raise ValueError("generated asset source URL is required")
-            content = await self.downloader.fetch(
+            downloader = (
+                self.video_generation_downloader
+                if item.mime_type.lower().startswith("video/")
+                else self.downloader
+            )
+            content = await downloader.fetch(
                 item.source_url,
                 expected_mime_type=item.mime_type,
             )

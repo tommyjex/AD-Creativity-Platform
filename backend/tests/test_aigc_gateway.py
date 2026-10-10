@@ -3899,6 +3899,47 @@ def test_gateway_marks_video_transfer_failure_as_retryable(
     assert error.value.retryable is True
 
 
+def test_gateway_classifies_video_transfer_validation_failure(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def reject_oversized_output(*_args, **_kwargs):
+        raise ValueError("generated asset exceeds maximum size")
+
+    monkeypatch.setattr(
+        test_asset_storage,
+        "upload_assets_from_sources",
+        reject_oversized_output,
+    )
+    gateway = AigcModelGateway(
+        repository,
+        FakeAigcGeneration(),
+        test_asset_storage,
+    )  # type: ignore[arg-type]
+    params = video_params()
+    params.update(
+        {
+            "generation_mode": "text_to_video",
+            "reference_image_asset_ids": [],
+            "reference_video_asset_ids": [],
+            "reference_audio_asset_ids": [],
+        }
+    )
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.VIDEO_GENERATION,
+        params,
+    )
+
+    with pytest.raises(AigcGatewayError) as error:
+        asyncio.run(gateway.execute(task))
+
+    assert error.value.error.code == "asset_transfer_failed"
+    assert error.value.error.stage == "asset_transfer"
+    assert error.value.retryable is False
+
+
 def test_gateway_executes_video_enhancement_and_streams_result(
     repository: InMemoryRepository,
     test_asset_storage: AssetStorageService,

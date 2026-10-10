@@ -134,6 +134,10 @@ class Settings(BaseModel):
     ark_video_poll_interval_seconds: int = Field(default=3, gt=0)
     aigc_video_concurrency: int = Field(default=1, gt=0)
     aigc_video_timeout_seconds: int = Field(default=1800, gt=0)
+    aigc_video_transfer_max_bytes: int = Field(
+        default=200 * 1024 * 1024,
+        gt=0,
+    )
     mediakit_api_key: SecretStr | None = None
     mediakit_base_url: str = "https://mediakit.cn-beijing.volces.com"
     mediakit_asr_poll_interval_seconds: int = Field(default=3, gt=0)
@@ -340,6 +344,10 @@ class Settings(BaseModel):
             aigc_video_timeout_seconds=_parse_positive_int_env(
                 "AIGC_VIDEO_TIMEOUT_SECONDS",
                 cls.model_fields["aigc_video_timeout_seconds"].default,
+            ),
+            aigc_video_transfer_max_bytes=_parse_positive_int_env(
+                "AIGC_VIDEO_TRANSFER_MAX_BYTES",
+                cls.model_fields["aigc_video_transfer_max_bytes"].default,
             ),
             mediakit_api_key=_get_secret_env_first("MEDIAKIT_API_KEY"),
             mediakit_base_url=getenv(

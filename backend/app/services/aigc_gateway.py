@@ -1954,8 +1954,14 @@ class AigcModelGateway:
                     )
                 ],
             )
-        except ValueError:
-            raise
+        except ValueError as exc:
+            raise AigcGatewayError(
+                AigcTaskError(
+                    code="asset_transfer_failed",
+                    message="Generated video could not be stored",
+                    stage="asset_transfer",
+                )
+            ) from exc
         except Exception as exc:
             raise AigcGatewayError(
                 AigcTaskError(

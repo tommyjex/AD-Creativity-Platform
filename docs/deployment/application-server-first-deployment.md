@@ -1,20 +1,54 @@
-# AD Creativity 应用服务器首次部署方案
+# AD Creativity 系统架构与部署手册
 
 ## 1. 文档目标
 
-本文用于首次将 AD Creativity 部署到一台 Linux 应用服务器。
+本文面向负责开发、测试、发布和运维的团队成员，用于：
+
+- 快速理解 AD Creativity 的运行架构、技术栈和数据流。
+- 准备应用服务器、云服务、网络和密钥等部署依赖。
+- 将指定版本首次部署到一台 Linux 应用服务器。
+- 完成发布验收、日常更新、故障排查和回滚。
 
 本方案假设：
 
-- MySQL 8 已由云平台托管，数据库和数据表已经创建完成。
+- MySQL 8 已由云平台托管，数据库实例、业务库和应用账号已经创建。
 - 应用服务器可以通过私网连接云 MySQL。
 - TOS、Ark、MediaKit 和 TLS 均使用云服务，不在应用服务器部署。
 - 前端和后端使用同一个公网域名，由 Nginx 统一提供 HTTPS。
 - 首次部署使用单台应用服务器和单个 FastAPI 进程。
 
-本文不包含 MySQL 实例部署、数据库建库和建表操作。
+本文不包含 MySQL 实例创建、云服务开通和 CI/CD 平台搭建。业务表由后端
+`init_database()` 创建或增量更新，生产执行前必须遵循本文的数据库发布门禁。
 
-## 2. 推荐架构
+> 当前仓库不提供 Dockerfile 或 Docker Compose。生产部署方式是
+> `systemd + Nginx`，应用依赖直接安装在 Linux 主机。
+>
+> 文档最后按仓库代码与部署脚本校验于 2026-10-10。
+
+## 2. 系统架构与技术栈
+
+### 2.1 技术栈
+
+| 层级 | 技术 | 当前约束与职责 |
+| --- | --- | --- |
+| Web 前端 | React 19、Next.js 16、TypeScript 5、Tailwind CSS 3 | 页面渲染、同源 API 访问、AIGC 画布和媒体工作台 |
+| 前端状态与交互 | TanStack Query、Zustand、XYFlow、Radix UI | 服务端状态、客户端状态、节点画布和基础交互组件 |
+| 后端 API | Python 3.11+、FastAPI、Uvicorn、Pydantic 2 | REST API、认证、工作流编排和服务集成 |
+| 数据访问 | SQLAlchemy 2、PyMySQL、MySQL 8 | 用户、项目、资产、任务、Pipeline、Worker 租约和运行记录 |
+| 媒体处理 | FFmpeg、FFprobe、Pillow、pillow-heif | 视频规范化、媒体探测、图片处理、字幕和成片合成 |
+| AI 与媒体云服务 | 火山方舟 Ark、MediaKit | 文本/图片/视频生成、字幕提取、视频增强、人脸模糊和多轨处理 |
+| 对象存储 | 火山引擎 TOS | 上传素材、生成产物和中间媒体文件 |
+| 可观测性 | JSON 标准输出、systemd journal、火山引擎 TLS | 请求、认证、AIGC 任务与异常日志；敏感模型原文只允许进入 TLS |
+| 接入与进程管理 | Nginx、systemd | HTTPS、反向代理、上传限制、长连接超时和进程守护 |
+
+版本的最终事实来源分别是：
+
+- Python：`backend/pyproject.toml` 和根目录 `requirements.txt`。
+- Node.js：`scripts/deploy_server.sh`，当前要求 22 或更高版本。
+- 前端依赖：`frontend/package.json` 和 `frontend/package-lock.json`。
+- 系统配置：`.env.example` 和 `backend/app/core/config.py`。
+
+### 2.2 运行拓扑
 
 ```text
 用户浏览器
@@ -33,6 +67,43 @@ Nginx
                               `-> TLS
 ```
 
+组件职责：
+
+| 组件 | 部署位置 | 端口/协议 | 说明 |
+| --- | --- | --- | --- |
+| Nginx | 应用服务器 | 公网 `80/443` | 唯一公网入口；将页面请求转发到 Next.js，将 `/api/*` 和 `/health` 转发到 FastAPI |
+| Next.js | 应用服务器 | `127.0.0.1:3000` | 生产前端；服务端通过 `BACKEND_INTERNAL_BASE_URL` 访问 FastAPI |
+| FastAPI | 应用服务器 | `127.0.0.1:8000` | API、认证、数据库访问、云服务调用和进程内 AIGC Worker |
+| MySQL 8 | 云数据库 | 私网 `3306` | 持久化业务数据、任务状态和 AIGC Worker 租约 |
+| TOS | 火山引擎 | HTTPS `443` | 持久化媒体资产；数据库只保存资产元数据和对象引用 |
+| Ark / MediaKit | 火山引擎 | HTTPS `443` | 模型推理和异步媒体处理 |
+| TLS | 火山引擎 | HTTPS `443` | 集中式结构化操作日志 |
+
+### 2.3 关键请求与任务流
+
+同步页面/API 请求：
+
+```text
+浏览器 -> Nginx -> Next.js 页面
+浏览器 -> Nginx /api/* -> FastAPI -> MySQL
+```
+
+上传与生成任务：
+
+```text
+浏览器上传 -> FastAPI -> FFprobe/FFmpeg 校验或规范化 -> TOS
+任务提交 -> FastAPI -> MySQL 任务队列
+进程内 AIGC Worker -> Ark/MediaKit -> TOS -> MySQL 状态更新
+浏览器轮询 API <- FastAPI <- MySQL
+```
+
+FastAPI 启动时会执行 `init_database()`，随后启动进程内 AIGC Worker。Worker
+通过 MySQL 中的全局租约保证同一时刻只有一个调度实例工作。首期部署必须使用
+单个 Uvicorn worker；扩容前需要验证多实例租约接管、运行中任务恢复和滚动发布。
+重启后端会中断当前进程内正在执行的任务，发布前应检查运行中任务并安排维护窗口。
+
+### 2.4 网络与安全边界
+
 服务器安全组只开放：
 
 - `22/tcp`：SSH，建议只允许办公网络或堡垒机。
@@ -41,19 +112,59 @@ Nginx
 
 不要向公网开放 `3000`、`8000` 或 MySQL `3306`。
 
+应用服务器还必须允许以下出站访问：
+
+- 云 MySQL 私网地址的 `3306/tcp`。
+- TOS、Ark、MediaKit 和 TLS 域名的 `443/tcp`。
+- 软件源、npm 源和 Python 包源的 `443/tcp`，仅在服务器执行依赖安装时需要。
+- DNS 解析和系统时间同步；签名 URL 与云 API 鉴权依赖准确时间。
+
+若生产网络限制出站域名，应在部署前由网络管理员加入白名单。不要在 Nginx、
+前端或日志中暴露数据库密码、会话 Cookie、Ark API Key 或云服务 AK/SK。
+
 ## 3. 部署前检查
 
-### 3.1 服务器建议
+### 3.1 部署输入
+
+开始操作前，发布负责人应收齐以下信息：
+
+| 输入 | 提供方 | 验证方式 |
+| --- | --- | --- |
+| 固定的 Git tag 或 commit SHA | 开发/发布负责人 | `git rev-parse HEAD` 与发布记录一致 |
+| 应用域名和 HTTPS 证书 | 域名/基础设施负责人 | DNS 已生效，证书覆盖目标域名 |
+| MySQL 私网地址、库名和应用账号 | 数据库负责人 | 从应用服务器执行 `SELECT 1` |
+| TOS bucket、endpoint、region 和凭据 | 云资源负责人 | 上传并读取一个测试对象 |
+| Ark API Key 和模型访问权限 | AI 平台负责人 | 执行最小文本生成请求 |
+| MediaKit 凭据 | 媒体能力负责人 | 仅在启用字幕、增强等能力时需要 |
+| TLS Project、Topic 和写入凭据 | 可观测性负责人 | 部署后可按 `request_id` 查询日志 |
+
+推荐按以下顺序完成首次部署：
+
+1. 准备云资源、域名、证书和网络白名单。
+2. 安装系统依赖，创建运行用户并检出固定代码版本。
+3. 创建 Python 虚拟环境并安装前后端依赖。
+4. 配置 `.env`，验证数据库和外部服务连通性。
+5. 创建数据库快照，在预发布环境验证 `init_database()`。
+6. 执行测试和生产构建。
+7. 配置并启动 systemd 服务。
+8. 配置 Nginx 和 HTTPS。
+9. 初始化管理员，完成端到端验收并记录发布版本。
+
+### 3.2 服务器建议
 
 首次部署建议：
 
-- 操作系统：Ubuntu 22.04 LTS 或 24.04 LTS。
+- 操作系统：推荐 Ubuntu 24.04 LTS。Ubuntu 22.04 LTS 仅在单独安装
+  Python 3.11 或更高版本后使用，其系统默认 Python 3.10 不满足项目要求。
 - CPU：至少 4 核，视频处理较多时建议 8 核。
 - 内存：至少 8 GB，视频处理较多时建议 16 GB。
 - 系统盘：至少 50 GB，并监控 `/tmp` 和日志占用。
 - 网络：能够访问云 MySQL、TOS、Ark、MediaKit 和 TLS。
 
-### 3.2 云 MySQL
+视频上传、转码和多轨任务会使用临时磁盘。磁盘告警不能只监控应用目录，还要
+监控 `/tmp`、systemd journal 和 Nginx 日志。生产环境应为日志配置轮转和保留期。
+
+### 3.3 云 MySQL
 
 确认以下条件：
 
@@ -71,7 +182,7 @@ Nginx
 
 如果生产账号不允许 DDL，建议使用单独的迁移账号在发布窗口执行结构升级。
 
-### 3.3 域名和证书
+### 3.4 域名和证书
 
 准备一个域名，例如：
 
@@ -81,7 +192,7 @@ ad.example.com
 
 将域名 A 记录指向应用服务器公网 IP。建议前后端使用同一域名，避免额外的跨域配置。
 
-### 3.4 公开部署安全要求
+### 3.5 公开部署安全要求
 
 正式开放公网前必须处理：
 
@@ -101,14 +212,21 @@ ad.example.com
 ```bash
 sudo apt update
 sudo apt install -y \
+  ca-certificates \
+  curl \
   git \
   nginx \
   python3 \
   python3-venv \
   python3-pip \
   ffmpeg \
-  mysql-client
+  mysql-client \
+  util-linux
 ```
+
+确认 `python3` 为 3.11 或更高版本。Ubuntu 22.04 需从公司批准的软件源安装
+Python 3.11+，并在后续创建虚拟环境时将 `python3` 替换为对应命令，例如
+`python3.11`。
 
 从公司批准的软件源或 NodeSource 安装 Node.js 22 LTS 或更高版本，然后确认：
 
@@ -117,8 +235,13 @@ python3 --version
 node --version
 npm --version
 ffmpeg -version
+ffprobe -version
 nginx -v
 ```
+
+`scripts/deploy_server.sh` 还依赖 `flock`、`curl`、`systemctl` 和
+`journalctl`。Ubuntu 中 `flock` 由 `util-linux` 提供。`ffprobe` 通常随
+`ffmpeg` 包一起安装；媒体上传校验缺少它时会直接失败。
 
 ## 5. 创建运行用户和目录
 
@@ -225,6 +348,22 @@ TLS_ACCESS_KEY_ID=<TLS_ACCESS_KEY_ID>
 TLS_SECRET_ACCESS_KEY=<TLS_SECRET_ACCESS_KEY>
 ```
 
+配置分组说明：
+
+| 分组 | 是否必需 | 说明 |
+| --- | --- | --- |
+| `APP_ENV`、`CORS_ORIGINS`、`SITE_ORIGIN`、`AUTH_COOKIE_SECURE` | 是 | 生产安全门禁；推荐同域 HTTPS |
+| `DB_*` | 是 | FastAPI 启动即连接 MySQL 并执行表结构初始化 |
+| `TOS_*` | 是 | 素材上传和生成产物持久化 |
+| `ARK_API_KEY` | 是 | Ark 模型调用；模型 ID 为空时使用代码默认值 |
+| `MEDIAKIT_*` | 按功能 | 字幕、视频增强、人脸模糊和多轨能力需要 |
+| `COMPOSER_FFMPEG_PATH` | 是 | 生产建议固定为 `/usr/bin/ffmpeg`；FFprobe 必须位于同目录 |
+| `TLS_*` | 生产推荐 | 集中日志；启用后凭据、Project 和 Topic 必须有效 |
+| `AIGC_*_CONCURRENCY`、各类 timeout | 按需 | 默认值适合单机起步，压测后再调整 |
+
+不要直接复制其他环境的 `.env`。至少重新核对数据库名、域名、TOS bucket、
+TLS Topic 和所有密钥，避免生产服务连接测试资源或把日志写入错误主题。
+
 生产环境默认拒绝通配 CORS。只有明确接受任意来源发起跨域请求和非安全
 方法调用的风险时，才同时配置：
 
@@ -254,7 +393,7 @@ Origin，不会被视为 wildcard。
 Cookie，浏览器脚本也无法读取带凭证的跨域响应。需要跨域登录时，应配置
 明确的 HTTPS 来源，而不是使用通配来源。
 
-当前仅能通过 `http://101.126.86.254/` 访问时，可临时使用以下公网 HTTP
+当前仅能通过 `http://<SERVER_PUBLIC_IP>/` 访问时，可临时使用以下公网 HTTP
 兼容配置：
 
 ```dotenv
@@ -294,6 +433,26 @@ sudo chmod 600 /opt/ad-creativity/app/.env
 
 不要在 `.env` 中使用未经确认的 Shell 语法。systemd 的 `EnvironmentFile`
 并不完整兼容 Bash。
+
+保存配置后，在启动服务前执行只读校验：
+
+```bash
+sudo systemd-run \
+  --wait \
+  --pipe \
+  --collect \
+  --property=User=adcreative \
+  --property=WorkingDirectory=/opt/ad-creativity/app \
+  --property=EnvironmentFile=/opt/ad-creativity/app/.env \
+  /opt/ad-creativity/app/.venv/bin/python -c \
+  "from backend.app.core.config import get_settings; get_settings(); print('config ok')"
+
+test -x /usr/bin/ffmpeg
+test -x /usr/bin/ffprobe
+```
+
+该命令使用与正式服务相同的 systemd `EnvironmentFile` 语义，不通过 Shell
+展开 `.env`。校验输出不得打印密钥值。
 
 ## 9. 验证数据库连接
 
@@ -605,12 +764,19 @@ sudo tail -f /var/log/nginx/access.log /var/log/nginx/error.log
 | 后端启动失败 | `.env`、MySQL 私网连通性、表结构版本 |
 | 浏览器请求 localhost:8000 | 构建环境错误设置了 `NEXT_PUBLIC_BACKEND_BASE_URL`，同域部署应移除后重新构建 |
 | 首页显示“产物加载失败” | FastAPI 健康状态、前端服务的 `BACKEND_INTERNAL_BASE_URL` |
+| 登录成功后又返回登录页 | 访问协议与 `AUTH_COOKIE_SECURE` 是否匹配；公网 HTTP 临时模式还需显式开启 `ALLOW_INSECURE_AUTH_COOKIE=true` |
 | 上传返回 413 | Nginx `client_max_body_size` |
 | 请求约 60 秒后断开 | Nginx 或上游负载均衡超时 |
-| 图片或视频不可访问 | TOS 配置、对象权限、签名地址 |
-| 最终成片失败 | `ffmpeg` 路径、磁盘空间、进程日志 |
+| 图片或视频不可访问 | TOS 配置、对象权限、签名地址和对象 `Content-Type` |
+| 视频上传或成片失败 | `/usr/bin/ffmpeg`、同目录 `ffprobe`、磁盘空间和进程日志 |
+| AIGC 任务一直排队 | 后端进程状态、`pipeline_worker_lease` 租约持有者和 Worker 启动日志 |
+| 发布期间任务变为 interrupted | 后端重启中断了进程内任务；确认服务稳定后重新提交 |
 | 浏览器出现 CORS 错误 | 前后端域名、协议、CORS 响应头 |
 | TLS 没有日志 | TLS 开关、凭据、Project 和 Topic |
+
+后端标准输出只记录脱敏的单行 JSON。模型原文等敏感调试信息不得输出到
+journal 或浏览器控制台，只能在已授权的 TLS Topic 中按最小权限和保留期查询。
+排障时优先使用响应头中的 `X-Request-ID` 关联 Nginx、后端和 TLS 日志。
 
 ## 16. 日常发布流程
 
@@ -629,18 +795,25 @@ cd /opt/ad-creativity/app
 sudo -u adcreative git rev-parse HEAD
 ```
 
-完成上述数据库门禁后，由部署用户手动拉取或检出已经确认的版本，再运行仓库内
-部署脚本：
+完成上述数据库门禁后，先确认没有不可中断的 AIGC 任务，再由运行用户检出已经
+确认的版本，由具备 systemd 管理权限的发布管理员运行仓库内部署脚本：
 
 ```bash
 cd /opt/ad-creativity/app
-sudo -u adcreative git pull --ff-only
-sudo -u adcreative ./scripts/deploy_server.sh
+sudo -u adcreative git fetch --tags
+sudo -u adcreative git checkout <RELEASE_TAG_OR_COMMIT>
+sudo -u adcreative git rev-parse HEAD
+sudo ./scripts/deploy_server.sh
 ```
 
 脚本依次安装 Python 依赖、编译检查后端、执行 `npm ci`、构建前端、重启两个
 systemd 服务，并检查 `127.0.0.1:8000/health` 和 `127.0.0.1:3000/`。安装或
 构建失败时不会重启当前服务；重启后失败时会输出两个服务的状态和最近 100 行日志。
+
+当前脚本在非 root 模式下会执行 `sudo -n true`，要求调用账号具有免密 sudo。
+不要为应用运行账号授予不受限的免密 sudo。默认由受控的发布管理员、堡垒机作业
+或 CI Runner 以提权方式执行；若团队要采用最小权限发布账号，应先改造脚本和
+sudoers/Polkit 规则，只允许管理这两个 systemd unit。
 
 脚本不会执行以下操作：
 
@@ -666,15 +839,13 @@ systemd 服务，并检查 `127.0.0.1:8000/health` 和 `127.0.0.1:3000/`。安�
 例如，服务启动较慢时可增加重试次数：
 
 ```bash
-sudo -u adcreative \
-  env \
+sudo env \
   HEALTH_CHECK_ATTEMPTS=60 \
   HEALTH_CHECK_INTERVAL_SECONDS=3 \
   ./scripts/deploy_server.sh
 ```
 
-脚本要求 Node.js 22 或更高版本、已有 `.venv` 和 `.env`，并要求部署用户可以通过
-免交互 sudo 管理 systemd。部署失败后可继续检查：
+脚本要求 Node.js 22 或更高版本、已有 `.venv` 和 `.env`。部署失败后可继续检查：
 
 ```bash
 sudo systemctl status \

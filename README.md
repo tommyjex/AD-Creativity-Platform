@@ -12,11 +12,14 @@
 ## 首次部署
 
 以下步骤适用于本地开发或一台可运行前后端服务的服务器。项目当前未提供 Docker Compose 配置。
+团队生产部署请以
+[`docs/deployment/application-server-first-deployment.md`](docs/deployment/application-server-first-deployment.md)
+为准，其中包含系统架构、云服务依赖、systemd、Nginx、发布验收和回滚步骤。
 
 ### 1. 安装前置软件
 
 - Python 3.11 或更高版本
-- Node.js 20 或更高版本
+- Node.js 22 或更高版本
 - npm
 - MySQL 8.0 或兼容版本
 - FFmpeg（需要生成最终成片或烧录字幕时）
@@ -220,9 +223,11 @@ npm test
 
 - 不要提交或复制 `.env`、TOS AK/SK、Ark API Key、数据库密码。
 - 生产环境应通过密钥管理系统或部署平台注入环境变量，而不是将 `.env` 放进镜像。
-- 当前后端 CORS 配置允许任意来源。对公网部署前，应按实际前端域名收紧 CORS 策略。
+- 生产环境应使用明确的 HTTPS `SITE_ORIGIN` 和 `CORS_ORIGINS`；通配 CORS
+  及非安全认证 Cookie 仅能通过专用开关显式启用。
 - 在反向代理层启用 HTTPS、访问日志、请求大小限制和超时控制。
-- 视频生成与合成可能耗时较长；建议使用进程守护工具管理后端服务，并根据负载配置工作进程。
+- 视频生成与合成可能耗时较长；使用 systemd 管理服务。后端包含进程内 AIGC
+  Worker，扩展 Uvicorn worker 数量前必须验证租约接管和任务恢复。
 
 ## 常见问题
 

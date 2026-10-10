@@ -1388,6 +1388,49 @@ def test_http_downloader_returns_valid_video_bytes() -> None:
     assert result == DownloadedAsset(content=b"mp4", mime_type="video/mp4")
 
 
+def test_asset_storage_uses_separate_video_generation_limit() -> None:
+    content = b"123456789"
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(
+            200,
+            content=content,
+            headers={"content-type": "video/mp4"},
+        )
+    )
+    service = AssetStorageService(
+        bucket="ad-assets",
+        client=FakeObjectStorageClient(),
+        downloader=HttpRemoteAssetDownloader(
+            timeout_seconds=5,
+            max_bytes=4,
+            transport=transport,
+        ),
+        video_generation_downloader=HttpRemoteAssetDownloader(
+            timeout_seconds=5,
+            max_bytes=10,
+            transport=transport,
+        ),
+    )
+    repository = InMemoryRepository()
+
+    assets = asyncio.run(
+        service.upload_assets_from_sources(
+            repository,
+            [
+                StoredAssetInput(
+                    type=AssetType.STORYBOARD_VIDEO,
+                    tool_asset_role=ToolAssetRole.OUTPUT,
+                    source_url="https://model.example/generated.mp4",
+                    mime_type="video/mp4",
+                )
+            ],
+        )
+    )
+
+    assert len(assets) == 1
+    assert assets[0].size_bytes == len(content)
+
+
 def test_http_downloader_rejects_media_family_mismatch() -> None:
     transport = httpx.MockTransport(
         lambda _request: httpx.Response(
@@ -1417,3 +1460,12 @@ def test_asset_storage_from_settings_uses_image_sized_download_timeout() -> None
     assert isinstance(service.downloader, HttpRemoteAssetDownloader)
     assert service.downloader.timeout_seconds == 600
     assert service.downloader.max_bytes == 30 * 1024 * 1024
+    assert isinstance(
+        service.video_generation_downloader,
+        HttpRemoteAssetDownloader,
+    )
+    assert service.video_generation_downloader.timeout_seconds == 600
+    assert (
+        service.video_generation_downloader.max_bytes
+        == 200 * 1024 * 1024
+    )
