@@ -591,7 +591,7 @@ function disconnectedPipeline(): AigcPipeline {
 
 function sharedImageBranchPipeline(): AigcPipeline {
   const imageModelConfig = {
-    model: "doubao-seedream-5-0-pro-260628",
+    model: "doubao-seedream-5-0-pro-260628" as const,
     aspect_ratio: "1:1" as const,
     size: "2K" as const,
     format: "png" as const
@@ -1541,7 +1541,7 @@ describe("AIGC editor store", () => {
       position: { x: 320, y: 0 },
       size: { width: 240, height: 160 },
       config: {
-        model: "doubao-seedream-5-0-pro-260628",
+        model: "doubao-seedream-5-0-pro-260628" as const,
         aspect_ratio: "1:1" as const,
         size: "2K" as const,
         format: "png" as const
@@ -4606,6 +4606,26 @@ describe("AIGC editor modes", () => {
     });
     act(() => store.getState().selectNode("seedream"));
 
+    const modelSelect = screen.getByLabelText("模型");
+    expect(modelSelect).toHaveValue("doubao-seedream-5-0-pro-260628");
+    expect(
+      within(modelSelect).getByRole("option", {
+        name: "Seedream 5.0 Flash"
+      })
+    ).toBeInTheDocument();
+    fireEvent.change(modelSelect, {
+      target: { value: "doubao-seedream-5-0-flash-260915" }
+    });
+    expect(modelSelect).toHaveValue("doubao-seedream-5-0-flash-260915");
+    expect(
+      screen.getByText("Seedream 5.0 Flash", { selector: "p" })
+    ).toBeInTheDocument();
+    expect(
+      store.getState().definition.nodes.find((node) => node.id === "seedream")
+    ).toMatchObject({
+      config: { model: "doubao-seedream-5-0-flash-260915" }
+    });
+
     expect(
       screen.getByRole("button", { name: "图生图" })
     ).toHaveAttribute("aria-pressed", "true");
@@ -4627,8 +4647,18 @@ describe("AIGC editor modes", () => {
     expect(
       store.getState().definition.nodes.find((node) => node.id === "seedream")
     ).toMatchObject({
-      config: { operation: "layer_decomposition", size: "auto" }
+      config: {
+        model: "doubao-seedream-5-0-pro-260628",
+        operation: "layer_decomposition",
+        size: "auto"
+      }
     });
+    expect(modelSelect).toHaveValue("doubao-seedream-5-0-pro-260628");
+    expect(
+      within(modelSelect).queryByRole("option", {
+        name: "Seedream 5.0 Flash"
+      })
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("拆分尺寸")).toHaveValue("auto");
     expect(screen.queryByLabelText("画幅")).toBeNull();
     expect(
@@ -4653,6 +4683,23 @@ describe("AIGC editor modes", () => {
     expect(
       screen.queryByRole("button", { name: "自定义像素" })
     ).toBeNull();
+  });
+
+  it("persists the selected text-to-image Seedream model", () => {
+    const { store } = renderEditor(pipeline, "pipeline");
+    act(() => store.getState().selectNode("model"));
+
+    const modelSelect = screen.getByLabelText("模型");
+    fireEvent.change(modelSelect, {
+      target: { value: "doubao-seedream-5-0-flash-260915" }
+    });
+
+    expect(modelSelect).toHaveValue("doubao-seedream-5-0-flash-260915");
+    expect(
+      store.getState().definition.nodes.find((node) => node.id === "model")
+    ).toMatchObject({
+      config: { model: "doubao-seedream-5-0-flash-260915" }
+    });
   });
 
   it("keeps an invalid text-to-image size draft local and blocks autosave and execution", async () => {

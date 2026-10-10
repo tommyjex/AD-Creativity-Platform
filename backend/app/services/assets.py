@@ -238,9 +238,6 @@ class HttpRemoteAssetDownloader:
                                 "generated asset response has invalid content length"
                             )
                         if declared_size > self.max_bytes:
-                            # #region debug-point A:declared-size-limit
-                            import json as _debug_json, urllib.request as _debug_request; _debug_url, _debug_session = "http://127.0.0.1:7777/event", "video-generation-invalid-input"; exec("try:\n with open('.dbg/video-generation-invalid-input.env') as _f:\n  _debug_env=_f.read(); _debug_url=next((_l.split('=',1)[1] for _l in _debug_env.splitlines() if _l.startswith('DEBUG_SERVER_URL=')),_debug_url); _debug_session=next((_l.split('=',1)[1] for _l in _debug_env.splitlines() if _l.startswith('DEBUG_SESSION_ID=')),_debug_session)\nexcept Exception: pass"); exec("try:\n _debug_request.urlopen(_debug_request.Request(_debug_url,data=_debug_json.dumps({'sessionId':_debug_session,'runId':'post-fix','hypothesisId':'A','location':'backend/app/services/assets.py:declared-size-limit','msg':'[DEBUG] Generated asset declared size exceeds downloader limit','data':{'declaredSize':declared_size,'maxBytes':self.max_bytes}}).encode(),headers={'Content-Type':'application/json'}),timeout=0.25).read()\nexcept Exception: pass")
-                            # #endregion
                             raise ValueError(
                                 "generated asset exceeds maximum size"
                             )
@@ -249,9 +246,6 @@ class HttpRemoteAssetDownloader:
                     async for chunk in response.aiter_bytes():
                         size += len(chunk)
                         if size > self.max_bytes:
-                            # #region debug-point A:stream-size-limit
-                            import json as _debug_json, urllib.request as _debug_request; _debug_url, _debug_session = "http://127.0.0.1:7777/event", "video-generation-invalid-input"; exec("try:\n with open('.dbg/video-generation-invalid-input.env') as _f:\n  _debug_env=_f.read(); _debug_url=next((_l.split('=',1)[1] for _l in _debug_env.splitlines() if _l.startswith('DEBUG_SERVER_URL=')),_debug_url); _debug_session=next((_l.split('=',1)[1] for _l in _debug_env.splitlines() if _l.startswith('DEBUG_SESSION_ID=')),_debug_session)\nexcept Exception: pass"); exec("try:\n _debug_request.urlopen(_debug_request.Request(_debug_url,data=_debug_json.dumps({'sessionId':_debug_session,'runId':'post-fix','hypothesisId':'A','location':'backend/app/services/assets.py:stream-size-limit','msg':'[DEBUG] Generated asset streamed size exceeds downloader limit','data':{'observedSize':size,'maxBytes':self.max_bytes}}).encode(),headers={'Content-Type':'application/json'}),timeout=0.25).read()\nexcept Exception: pass")
-                            # #endregion
                             raise ValueError(
                                 "generated asset exceeds maximum size"
                             )

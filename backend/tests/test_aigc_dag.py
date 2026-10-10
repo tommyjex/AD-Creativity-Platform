@@ -1790,13 +1790,36 @@ def test_layer_decomposition_rejects_second_image() -> None:
 def test_layer_decomposition_requires_seedream_5_pro() -> None:
     definition = layer_workflow_definition()
     model = next(item for item in definition.nodes if item.id == "decompose")
-    model.config.model = "another-image-model"
+    model.config.model = "doubao-seedream-5-0-flash-260915"
 
     with pytest.raises(AigcDagValidationError) as error:
         validate_aigc_dag_structure(definition)
 
     assert error.value.code == "model_not_supported_for_operation"
     assert error.value.node_id == "decompose"
+
+
+@pytest.mark.parametrize("operation", ["image_to_image", "image_edit"])
+def test_seedream_flash_is_supported_for_standard_image_operations(
+    operation: str,
+) -> None:
+    definition = AigcPipelineDefinition.model_validate(
+        {
+            "nodes": [
+                node(
+                    "model",
+                    "image_to_image",
+                    0,
+                    config={
+                        "model": "doubao-seedream-5-0-flash-260915",
+                        "operation": operation,
+                    },
+                )
+            ]
+        }
+    )
+
+    validate_aigc_dag_structure(definition)
 
 
 def test_image_edit_accepts_exactly_one_plain_image_target() -> None:

@@ -160,9 +160,15 @@ import {
 } from "@/lib/aigc/result-projection";
 import {
   isSeedreamImageEdgeIncompatible,
+  normalizeSeedreamImageConfig,
   validateLayerDecompositionAssets,
   validateSeedreamImageDefinition
 } from "@/lib/aigc/seedream-image";
+import {
+  SEEDREAM_MODELS,
+  seedreamModelOptions,
+  type SeedreamModel
+} from "@/lib/aigc/seedream-models";
 import {
   isVideoEdgeIncompatible,
   seedancePromptLengthWarning,
@@ -2006,11 +2012,24 @@ function NodeConfig({
   if (node.type === "text_to_image") {
     return (
       <ConfigGroup title={displayName}>
-        <AigcImageDimensionsField
-          config={node.config}
-          nodeId={node.id}
-          onChange={(config) => update(node.id, config)}
-        />
+        <div className="space-y-3">
+          <SelectField
+            label="模型"
+            onChange={(value) =>
+              update(node.id, {
+                ...node.config,
+                model: value as SeedreamModel
+              })
+            }
+            options={seedreamModelOptions("text_to_image")}
+            value={node.config.model}
+          />
+          <AigcImageDimensionsField
+            config={node.config}
+            nodeId={node.id}
+            onChange={(config) => update(node.id, config)}
+          />
+        </div>
       </ConfigGroup>
     );
   }
@@ -2139,6 +2158,9 @@ function SeedreamImageConfig({
   const update = useAigcEditorStore((state) => state.updateNodeConfig);
   const definition = useAigcEditorStore((state) => state.definition);
   const operation = node.config.operation ?? "image_to_image";
+  const selectedModel = SEEDREAM_MODELS.find(
+    (model) => model.id === node.config.model
+  );
   const validationAssets = useQuery({
     queryKey: ["aigc", "media-validation-assets"],
     queryFn: loadAigcMediaAssets
@@ -2174,10 +2196,16 @@ function SeedreamImageConfig({
                 )}
                 key={option.value}
                 onClick={() =>
-                  update(node.id, {
-                    ...node.config,
-                    operation: option.value
-                  })
+                  update(
+                    node.id,
+                    normalizeSeedreamImageConfig(
+                      {
+                        ...node.config,
+                        operation: option.value
+                      },
+                      operation
+                    )
+                  )
                 }
                 type="button"
               >
@@ -2186,8 +2214,21 @@ function SeedreamImageConfig({
             ))}
           </div>
         </div>
+        <SelectField
+          label="模型"
+          onChange={(value) =>
+            update(node.id, {
+              ...node.config,
+              model: value as SeedreamModel
+            })
+          }
+          options={seedreamModelOptions(operation)}
+          value={node.config.model}
+        />
         <div className="rounded-md border border-border bg-muted/25 px-2.5 py-2 text-[10px] leading-4 text-muted-foreground">
-          <p className="font-medium text-foreground">Seedream 5.0 Pro</p>
+          <p className="font-medium text-foreground">
+            {selectedModel?.label ?? node.config.model}
+          </p>
           <p>
             {operation === "image_to_image"
               ? "连接 1-10 张参考图和必填提示词，输出新图片。"

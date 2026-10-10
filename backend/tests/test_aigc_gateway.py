@@ -32,6 +32,7 @@ from backend.app.schemas import (
     ToolAssetRole,
     ReferenceAssetKind,
 )
+from backend.app.schemas.aigc import AIGC_SEEDREAM_FLASH_MODEL
 from backend.app.services.aigc_gateway import (
     AIGC_DEFAULT_IMAGE_MODEL,
     AIGC_DEFAULT_TEXT_MODEL,
@@ -1023,6 +1024,28 @@ def test_gateway_persists_text_to_image_output_asset(
     assert "target_width" not in saved.metadata
 
 
+def test_gateway_forwards_seedream_flash_for_text_to_image(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    generation = FakeAigcGeneration()
+    gateway = AigcModelGateway(repository, generation, test_asset_storage)  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.TEXT_TO_IMAGE,
+        {
+            "model": AIGC_SEEDREAM_FLASH_MODEL,
+            "prompt": "橙色商品海报",
+            "size": "2K",
+            "format": "png",
+        },
+    )
+
+    asyncio.run(gateway.execute(task))
+
+    assert generation.image_requests[0]["model"] == AIGC_SEEDREAM_FLASH_MODEL
+
+
 def test_gateway_starts_generation_and_naming_concurrently(
     repository: InMemoryRepository,
     test_asset_storage: AssetStorageService,
@@ -1708,6 +1731,31 @@ def test_gateway_plain_image_edit_remains_compatible(
         ("input", "edit_image", "source-image"),
         ("output", "image", output.asset_id),
     ]
+
+
+def test_gateway_forwards_seedream_flash_for_plain_image_edit(
+    repository: InMemoryRepository,
+    test_asset_storage: AssetStorageService,
+) -> None:
+    create_image_asset(repository, "source-image")
+    generation = FakeAigcGeneration()
+    gateway = AigcModelGateway(repository, generation, test_asset_storage)  # type: ignore[arg-type]
+    task = create_persisted_task(
+        repository,
+        AigcTaskType.IMAGE_EDIT,
+        {
+            "model": AIGC_SEEDREAM_FLASH_MODEL,
+            "operation": "image_edit",
+            "prompt": "移除背景文字",
+            "size": "2K",
+            "format": "png",
+            "edit_image_asset_id": "source-image",
+        },
+    )
+
+    asyncio.run(gateway.execute(task))
+
+    assert generation.image_requests[0]["model"] == AIGC_SEEDREAM_FLASH_MODEL
 
 
 def test_gateway_layer_edit_resizes_png_and_applies_original_alpha_mask(

@@ -17,7 +17,6 @@ from backend.app.aigc_run_scope import (
     aigc_run_scope_node_ids,
 )
 from backend.app.schemas import (
-    AIGC_DEFAULT_IMAGE_MODEL,
     AIGC_MAX_EDGES,
     AIGC_MAX_NODES,
     AIGC_V2_NODE_REGISTRY,
@@ -36,7 +35,7 @@ from backend.app.schemas import (
     VideoNode,
     VideoGenerationNode,
 )
-from backend.app.schemas.aigc import AigcV2Node
+from backend.app.schemas.aigc import AIGC_SEEDREAM_PRO_MODEL, AigcV2Node
 from backend.app.schemas.aigc_definition_migration import migrate_aigc_definition_v2
 from backend.app.schemas.seedance import SEEDANCE_CAPABILITIES, SEEDANCE_DEFAULT_MODEL
 
@@ -440,7 +439,7 @@ def _validate_image_node_connections(
         operation = node.config.operation
         if (
             operation == "layer_decomposition"
-            and node.config.model != AIGC_DEFAULT_IMAGE_MODEL
+            and node.config.model != AIGC_SEEDREAM_PRO_MODEL
         ):
             raise AigcDagValidationError(
                 "model_not_supported_for_operation",

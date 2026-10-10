@@ -3,6 +3,7 @@ import type {
   SeedreamImagePresetSize,
   SeedreamImageSize
 } from "@/lib/aigc/image-dimensions";
+import type { SeedreamModel } from "@/lib/aigc/seedream-models";
 import type {
   SeedanceAspectRatio,
   SeedanceModel,
@@ -357,7 +358,7 @@ export interface JsonParserConfig {
 }
 
 export interface ImageModelConfig {
-  model: string;
+  model: SeedreamModel;
   aspect_ratio: AigcImageAspectRatio;
   size: AigcImageSize;
   format: AigcImageFormat;

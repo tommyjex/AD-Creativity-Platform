@@ -49,7 +49,17 @@ AIGC_LEGACY_DEFINITION_SCHEMA_VERSION = 1
 AIGC_MAX_NODES = 100
 AIGC_MAX_EDGES = 200
 AIGC_DEFAULT_TEXT_MODEL = "doubao-seed-evolving"
-AIGC_DEFAULT_IMAGE_MODEL = "doubao-seedream-5-0-pro-260628"
+AIGC_SEEDREAM_PRO_MODEL = "doubao-seedream-5-0-pro-260628"
+AIGC_SEEDREAM_FLASH_MODEL = "doubao-seedream-5-0-flash-260915"
+AIGC_DEFAULT_IMAGE_MODEL = AIGC_SEEDREAM_PRO_MODEL
+AIGC_IMAGE_MODELS = (
+    AIGC_SEEDREAM_PRO_MODEL,
+    AIGC_SEEDREAM_FLASH_MODEL,
+)
+AigcImageModel = Literal[
+    "doubao-seedream-5-0-pro-260628",
+    "doubao-seedream-5-0-flash-260915",
+]
 AIGC_GENERATED_MEDIA_NAMING_MODEL = "doubao-seed-2-0-mini-260428"
 AIGC_JSON_PARSER_DEFAULT_PATH = "$.items"
 AIGC_JSON_PARSER_MAX_ITEMS = 20
@@ -938,7 +948,7 @@ class JsonParserConfig(SchemaModel):
 
 
 class ImageModelConfig(SchemaModel):
-    model: str = Field(default=AIGC_DEFAULT_IMAGE_MODEL, min_length=1, max_length=255)
+    model: AigcImageModel = AIGC_DEFAULT_IMAGE_MODEL
     aspect_ratio: AigcImageAspectRatio = "1:1"
     size: AigcImageSize = "2K"
     format: AigcImageFormat = "png"
@@ -2107,7 +2117,7 @@ AIGC_NODE_REGISTRY: tuple[AigcNodeRegistryItem, ...] = (
         executable=True,
         inputs=[_port("prompt", "提示词", AigcPortType.TEXT)],
         outputs=[_port("image", "图片", AigcPortType.IMAGE_ASSET)],
-        models=[AIGC_DEFAULT_IMAGE_MODEL],
+        models=list(AIGC_IMAGE_MODELS),
     ),
     AigcNodeRegistryItem(
         type=AigcNodeType.IMAGE_TO_IMAGE,
@@ -2141,7 +2151,7 @@ AIGC_NODE_REGISTRY: tuple[AigcNodeRegistryItem, ...] = (
             _port("edited_layer", "编辑图层", AigcPortType.EDITED_LAYER),
             _port("layers", "图层集", AigcPortType.LAYER_SET),
         ],
-        models=[AIGC_DEFAULT_IMAGE_MODEL],
+        models=list(AIGC_IMAGE_MODELS),
     ),
     AigcNodeRegistryItem(
         type=AigcNodeType.VIDEO_GENERATION,

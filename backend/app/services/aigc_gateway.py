@@ -60,6 +60,10 @@ from backend.app.schemas import (
     VideoSubtitleExtractionConfig,
     validate_multi_track_edit_config,
 )
+from backend.app.schemas.aigc import (
+    AIGC_SEEDREAM_FLASH_MODEL,
+    AIGC_SEEDREAM_PRO_MODEL,
+)
 from backend.app.schemas.common import SchemaModel
 from backend.app.schemas.image_dimensions import (
     SeedreamImageSize,
@@ -135,6 +139,9 @@ from backend.app.services.subtitles import segments_to_srt
 
 AIGC_LLM_EXECUTOR_VERSION = "aigc-llm-v1"
 AIGC_IMAGE_EXECUTOR_VERSION = "aigc-image-v3"
+AIGC_ENABLED_IMAGE_MODELS = frozenset(
+    {AIGC_SEEDREAM_PRO_MODEL, AIGC_SEEDREAM_FLASH_MODEL}
+)
 AIGC_VIDEO_EXECUTOR_VERSION = "aigc-video-v2"
 AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION = "aigc-video-enhancement-v1"
 AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION = "aigc-video-face-blur-v1"
@@ -793,7 +800,7 @@ class AigcModelGateway:
         task: AigcPipelineTaskAttempt,
     ) -> AigcTaskResult:
         params = AigcImageExecutionParams.model_validate(task.params)
-        if params.model != AIGC_DEFAULT_IMAGE_MODEL:
+        if params.model not in AIGC_ENABLED_IMAGE_MODELS:
             raise ValueError("image model is not enabled")
         source_url: str | None = None
         reference_urls: list[str] = []
@@ -982,7 +989,7 @@ class AigcModelGateway:
         task: AigcPipelineTaskAttempt,
     ) -> AigcTaskResult:
         params = AigcImageEditExecutionParams.model_validate(task.params)
-        if params.model != AIGC_DEFAULT_IMAGE_MODEL:
+        if params.model not in AIGC_ENABLED_IMAGE_MODELS:
             raise ValueError("image edit model is not enabled")
         if params.edit_layer is not None:
             return await self._execute_layer_image_edit(task, params)
@@ -1263,7 +1270,7 @@ class AigcModelGateway:
         task: AigcPipelineTaskAttempt,
     ) -> AigcTaskResult:
         params = AigcLayerDecompositionExecutionParams.model_validate(task.params)
-        if params.model != AIGC_DEFAULT_IMAGE_MODEL:
+        if params.model != AIGC_SEEDREAM_PRO_MODEL:
             raise ValueError("layer decomposition model is not enabled")
 
         source = self.repository.get_asset(params.source_asset_id)

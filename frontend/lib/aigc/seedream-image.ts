@@ -4,6 +4,10 @@ import {
   isSeedreamImagePresetSize,
   normalizeSeedreamImageSize
 } from "@/lib/aigc/image-dimensions";
+import {
+  SEEDREAM_DEFAULT_MODEL,
+  seedreamModelSupportsOperation
+} from "@/lib/aigc/seedream-models";
 import type {
   AigcEdge,
   AigcImageOperation,
@@ -66,6 +70,9 @@ export function normalizeSeedreamImageConfig(
   previousOperation?: AigcImageOperation
 ): ImageToImageConfig {
   const operation = config.operation ?? "image_to_image";
+  const model = seedreamModelSupportsOperation(config.model, operation)
+    ? config.model
+    : SEEDREAM_DEFAULT_MODEL;
   let size: AigcImageToImageSize = config.size;
 
   if (
@@ -88,6 +95,7 @@ export function normalizeSeedreamImageConfig(
 
   return {
     ...config,
+    model,
     operation,
     size
   } as ImageToImageConfig;

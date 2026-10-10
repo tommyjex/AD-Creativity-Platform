@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { createAigcEditorStore } from "@/lib/aigc/editor-store";
+import { normalizeSeedreamImageConfig } from "@/lib/aigc/seedream-image";
 import type {
   AigcNode,
-  AigcPipelineDefinition
+  AigcPipelineDefinition,
+  ImageToImageConfig
 } from "@/lib/aigc/types";
 
 function definitionWithImageSize(
@@ -56,6 +58,14 @@ function seedreamConfig(
 }
 
 describe("AIGC image config serialization", () => {
+  const baseConfig: ImageToImageConfig = {
+    model: "doubao-seedream-5-0-pro-260628",
+    operation: "image_to_image",
+    aspect_ratio: "1:1",
+    size: "2K",
+    format: "png"
+  };
+
   it("migrates legacy definitions to schemaVersion 2 and normalizes custom sizes", () => {
     const legacy = storeFor(definitionWithImageSize("2K"));
     const custom = storeFor(
@@ -115,4 +125,36 @@ describe("AIGC image config serialization", () => {
       });
     }
   );
+
+  it("keeps Flash for image generation and editing operations", () => {
+    for (const operation of ["image_to_image", "image_edit"] as const) {
+      expect(
+        normalizeSeedreamImageConfig({
+          ...baseConfig,
+          model: "doubao-seedream-5-0-flash-260915",
+          operation
+        })
+      ).toMatchObject({
+        model: "doubao-seedream-5-0-flash-260915",
+        operation
+      });
+    }
+  });
+
+  it("switches Flash to Pro when entering layer decomposition", () => {
+    expect(
+      normalizeSeedreamImageConfig(
+        {
+          ...baseConfig,
+          model: "doubao-seedream-5-0-flash-260915",
+          operation: "layer_decomposition"
+        },
+        "image_to_image"
+      )
+    ).toMatchObject({
+      model: "doubao-seedream-5-0-pro-260628",
+      operation: "layer_decomposition",
+      size: "auto"
+    });
+  });
 });

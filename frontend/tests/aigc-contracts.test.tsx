@@ -10,6 +10,7 @@ import {
   AIGC_NODE_REGISTRY
 } from "@/lib/aigc/node-registry";
 import { createAigcEditorStore } from "@/lib/aigc/editor-store";
+import { SEEDREAM_FLASH_MODEL } from "@/lib/aigc/seedream-models";
 import {
   AIGC_V2_NODE_TYPES,
   type AigcPipelineDefinition,
@@ -62,7 +63,7 @@ describe("AIGC contracts", () => {
       AIGC_NODE_REGISTRY.find((item) => item.type === "image_to_image")
     ).toMatchObject({
       executable: true,
-      models: [AIGC_DEFAULT_IMAGE_MODEL],
+      models: [AIGC_DEFAULT_IMAGE_MODEL, SEEDREAM_FLASH_MODEL],
       inputs: [
         {
           id: "image",

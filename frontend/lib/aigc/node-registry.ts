@@ -19,9 +19,13 @@ import {
 import { AIGC_DEFAULT_VIDEO_ENHANCEMENT_CONFIG } from "@/lib/aigc/video-enhancement";
 import { AIGC_DEFAULT_VIDEO_FACE_BLUR_CONFIG } from "@/lib/aigc/video-face-blur";
 import { AIGC_DEFAULT_MULTI_TRACK_EDIT_CONFIG } from "@/lib/aigc/multitrack";
+import {
+  SEEDREAM_DEFAULT_MODEL,
+  SEEDREAM_MODELS
+} from "@/lib/aigc/seedream-models";
 
 export const AIGC_DEFAULT_TEXT_MODEL = "doubao-seed-evolving";
-export const AIGC_DEFAULT_IMAGE_MODEL = "doubao-seedream-5-0-pro-260628";
+export const AIGC_DEFAULT_IMAGE_MODEL = SEEDREAM_DEFAULT_MODEL;
 export const AIGC_DEFAULT_JSON_PATH = "$.items";
 export const AIGC_DEFAULT_IMAGE_OPERATION = "image_to_image" as const;
 export const AIGC_DEFAULT_VIDEO_CONFIG: VideoGenerationConfig = {
@@ -99,7 +103,7 @@ const AIGC_MODEL_CONTROL_NODE_REGISTRY = [
     executable: true,
     inputs: [port("prompt", "提示词", "text")],
     outputs: [port("image", "图片", "image_asset")],
-    models: [AIGC_DEFAULT_IMAGE_MODEL]
+    models: SEEDREAM_MODELS.map((model) => model.id)
   },
   {
     type: "image_to_image",
@@ -124,7 +128,7 @@ const AIGC_MODEL_CONTROL_NODE_REGISTRY = [
       port("edited_layer", "编辑图层", "edited_layer"),
       port("layers", "图层集", "layer_set")
     ],
-    models: [AIGC_DEFAULT_IMAGE_MODEL]
+    models: SEEDREAM_MODELS.map((model) => model.id)
   },
   {
     type: "video_generation",

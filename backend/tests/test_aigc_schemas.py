@@ -793,6 +793,24 @@ def test_restricted_image_operations_keep_their_existing_size_sets(
     assert config.size == size
 
 
+@pytest.mark.parametrize(
+    "model",
+    [
+        "doubao-seedream-5-0-pro-260628",
+        "doubao-seedream-5-0-flash-260915",
+    ],
+)
+def test_image_model_config_accepts_supported_seedream_models(model: str) -> None:
+    config = ImageModelConfig(model=model)
+
+    assert config.model == model
+
+
+def test_image_model_config_rejects_unknown_model() -> None:
+    with pytest.raises(ValidationError):
+        ImageModelConfig(model="unknown-image-model")
+
+
 def test_layer_nodes_have_serializable_default_configs() -> None:
     definition = AigcPipelineDefinition.model_validate(
         {
