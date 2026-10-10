@@ -226,93 +226,107 @@ export function AigcWorkspace({
 
   return (
     <main
-      className="w-full max-w-none bg-[#0b0f14] bg-[radial-gradient(circle_at_12%_14%,rgba(66,153,255,0.18)_0_1px,transparent_1.5px),radial-gradient(circle_at_83%_20%,rgba(255,130,73,0.15)_0_1px,transparent_1.5px),linear-gradient(rgba(116,142,171,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(116,142,171,0.08)_1px,transparent_1px)] bg-[size:auto,auto,36px_36px,36px_36px] px-3 py-6 text-slate-100 sm:px-4 sm:py-8 lg:px-5"
+      className="min-h-[calc(100dvh-4rem)] w-full bg-[#090d0c] px-4 py-8 text-slate-100 sm:px-6 sm:py-10 lg:px-8"
       data-testid="aigc-workspace"
     >
-      <header className="border-b border-slate-700/80 pb-5">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <p className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-sky-400">
-              DAG creation workspace
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold text-slate-50">
-              星图创作台
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-              从模板快速建立生成流程，或维护可重复执行的节点画布。
-            </p>
-            {!canWrite ? (
-              <ReadOnlyNotice className="mt-3 max-w-xl border-slate-700 bg-slate-900/80 text-slate-400" />
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="border border-slate-700 bg-slate-900/80 px-3 py-1.5 font-mono text-xs text-slate-300">
-              {activeData?.total ?? 0} 个{view === "templates" ? "模板" : "画布"}
+      <div
+        className="mx-auto w-full max-w-[1400px]"
+        data-testid="aigc-workspace-content"
+      >
+        <header className="border-b border-white/10 pb-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-mono text-[0.68rem] font-semibold uppercase text-emerald-400">
+                DAG CREATION WORKSPACE
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold text-white sm:text-4xl">
+                星图创作台
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+                从模板快速建立生成流程，或维护可重复执行的节点画布。
+              </p>
+              {!canWrite ? (
+                <ReadOnlyNotice className="mt-3 max-w-xl border-white/10 bg-white/[0.035] text-slate-400" />
+              ) : null}
+            </div>
+            <span className="w-fit shrink-0 rounded-full border border-emerald-400/20 bg-emerald-400/[0.07] px-3 py-1.5 font-mono text-xs text-emerald-200">
+              {activeData?.total ?? 0} 个
+              {view === "templates" ? "模板" : "画布"}
             </span>
-            {canWrite ? <Button
-              className="bg-sky-500 text-slate-950 hover:bg-sky-400"
-              onClick={() => setIsCreateOpen(true)}
-              type="button"
-            >
-              <Plus className="h-4 w-4" />
-              新建空白画布
-            </Button> : null}
           </div>
-        </div>
-      </header>
+        </header>
 
-      <section className="mt-5 flex flex-col gap-3 border-b border-slate-700/80 pb-5 lg:flex-row lg:items-center lg:justify-between">
-        <div
-          aria-label="AIGC 视图"
-          className="flex w-full gap-1 border border-slate-700 bg-slate-950/60 p-1 sm:w-fit"
-          role="tablist"
+        <section
+          className="mt-5 flex flex-col gap-3 border-b border-white/10 pb-5 lg:flex-row lg:items-center lg:justify-between"
+          data-testid="aigc-workspace-toolbar"
         >
-          <ViewButton
-            active={view === "templates"}
-            icon={<FileStack className="h-4 w-4" />}
-            label="画布模板"
-            onClick={() => changeView("templates")}
-          />
-          <ViewButton
-            active={view === "pipelines"}
-            icon={<Workflow className="h-4 w-4" />}
-            label="我的画布"
-            onClick={() => changeView("pipelines")}
-          />
-        </div>
-
-        <form className="flex w-full gap-2 lg:max-w-md" onSubmit={submitSearch}>
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              aria-label="按名称筛选"
-              className="border-slate-700 bg-slate-950/70 pl-9 text-slate-100 placeholder:text-slate-500"
-              onChange={(event) => setDraftQuery(event.target.value)}
-              placeholder="按名称筛选"
-              value={draftQuery}
+          <div
+            aria-label="AIGC 视图"
+            className="flex w-full gap-1 border border-white/10 bg-black/20 p-1 sm:w-fit"
+            role="tablist"
+          >
+            <ViewButton
+              active={view === "templates"}
+              icon={<FileStack className="h-4 w-4" />}
+              label="画布模板"
+              onClick={() => changeView("templates")}
+            />
+            <ViewButton
+              active={view === "pipelines"}
+              icon={<Workflow className="h-4 w-4" />}
+              label="我的画布"
+              onClick={() => changeView("pipelines")}
             />
           </div>
-          {draftQuery || query ? (
-            <Button
-              aria-label="清空筛选"
-              onClick={clearSearch}
-              size="icon"
-              title="清空筛选"
-              type="button"
-              variant="ghost"
+
+          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+            <form
+              className="flex min-w-0 flex-1 gap-2 lg:w-[25rem]"
+              onSubmit={submitSearch}
             >
-              <Eraser className="h-4 w-4" />
-            </Button>
-          ) : null}
-          <Button
-            className="border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-white"
-            type="submit"
-            variant="outline"
-          >
-            筛选
-          </Button>
-        </form>
-      </section>
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  aria-label="按名称筛选"
+                  className="border-white/10 bg-black/20 pl-9 text-slate-100 placeholder:text-slate-600 focus-visible:ring-emerald-400"
+                  onChange={(event) => setDraftQuery(event.target.value)}
+                  placeholder="按名称筛选"
+                  value={draftQuery}
+                />
+              </div>
+              {draftQuery || query ? (
+                <Button
+                  aria-label="清空筛选"
+                  className="border-white/10 text-slate-400 hover:bg-white/[0.055] hover:text-white"
+                  onClick={clearSearch}
+                  size="icon"
+                  title="清空筛选"
+                  type="button"
+                  variant="outline"
+                >
+                  <Eraser className="h-4 w-4" />
+                </Button>
+              ) : null}
+              <Button
+                className="border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08] hover:text-white"
+                type="submit"
+                variant="outline"
+              >
+                筛选
+              </Button>
+            </form>
+            {canWrite ? (
+              <Button
+                className="bg-emerald-400 text-[#06100c] hover:bg-emerald-300"
+                onClick={() => setIsCreateOpen(true)}
+                type="button"
+              >
+                <Plus className="h-4 w-4" />
+                新建空白画布
+              </Button>
+            ) : null}
+          </div>
+        </section>
 
       {errorMessage ? (
         <div
@@ -323,17 +337,17 @@ export function AigcWorkspace({
             <AlertCircle className="h-4 w-4 shrink-0" />
             {errorMessage}
           </span>
-          <Button
-            onClick={() => {
-              setFeedback(null);
-              void activeQuery.refetch();
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            重试
-          </Button>
+            <Button
+              onClick={() => {
+                setFeedback(null);
+                void activeQuery.refetch();
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              重试
+            </Button>
         </div>
       ) : null}
 
@@ -495,6 +509,7 @@ export function AigcWorkspace({
         open={thumbnailPipeline !== null}
         pipeline={thumbnailPipeline}
       /> : null}
+      </div>
     </main>
   );
 }
@@ -514,10 +529,10 @@ function ViewButton({
     <button
       aria-selected={active}
       className={cn(
-        "flex min-h-9 flex-1 items-center justify-center gap-2 rounded px-4 text-sm font-semibold transition sm:flex-none",
+        "flex min-h-9 flex-1 items-center justify-center gap-2 px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:flex-none",
         active
-          ? "bg-slate-800 text-sky-300 shadow-sm"
-          : "text-slate-400 hover:bg-slate-900 hover:text-slate-100"
+          ? "bg-emerald-400/10 text-emerald-300"
+          : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-100"
       )}
       onClick={onClick}
       role="tab"

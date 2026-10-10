@@ -195,15 +195,52 @@ describe("AIGC workspace list", () => {
     ).toHaveAttribute("href", "/workspace/aigc/templates/template-1");
   });
 
-  it("renders the constellation workspace shell and current view total", () => {
+  it("renders the constrained constellation workspace shell and current view total", () => {
     renderWorkspace();
 
     expect(screen.getByTestId("aigc-workspace")).toHaveClass(
-      "bg-[#0b0f14]",
+      "bg-[#090d0c]",
       "text-slate-100"
     );
-    expect(screen.getByText("星图创作台")).toBeInTheDocument();
-    expect(screen.getByText("1 个模板")).toBeInTheDocument();
+    expect(screen.getByTestId("aigc-workspace-content")).toHaveClass(
+      "mx-auto",
+      "max-w-[1400px]"
+    );
+    expect(screen.getByText("DAG CREATION WORKSPACE")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "星图创作台" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 个模板")).toHaveClass(
+      "rounded-full",
+      "border-emerald-400/20"
+    );
+  });
+
+  it("keeps tabs, submitted search, clear action and creation in one responsive toolbar", () => {
+    renderWorkspace();
+
+    expect(screen.getByTestId("aigc-workspace-toolbar")).toHaveClass(
+      "flex-col",
+      "lg:flex-row"
+    );
+    expect(
+      screen.getByRole("tablist", { name: "AIGC 视图" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "按名称筛选" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "新建空白画布" })
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "按名称筛选" }), {
+      target: { value: "商品" }
+    });
+    expect(
+      screen.getByRole("button", { name: "清空筛选" })
+    ).toBeInTheDocument();
+    expect(apiMocks.listAigcTemplates).not.toHaveBeenCalled();
   });
 
   it("renders preview metadata and a missing-description fallback", () => {
