@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { afterEach, describe, expect, it } from "vitest";
 import nextConfig from "../next.config.mjs";
 
@@ -12,6 +14,21 @@ afterEach(() => {
 });
 
 describe("Next.js API rewrites", () => {
+  it("provides an explicit local HTTPS development command", async () => {
+    const packageJson = JSON.parse(
+      await readFile("package.json", "utf8")
+    );
+
+    expect(packageJson.scripts["cert:https"]).toBe(
+      "../scripts/setup_local_https.sh"
+    );
+    expect(packageJson.scripts["dev:https"]).toBe(
+      "npm run cert:https && next dev --webpack --hostname localhost --experimental-https " +
+        "--experimental-https-cert .certificates/localhost.pem " +
+        "--experimental-https-key .certificates/localhost-key.pem"
+    );
+  });
+
   it("allows large uploads to outlive the default 30-second proxy timeout", () => {
     expect(nextConfig.experimental.proxyClientMaxBodySize).toBe("200mb");
     expect(nextConfig.experimental.proxyTimeout).toBe(900_000);

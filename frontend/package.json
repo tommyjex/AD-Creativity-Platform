@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "cert:https": "../scripts/setup_local_https.sh",
+    "dev:https": "npm run cert:https && next dev --webpack --hostname localhost --experimental-https --experimental-https-cert .certificates/localhost.pem --experimental-https-key .certificates/localhost-key.pem",
     "build": "next build",
     "start": "next start",
     "acceptance:aigc": "node scripts/create-aigc-acceptance-fixture.mjs",

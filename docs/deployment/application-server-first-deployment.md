@@ -184,13 +184,15 @@ FastAPI 启动时会执行 `init_database()`，随后启动进程内 AIGC Worker
 
 ### 3.4 域名和证书
 
-准备一个域名，例如：
+生产域名为：
 
 ```text
-ad.example.com
+ad-creativity.tech
 ```
 
-将域名 A 记录指向应用服务器公网 IP。建议前后端使用同一域名，避免额外的跨域配置。
+将域名 A 记录指向应用服务器公网 IP。前后端使用同一域名，避免额外的跨域配置。
+当前正式证书只覆盖 `ad-creativity.tech`，不覆盖 `www.ad-creativity.tech`；
+在申请包含 `www` 的新证书前，不要为该主机名配置生产入口。
 
 ### 3.5 公开部署安全要求
 
@@ -303,10 +305,10 @@ sudo -u adcreative npm ci
 APP_ENV=production
 
 # 认证与同源策略
-CORS_ORIGINS=https://ad.example.com
+CORS_ORIGINS=https://ad-creativity.tech
 ALLOW_INSECURE_CORS=false
 ALLOW_INSECURE_AUTH_COOKIE=false
-SITE_ORIGIN=https://ad.example.com
+SITE_ORIGIN=https://ad-creativity.tech
 AUTH_COOKIE_SECURE=true
 AUTH_SESSION_IDLE_SECONDS=43200
 AUTH_SESSION_ABSOLUTE_SECONDS=604800
@@ -370,7 +372,7 @@ TLS Topic 和所有密钥，避免生产服务连接测试资源或把日志写�
 ```dotenv
 CORS_ORIGINS=*
 ALLOW_INSECURE_CORS=true
-SITE_ORIGIN=https://ad.example.com
+SITE_ORIGIN=https://example.invalid
 ```
 
 `ALLOW_INSECURE_CORS` 去除首尾空白后仅接受精确小写 `true` 或 `false`；
@@ -386,7 +388,7 @@ query、fragment 或内部空白，path 仅允许为空或 `/`。其他生产配
 `CORS_ORIGINS` 中。
 
 `CORS_ORIGINS` 按逗号拆分并去除每个条目的首尾空白。只有独立条目精确为
-`*` 时才进入通配模式；例如 `https://ad.example.com/*` 是带 path 的非法
+`*` 时才进入通配模式；例如 `https://example.invalid/*` 是带 path 的非法
 Origin，不会被视为 wildcard。
 
 该模式下，服务端不会返回允许携带凭证的 CORS 授权；即使请求包含认证
@@ -605,82 +607,53 @@ sudo systemctl status ad-creativity-frontend --no-pager
 
 ## 12. 配置 Nginx
 
-创建 `/etc/nginx/sites-available/ad-creativity`：
-
-```nginx
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ad.example.com;
-
-    client_max_body_size 2g;
-
-    location ^~ /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Request-ID $request_id;
-
-        proxy_connect_timeout 30s;
-        proxy_send_timeout 3600s;
-        proxy_read_timeout 3600s;
-        proxy_buffering off;
-        proxy_request_buffering off;
-    }
-
-    location = /health {
-        proxy_pass http://127.0.0.1:8000/health;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Request-ID $request_id;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-```
-
-启用站点并检查配置：
+仓库中的 `deploy/nginx/ad-creativity.conf` 是生产站点配置的事实来源，包含
+HTTP 到 HTTPS 跳转、TLS 1.2/1.3、HSTS、2 GB 上传限制、长任务超时以及
+Next.js/FastAPI 反向代理。安装并启用：
 
 ```bash
-sudo ln -s \
+cd /opt/ad-creativity/app
+sudo install -m 644 \
+  deploy/nginx/ad-creativity.conf \
+  /etc/nginx/sites-available/ad-creativity
+
+sudo ln -sfn \
   /etc/nginx/sites-available/ad-creativity \
   /etc/nginx/sites-enabled/ad-creativity
 
 sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
 ```
 
 ## 13. 配置 HTTPS
 
-可以使用云负载均衡证书，也可以在服务器安装 Certbot：
+证书 tar 包必须通过团队批准的密钥交付渠道传到服务器受限目录，不得复制到
+Git 仓库。安装脚本会校验归档结构、证书 SAN、至少 14 天剩余有效期和证钥
+匹配，随后以 `0644/0600` 权限原子安装并执行 `nginx -t`：
 
 ```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d ad.example.com
-sudo certbot renew --dry-run
+cd /opt/ad-creativity/app
+sudo scripts/install_nginx_certificate.sh \
+  /secure/path/ad-creativity.tech_nginx.tar
 ```
 
-确认 HTTP 自动跳转 HTTPS。
+目标路径为：
 
-若由云负载均衡终止 TLS，应只允许负载均衡安全组访问应用服务器，并明确
-“负载均衡 HTTPS -> Nginx HTTP”回源方式；不要同时让公网直接访问 Nginx。
+```text
+/etc/nginx/ssl/ad-creativity.tech/fullchain.pem
+/etc/nginx/ssl/ad-creativity.tech/privkey.pem
+```
+
+当前证书有效期截至 2027-04-26 23:59:59 UTC。运维负责人应在到期前至少
+30 天申请替换证书并重新运行安装脚本。已有证书会备份为带 UTC 时间戳的
+`.bak` 文件。若上线后需要回滚，恢复同一时间戳的证书和私钥后执行：
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+脚本在 `nginx -t` 失败时会自动恢复旧文件且不 reload；reload 失败时会保留
+备份路径供人工恢复。
 
 ## 14. 首次启动验收
 
@@ -700,18 +673,22 @@ sudo ss -lntp | grep -E ':(3000|8000|80|443)\b'
 
 ```bash
 curl --fail http://127.0.0.1:8000/health
-curl --fail https://ad.example.com/health
+curl -I http://ad-creativity.tech/health
+curl --fail https://ad-creativity.tech/health
+openssl s_client \
+  -connect ad-creativity.tech:443 \
+  -servername ad-creativity.tech </dev/null
 ```
 
 注意：`/health` 当前只代表 FastAPI 进程可用，不验证 MySQL、TOS 或 Ark。
-预期响应包含 `"status":"ok"`。
+HTTP 应返回 301 并保留路径与查询参数；HTTPS 响应应包含 `"status":"ok"`。
 
 ### 14.3 首个管理员初始化
 
 首次部署认证版本或升级后尚无用户时，在浏览器打开：
 
 ```text
-https://ad.example.com/setup
+https://ad-creativity.tech/setup
 ```
 
 页面应显示首次初始化表单。由管理员现场设置用户名、显示名称和密码；密码不得
@@ -897,7 +874,9 @@ curl --fail http://127.0.0.1:8000/health
 ## 18. 上线检查清单
 
 - [ ] 域名解析正确。
-- [ ] HTTPS 证书有效且可自动续期。
+- [ ] HTTPS 证书 SAN 精确覆盖 `ad-creativity.tech`，未配置不受支持的 `www` 主机名。
+- [ ] 已记录证书替换负责人和到期前操作日期；当前证书到期时间为 2027-04-26。
+- [ ] HTTP 保留路径和查询参数跳转 HTTPS；TLS 1.2/1.3、HSTS 和基础安全头已验证。
 - [ ] 安全组只开放必要端口。
 - [ ] MySQL 使用私网地址并限制白名单。
 - [ ] 数据库结构与部署 commit 匹配。

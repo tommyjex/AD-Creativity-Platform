@@ -23,11 +23,12 @@
 - npm
 - MySQL 8.0 或兼容版本
 - FFmpeg（需要生成最终成片或烧录字幕时）
+- mkcert（仅本地可信 HTTPS 开发需要）
 
 macOS 可执行：
 
 ```bash
-brew install python node mysql ffmpeg
+brew install python node mysql ffmpeg mkcert
 ```
 
 确认版本：
@@ -185,6 +186,28 @@ npm run dev
 ```
 
 打开 `http://localhost:3000`。
+
+需要通过本地可信 HTTPS 访问时，将根目录 `.env` 中的认证来源改为：
+
+```dotenv
+APP_ENV=local
+CORS_ORIGINS=https://localhost:3000
+SITE_ORIGIN=https://localhost:3000
+AUTH_COOKIE_SECURE=true
+```
+
+然后启动 HTTPS 前端：
+
+```bash
+cd frontend
+npm run dev:https
+```
+
+首次执行会使用 `mkcert` 初始化本机开发 CA，并在已被 Git 忽略的
+`frontend/.certificates/` 中生成 localhost 证书。打开
+`https://localhost:3000`。浏览器 API 请求仍使用同源 `/api/...`，后端内部
+连接保持 HTTP。`npm run dev` 继续提供原有 HTTP 开发方式；切换回 HTTP 时也要
+将 `.env` 中的 Origin 和 `AUTH_COOKIE_SECURE` 恢复为 HTTP 配置。
 
 若本地 FastAPI 使用其他地址，在 `frontend/.env.local` 中设置服务端内部地址：
 
