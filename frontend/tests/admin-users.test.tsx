@@ -87,6 +87,62 @@ describe("admin user management", () => {
     expect(await screen.findByText("creative.user")).toBeInTheDocument();
   });
 
+  it.each([7, 33])(
+    "rejects a %i-character password when creating a user",
+    async (length) => {
+      const client = makeClient();
+      render(<UserManagement client={client} currentUser={admin} />);
+      await screen.findByText("reviewer");
+
+      fireEvent.click(screen.getByRole("button", { name: "创建用户" }));
+      fill("用户名", "creative.user");
+      fill("显示名称", "创作用户");
+      fill("临时密码", "x".repeat(length));
+      fill("确认临时密码", "x".repeat(length));
+      fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
+      expect(screen.getByText("密码需为 8 至 32 个字符。")).toBeVisible();
+      expect(client.createUser).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([8, 32])(
+    "accepts a %i-character password when creating a user",
+    async (length) => {
+      const created = makeUser({
+        display_name: "创作用户",
+        id: `creator-${length}`,
+        role: "creator",
+        username: "creative.user"
+      });
+      const client = makeClient({
+        createUser: vi.fn().mockResolvedValue(created)
+      });
+      render(<UserManagement client={client} currentUser={admin} />);
+      await screen.findByText("reviewer");
+      const password = "x".repeat(length);
+
+      fireEvent.click(screen.getByRole("button", { name: "创建用户" }));
+      fill("用户名", "creative.user");
+      fill("显示名称", "创作用户");
+      fireEvent.change(screen.getByLabelText("角色"), {
+        target: { value: "creator" }
+      });
+      fill("临时密码", password);
+      fill("确认临时密码", password);
+      fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
+      await waitFor(() => {
+        expect(client.createUser).toHaveBeenCalledWith({
+          display_name: "创作用户",
+          password,
+          role: "creator",
+          username: "creative.user"
+        });
+      });
+    }
+  );
+
   it("shows a readable username conflict in the create dialog", async () => {
     const client = makeClient({
       createUser: vi.fn().mockRejectedValue(
@@ -181,6 +237,25 @@ describe("admin user management", () => {
       "reviewer 的临时密码已重置"
     );
   });
+
+  it.each([7, 33])(
+    "rejects a %i-character temporary password during reset",
+    async (length) => {
+      const client = makeClient();
+      render(<UserManagement client={client} currentUser={admin} />);
+      await screen.findByText("reviewer");
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "重置 reviewer 的密码" })
+      );
+      fill("新临时密码", "x".repeat(length));
+      fill("确认新临时密码", "x".repeat(length));
+      fireEvent.click(screen.getByRole("button", { name: "确认重置" }));
+
+      expect(screen.getByText("密码需为 8 至 32 个字符。")).toBeVisible();
+      expect(client.resetUserPassword).not.toHaveBeenCalled();
+    }
+  );
 
   it("keeps the dialog open and explains the last-admin conflict", async () => {
     const client = makeClient({

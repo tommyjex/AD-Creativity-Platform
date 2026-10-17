@@ -128,7 +128,7 @@ export function SetupForm({
           id="setup-password"
           label="密码"
           name="password"
-          placeholder="12 至 128 个字符"
+          placeholder="8 至 32 个字符"
           type="password"
         />
         <AuthField

@@ -765,8 +765,8 @@ function validatePassword(
   confirmPassword: string,
   username: string
 ): string | null {
-  if (password.length < 12 || password.length > 128) {
-    return "密码需为 12 至 128 个字符。";
+  if (password.length < 8 || password.length > 32) {
+    return "密码需为 8 至 32 个字符。";
   }
   if (password.toLowerCase() === username.trim().toLowerCase()) {
     return "密码不能与用户名相同。";

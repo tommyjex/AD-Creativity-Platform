@@ -111,7 +111,7 @@ export function ChangePasswordForm({
           id="change-new-password"
           label="新密码"
           name="newPassword"
-          placeholder="12 至 128 个字符"
+          placeholder="8 至 32 个字符"
           type="password"
         />
         <AuthField

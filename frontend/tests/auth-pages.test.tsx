@@ -59,10 +59,52 @@ describe("authentication forms", () => {
       await screen.findByText(/用户名需为 3 至 64 位/)
     ).toBeVisible();
     expect(screen.getByText("请输入显示名称。")).toBeVisible();
-    expect(screen.getByText("密码需为 12 至 128 个字符。")).toBeVisible();
+    expect(screen.getByText("密码需为 8 至 32 个字符。")).toBeVisible();
     expect(screen.getByText("两次输入的密码不一致。")).toBeVisible();
     expect(setup).not.toHaveBeenCalled();
   });
+
+  it.each([7, 33])(
+    "rejects a %i-character password during setup",
+    async (length) => {
+      const setup = vi.fn();
+      render(<SetupForm client={{ setup }} />);
+
+      fill("管理员用户名", "admin.user");
+      fill("显示名称", "管理员");
+      fill("密码", "x".repeat(length));
+      fill("确认密码", "x".repeat(length));
+      submit("创建管理员");
+
+      expect(
+        await screen.findByText("密码需为 8 至 32 个字符。")
+      ).toBeVisible();
+      expect(setup).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([8, 32])(
+    "accepts a %i-character password during setup",
+    async (length) => {
+      const setup = vi.fn().mockResolvedValue(user);
+      render(<SetupForm client={{ setup }} />);
+      const password = "x".repeat(length);
+
+      fill("管理员用户名", "admin.user");
+      fill("显示名称", "管理员");
+      fill("密码", password);
+      fill("确认密码", password);
+      submit("创建管理员");
+
+      await waitFor(() => {
+        expect(setup).toHaveBeenCalledWith({
+          display_name: "管理员",
+          password,
+          username: "admin.user"
+        });
+      });
+    }
+  );
 
   it("prevents duplicate setup submissions while the request is pending", async () => {
     let resolveSetup!: (value: AuthUser) => void;

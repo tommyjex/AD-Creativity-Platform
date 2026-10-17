@@ -56,7 +56,7 @@ export function validateUsername(username: string): string | null {
 }
 
 export function validatePassword(password: string): string | null {
-  return password.length >= 12 && password.length <= 128
+  return password.length >= 8 && password.length <= 32
     ? null
-    : "密码需为 12 至 128 个字符。";
+    : "密码需为 8 至 32 个字符。";
 }
