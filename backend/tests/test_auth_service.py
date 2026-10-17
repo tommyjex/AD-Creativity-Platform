@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from argon2 import PasswordHasher
+from pydantic import ValidationError
 
 from backend.app.core.config import Settings
 from backend.app.repositories import InMemoryRepository
@@ -12,7 +13,9 @@ from backend.app.schemas.auth import (
     CreateUserRequest,
     LoginRequest,
     SetupRequest,
+    UserRecord,
     UserRole,
+    validate_password,
 )
 from backend.app.services.auth import (
     AUTHENTICATION_FAILED_MESSAGE,
@@ -55,6 +58,53 @@ def _setup(service: AuthService):
             password="correct horse battery staple",
         )
     )
+
+
+@pytest.mark.parametrize("length", [8, 32])
+def test_new_password_accepts_policy_boundaries(length: int) -> None:
+    password = "x" * length
+
+    assert validate_password(password, "admin.user") == password
+
+
+@pytest.mark.parametrize("length", [7, 33])
+def test_new_password_rejects_values_outside_policy(length: int) -> None:
+    with pytest.raises(
+        ValueError,
+        match="password must be between 8 and 32 characters",
+    ):
+        validate_password("x" * length, "admin.user")
+
+
+def test_login_accepts_existing_password_longer_than_new_policy(
+    auth_context,
+) -> None:
+    repository, service, _ = auth_context
+    legacy_password = "L" * 64
+    user = UserRecord(
+        username="legacy.admin",
+        display_name="Legacy Admin",
+        password_hash=PasswordHasher(
+            time_cost=1,
+            memory_cost=1024,
+            parallelism=1,
+        ).hash(legacy_password),
+        role=UserRole.ADMIN,
+        must_change_password=False,
+    )
+    repository.create_user(user)
+
+    authenticated = service.login(
+        LoginRequest(username=user.username, password=legacy_password),
+        source_ip="192.0.2.50",
+    )
+
+    assert authenticated.user.id == user.id
+
+
+def test_login_rejects_password_over_compatibility_limit() -> None:
+    with pytest.raises(ValidationError):
+        LoginRequest(username="legacy.admin", password="x" * 129)
 
 
 def test_setup_hashes_password_and_only_persists_token_digest(

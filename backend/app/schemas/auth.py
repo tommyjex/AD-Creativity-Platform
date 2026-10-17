@@ -10,8 +10,9 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from .common import SchemaModel, utc_now
 
 USERNAME_PATTERN = re.compile(r"^[a-z0-9._-]{3,64}$")
-PASSWORD_MIN_LENGTH = 12
-PASSWORD_MAX_LENGTH = 128
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_MAX_LENGTH = 32
+LOGIN_PASSWORD_MAX_LENGTH = 128
 
 
 class UserRole(str, Enum):
@@ -32,7 +33,7 @@ def normalize_username(value: str) -> str:
 
 def validate_password(password: str, username: str) -> str:
     if not PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH:
-        raise ValueError("password must be between 12 and 128 characters")
+        raise ValueError("password must be between 8 and 32 characters")
     if password.casefold() == normalize_username(username).casefold():
         raise ValueError("password must not match username")
     return password
@@ -66,7 +67,10 @@ class SetupRequest(UsernameRequest):
 
 
 class LoginRequest(UsernameRequest):
-    password: SecretStr = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
+    password: SecretStr = Field(
+        min_length=1,
+        max_length=LOGIN_PASSWORD_MAX_LENGTH,
+    )
 
 
 class ChangePasswordRequest(SchemaModel):
