@@ -52,6 +52,7 @@ _SAFE_CONTEXT_FIELDS = frozenset(
         "provider_task_id",
         "model",
         "phase",
+        "stage",
         "operation",
         "route",
         "method",
@@ -60,6 +61,7 @@ _SAFE_CONTEXT_FIELDS = frozenset(
         "error_type",
         "error_code",
         "error_stage",
+        "validation_error_type",
         "actor_user_id",
         "target_user_id",
         "username_digest",
@@ -284,11 +286,13 @@ def emit_tls_only_event(
     *,
     outcome: Outcome,
     output_text: str,
+    exception_message: str | None = None,
     **context: Any,
 ) -> None:
     """Queue a TLS-only audit event without mirroring its raw output locally."""
 
-    encoded_output = output_text.encode("utf-8")[:_TLS_RAW_OUTPUT_MAX_BYTES]
+    encoded = output_text.encode("utf-8")
+    encoded_output = encoded[:_TLS_RAW_OUTPUT_MAX_BYTES]
     raw_output = encoded_output.decode("utf-8", errors="ignore")
     payload = {
         "event": event,
@@ -296,8 +300,12 @@ def emit_tls_only_event(
         **get_log_context(),
         **_filter_context(context),
         "output_text": raw_output,
-        "output_truncated": len(encoded_output) < len(output_text.encode("utf-8")),
+        "output_truncated": len(encoded_output) < len(encoded),
     }
+    if exception_message is not None:
+        payload["exception_message"] = exception_message[
+            :_TLS_EXCEPTION_MESSAGE_MAX_LENGTH
+        ]
     for handler in logging.getLogger().handlers:
         if isinstance(handler, TlsLogHandler):
             handler.sink.emit(payload)

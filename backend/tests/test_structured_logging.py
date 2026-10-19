@@ -3,14 +3,25 @@ import json
 import logging
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 from backend.app.core.logging import (
     JsonStdoutFormatter,
     bind_log_context,
+    emit_tls_only_event,
     log_event,
     reset_log_context,
     sanitize_value,
 )
+from backend.app.core.tls_logging import TlsLogHandler
+
+
+class _CapturingSink:
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    def emit(self, event: dict[str, Any]) -> None:
+        self.events.append(event)
 
 
 def _logger_with_output() -> tuple[logging.Logger, StringIO]:
@@ -170,6 +181,89 @@ def test_explicit_error_fields_override_inference_and_tls_message_is_bounded() -
         assert event["error_type"] == "GatewayError"
     assert "exception_message" not in stdout_event
     assert tls_event["exception_message"] == "x" * 500
+
+
+def test_tls_only_event_keeps_validation_evidence_out_of_stdout(
+    monkeypatch,
+) -> None:
+    output = StringIO()
+    stdout_handler = logging.StreamHandler(output)
+    stdout_handler.setFormatter(
+        JsonStdoutFormatter(
+            service="test",
+            environment="test",
+        )
+    )
+    sink = _CapturingSink()
+    tls_handler = TlsLogHandler(
+        sink,  # type: ignore[arg-type]
+        JsonStdoutFormatter(service="test", environment="test"),
+    )
+    root_logger = logging.getLogger()
+    monkeypatch.setattr(root_logger, "handlers", [stdout_handler, tls_handler])
+
+    emit_tls_only_event(
+        "aigc.text_generation.response_validation_failed",
+        outcome="failed",
+        output_text='{"title":"raw-model-output"}',
+        exception_message=(
+            "storyboard_shots.1.duration_seconds: Input should be a number"
+        ),
+        stage="storyboard",
+        phase="response_validation",
+        error_type="ModelArkTextParseError",
+        validation_error_type="ValidationError",
+    )
+
+    assert output.getvalue() == ""
+    assert sink.events == [
+        {
+            "event": "aigc.text_generation.response_validation_failed",
+            "outcome": "failed",
+            "stage": "storyboard",
+            "phase": "response_validation",
+            "error_type": "ModelArkTextParseError",
+            "validation_error_type": "ValidationError",
+            "output_text": '{"title":"raw-model-output"}',
+            "output_truncated": False,
+            "exception_message": (
+                "storyboard_shots.1.duration_seconds: Input should be a number"
+            ),
+        }
+    ]
+
+
+def test_tls_only_event_bounds_utf8_output_and_exception_message(
+    monkeypatch,
+) -> None:
+    sink = _CapturingSink()
+    root_logger = logging.getLogger()
+    monkeypatch.setattr(
+        root_logger,
+        "handlers",
+        [
+            TlsLogHandler(
+                sink,  # type: ignore[arg-type]
+                JsonStdoutFormatter(service="test", environment="test"),
+            )
+        ],
+    )
+
+    emit_tls_only_event(
+        "aigc.text_generation.response_validation_failed",
+        outcome="failed",
+        output_text="界" * (32 * 1024),
+        exception_message="x" * 600,
+        stage="story",
+        phase="response_validation",
+        error_type="ModelArkTextParseError",
+        validation_error_type="ValidationError",
+    )
+
+    event = sink.events[0]
+    assert len(event["output_text"].encode("utf-8")) <= 32 * 1024
+    assert event["output_truncated"] is True
+    assert event["exception_message"] == "x" * 500
 
 
 def test_async_contexts_do_not_cross_contaminate() -> None:
