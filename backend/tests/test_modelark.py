@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
+import logging
 import re
+from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,6 +14,9 @@ from pydantic import ValidationError
 
 import backend.app.services.modelark as modelark_module
 from backend.app.core.config import Settings
+from backend.app.core.logging import JsonStdoutFormatter
+from backend.app.core.tls_logging import TlsLogHandler
+from backend.app.prompts import load_seedream_image_prompt
 from backend.app.schemas import (
     AigcGeneratedMediaNamingRequest,
     AigcPromptOptimizeRequest,
@@ -53,7 +58,6 @@ from backend.app.services.modelark import (
     VideoPromptOptimizationShotContext,
     aigc_local_edit_mode_allowed,
 )
-from backend.app.prompts import load_seedream_image_prompt
 from backend.app.video_prompt import build_single_shot_video_prompt
 
 
@@ -125,6 +129,55 @@ class FakeRawResponse:
 
     def json(self) -> object:
         return self.payload
+
+
+class _CapturingSink:
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    def emit(self, event: dict[str, Any]) -> None:
+        self.events.append(event)
+
+
+def _capture_tls_events(monkeypatch) -> _CapturingSink:
+    sink = _CapturingSink()
+    monkeypatch.setattr(
+        logging.getLogger(),
+        "handlers",
+        [
+            TlsLogHandler(
+                sink,  # type: ignore[arg-type]
+                JsonStdoutFormatter(service="test", environment="test"),
+            )
+        ],
+    )
+    return sink
+
+
+class FakeAsyncChatCompletionsClient:
+    def __init__(self, chunks: list[str]) -> None:
+        self.chunks = chunks
+
+    async def create(self, **_kwargs):
+        async def stream():
+            for chunk in self.chunks:
+                yield SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(content=chunk),
+                        )
+                    ]
+                )
+
+        return stream()
+
+
+def _fake_async_client(chunks: list[str]) -> SimpleNamespace:
+    return SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=FakeAsyncChatCompletionsClient(chunks),
+        )
+    )
 
 
 class FakeContentGenerationTasksClient:
@@ -1860,10 +1913,7 @@ def test_mock_generated_media_naming_is_valid_and_deterministic() -> None:
 
 
 def test_byteplus_text_adapter_parses_storyboard_json() -> None:
-    client = FakeArkClient(
-        chat_responses=[
-            _chat_response(
-                """
+    raw_response = """
                 {
                   "title": "分镜脚本",
                   "content": "分镜正文",
@@ -1889,7 +1939,9 @@ def test_byteplus_text_adapter_parses_storyboard_json() -> None:
                   ]
                 }
                 """
-            ),
+    client = FakeArkClient(
+        chat_responses=[
+            _chat_response(raw_response),
         ]
     )
     adapter = BytePlusModelArkAdapter(_settings(), client=client)
@@ -1914,6 +1966,85 @@ def test_byteplus_text_adapter_parses_storyboard_json() -> None:
     assert [shot.index for shot in result.storyboard_shots] == [1, 2]
     assert result.storyboard_shots[0].project_id == "project-1"
     assert result.storyboard_shots[1].duration_seconds == 12
+    assert result._raw_output == raw_response.strip()
+    assert "_raw_output" not in result.model_dump()
+
+
+@pytest.mark.parametrize("stage", [Stage.STORY, Stage.SCRIPT, Stage.STORYBOARD])
+def test_text_response_validation_tls_records_stage_and_safe_schema_summary(
+    monkeypatch,
+    stage: Stage,
+) -> None:
+    raw_response = '{"title":"Provider title","storyboard_shots":[]}'
+    sink = _capture_tls_events(monkeypatch)
+    adapter = BytePlusModelArkAdapter(
+        _settings(),
+        client=FakeArkClient(chat_responses=[_chat_response(raw_response)]),
+    )
+
+    with pytest.raises(ModelArkTextParseError):
+        asyncio.run(
+            adapter.generate_text(
+                TextGenerationRequest(
+                    project_id="project-1",
+                    stage=stage,
+                    brief=Brief(prompt="prompt-must-not-appear"),
+                    upstream_content=(
+                        "valid upstream"
+                        if stage in {Stage.SCRIPT, Stage.STORYBOARD}
+                        else None
+                    ),
+                )
+            )
+        )
+
+    assert len(sink.events) == 1
+    event = sink.events[0]
+    assert event["event"] == "aigc.text_generation.response_validation_failed"
+    assert event["outcome"] == "failed"
+    assert event["stage"] == stage.value
+    assert event["phase"] == "response_validation"
+    assert event["error_type"] == "ModelArkTextParseError"
+    assert event["validation_error_type"] == "ValidationError"
+    assert event["output_text"] == raw_response
+    assert '"loc":"content"' in event["exception_message"]
+    assert '"type":"missing"' in event["exception_message"]
+    assert '"input"' not in event["exception_message"]
+    assert "prompt-must-not-appear" not in json.dumps(event)
+
+
+def test_stream_text_response_validation_tls_records_json_location(
+    monkeypatch,
+) -> None:
+    raw_response = '{"title":"Script","content":"broken"'
+    sink = _capture_tls_events(monkeypatch)
+    adapter = BytePlusModelArkAdapter(
+        _settings(),
+        client=FakeArkClient(),
+        async_client=_fake_async_client([raw_response]),
+    )
+
+    async def consume() -> None:
+        async for _ in adapter.stream_text(
+            TextGenerationRequest(
+                project_id="project-1",
+                stage=Stage.SCRIPT,
+                brief=Brief(prompt="script prompt"),
+                upstream_content="story",
+            )
+        ):
+            pass
+
+    with pytest.raises(ModelArkTextParseError):
+        asyncio.run(consume())
+
+    assert len(sink.events) == 1
+    event = sink.events[0]
+    assert event["stage"] == Stage.SCRIPT.value
+    assert event["validation_error_type"] == "JSONDecodeError"
+    assert "line=1" in event["exception_message"]
+    assert "column=" in event["exception_message"]
+    assert event["output_text"] == raw_response
 
 
 def test_byteplus_text_adapter_sanitizes_provider_and_parse_errors() -> None:

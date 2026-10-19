@@ -12,6 +12,7 @@ from typing import Any, Literal, Optional, Protocol, TypeAlias, Union
 import httpx
 from pydantic import (
     Field,
+    PrivateAttr,
     ValidationError,
     field_validator,
     model_validator,
@@ -19,14 +20,13 @@ from pydantic import (
 
 from ..core.config import Settings, get_settings
 from ..core.logging import emit_tls_only_event
+from ..prompts import load_seedream_image_prompt
 from ..schemas import (
     AIGC_GENERATED_MEDIA_NAMING_MODEL,
     AigcGeneratedMediaName,
     AigcGeneratedMediaNamingRequest,
-    AigcImagePromptSection,
-    AigcImagePromptFullDesignResult as AigcImagePromptSectionsResult,
     AigcImagePromptLocalEditResult,
-    AigcImagePromptOptimizationResult as AigcImagePromptModeResult,
+    AigcImagePromptSection,
     AigcPromptOptimizeRequest,
     AigcSeedreamGenerationType,
     AigcSeedreamPromptOptimizationResult,
@@ -35,14 +35,20 @@ from ..schemas import (
     CharacterAssetIterationOperation,
     ImageGenerationOperation,
     ImageGenerationSize,
-    ImagePromptSuggestion,
     ImageLayerDecompositionSize,
     ImageOutputFormat,
+    ImagePromptSuggestion,
     Stage,
     Status,
     StoryboardShotCreate,
     TargetLanguage,
     validate_visible_selling_copy,
+)
+from ..schemas import (
+    AigcImagePromptFullDesignResult as AigcImagePromptSectionsResult,
+)
+from ..schemas import (
+    AigcImagePromptOptimizationResult as AigcImagePromptModeResult,
 )
 from ..schemas.common import SchemaModel
 from ..schemas.image_dimensions import (
@@ -70,13 +76,11 @@ from ..schemas.tool_task import (
     validate_tool_video_resolution,
 )
 from ..video_prompt import MAX_VIDEO_PROMPT_LENGTH
-from ..prompts import load_seedream_image_prompt
 from .prompt_anchors import (
     extract_source_constraints,
     positive_anchor_section_index,
 )
 from .text_streaming import IncrementalJsonStringExtractor
-
 
 TEXT_GENERATION_STAGES = {Stage.STORY, Stage.SCRIPT, Stage.STORYBOARD}
 SEED_THINKING_DISABLED = {"type": "disabled"}
@@ -316,6 +320,68 @@ class ModelArkProviderError(RuntimeError):
 
 class ModelArkTextParseError(ModelArkProviderError):
     """Safe text parsing error for model responses that failed validation."""
+
+
+def _root_exception(exc: BaseException) -> BaseException:
+    current = exc
+    seen: set[int] = set()
+    while id(current) not in seen:
+        seen.add(id(current))
+        next_error = current.__cause__ or current.__context__
+        if next_error is None:
+            return current
+        current = next_error
+    return current
+
+
+def _response_validation_summary(exc: BaseException) -> tuple[str, str]:
+    root = _root_exception(exc)
+    if isinstance(root, ValidationError):
+        details = [
+            {
+                "loc": ".".join(str(part) for part in item["loc"]),
+                "type": item["type"],
+                "msg": item["msg"],
+            }
+            for item in root.errors(
+                include_url=False,
+                include_context=False,
+                include_input=False,
+            )
+        ]
+        return type(root).__name__, json.dumps(
+            details,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    if isinstance(root, json.JSONDecodeError):
+        return (
+            type(root).__name__,
+            f"{root.msg}; line={root.lineno}; column={root.colno}",
+        )
+    return type(root).__name__, str(root)
+
+
+def emit_text_response_validation_failed(
+    stage: Stage,
+    output_text: str,
+    exception: BaseException,
+    *,
+    validation_exception: BaseException | None = None,
+) -> None:
+    validation_error_type, exception_message = _response_validation_summary(
+        validation_exception or exception
+    )
+    emit_tls_only_event(
+        "aigc.text_generation.response_validation_failed",
+        outcome="failed",
+        output_text=output_text,
+        exception_message=exception_message,
+        stage=stage.value,
+        phase="response_validation",
+        error_type=type(exception).__name__,
+        validation_error_type=validation_error_type,
+    )
 
 
 class TextGenerationRequest(SchemaModel):
@@ -699,6 +765,7 @@ class GeneratedTextResult(SchemaModel):
     metadata: dict[str, Optional[Union[str, int, float, bool]]] = Field(
         default_factory=dict
     )
+    _raw_output: str = PrivateAttr(default="")
 
 
 class TextGenerationPayload(SchemaModel):
@@ -955,6 +1022,7 @@ class BytePlusModelArkAdapter:
             )
 
         prompt = MockModelArkAdapter.build_text_prompt(request)
+        text = ""
         try:
             if request.image_urls:
                 response = await asyncio.to_thread(
@@ -1005,18 +1073,28 @@ class BytePlusModelArkAdapter:
                 text,
                 project_id=request.project_id,
             )
-        except (ModelArkProviderError, ModelArkTextParseError):
+        except ModelArkTextParseError as exc:
+            emit_text_response_validation_failed(request.stage, text, exc)
             raise
         except ValidationError as exc:
-            raise ModelArkTextParseError(
+            wrapped = ModelArkTextParseError(
                 f"{request.stage.value} text generation response could not be parsed"
-            ) from exc
+            )
+            emit_text_response_validation_failed(
+                request.stage,
+                text,
+                wrapped,
+                validation_exception=exc,
+            )
+            raise wrapped from exc
+        except ModelArkProviderError:
+            raise
         except Exception as exc:
             raise ModelArkProviderError(
                 f"text generation failed for stage {request.stage.value}"
             ) from exc
 
-        return GeneratedTextResult(
+        result = GeneratedTextResult(
             stage=request.stage,
             title=payload.title,
             content=payload.content,
@@ -1030,6 +1108,8 @@ class BytePlusModelArkAdapter:
                 "prompt_summary": prompt[:240],
             },
         )
+        result._raw_output = text
+        return result
 
     async def generate_aigc_media_name(
         self,
@@ -1285,13 +1365,25 @@ class BytePlusModelArkAdapter:
                 project_id=request.project_id,
             )
         except ModelArkTextParseError as exc:
-            raise
-        except ModelArkProviderError as exc:
+            emit_text_response_validation_failed(
+                request.stage,
+                extractor.raw_json,
+                exc,
+            )
             raise
         except ValidationError as exc:
-            raise ModelArkTextParseError(
+            wrapped = ModelArkTextParseError(
                 f"{request.stage.value} text generation response could not be parsed"
-            ) from exc
+            )
+            emit_text_response_validation_failed(
+                request.stage,
+                extractor.raw_json,
+                wrapped,
+                validation_exception=exc,
+            )
+            raise wrapped from exc
+        except ModelArkProviderError:
+            raise
         except Exception as exc:
             raise ModelArkProviderError(
                 f"text generation failed for stage {request.stage.value}"
@@ -1311,6 +1403,7 @@ class BytePlusModelArkAdapter:
                 "prompt_summary": prompt[:240],
             },
         )
+        result._raw_output = extractor.raw_json
         yield ModelArkStreamEvent(kind="completed", result=result)
 
     async def optimize_video_prompt(
