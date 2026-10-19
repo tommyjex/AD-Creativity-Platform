@@ -3530,6 +3530,96 @@ class MismatchedStoryboardDurationAdapter:
         )
 
 
+class InvalidStoryboardBusinessValidationAdapter:
+    raw_output = (
+        '{"title":"分镜","content":"正文","storyboard_shots":'
+        '[{"index":1,"duration_seconds":0}]}'
+    )
+
+    async def generate_text(self, request: TextGenerationRequest) -> GeneratedTextResult:
+        invalid_shot = StoryboardShotCreate.model_construct(
+            project_id=request.project_id,
+            index=1,
+            title="Opening",
+            description="Opening shot",
+            visual_prompt="Opening visual",
+            narration="Opening narration",
+            duration_seconds=0,
+            status=Status.DRAFT,
+        )
+        result = GeneratedTextResult(
+            stage=Stage.STORYBOARD,
+            title="Storyboard",
+            content="storyboard",
+            storyboard_shots=[invalid_shot],
+        )
+        result._raw_output = self.raw_output
+        return result
+
+    async def stream_text(
+        self,
+        request: TextGenerationRequest,
+    ):
+        yield ModelArkStreamEvent(
+            kind="completed",
+            result=await self.generate_text(request),
+        )
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_storyboard_business_validation_tls_records_private_raw_output(
+    monkeypatch,
+    streaming: bool,
+) -> None:
+    sink = _capture_tls_events(monkeypatch)
+    adapter = InvalidStoryboardBusinessValidationAdapter()
+    service = ModelArkGenerationService(adapter=adapter)
+    brief = Brief(
+        prompt="生成一条咖啡机广告",
+        duration_seconds=30,
+        product_name="便携咖啡机",
+    )
+
+    async def run() -> None:
+        if streaming:
+            async for _ in service.stream_storyboard(
+                "project-1",
+                brief,
+                "有效剧本正文",
+            ):
+                pass
+            return
+        await service.generate_storyboard(
+            "project-1",
+            brief,
+            "有效剧本正文",
+        )
+
+    with pytest.raises(
+        ModelArkTextParseError,
+        match="duration must be greater than 0",
+    ):
+        asyncio.run(run())
+
+    assert len(sink.events) == 1
+    event = sink.events[0]
+    assert event["event"] == "aigc.text_generation.response_validation_failed"
+    assert event["stage"] == Stage.STORYBOARD.value
+    assert event["validation_error_type"] == "ModelArkTextParseError"
+    assert event["output_text"] == adapter.raw_output
+    result = asyncio.run(
+        adapter.generate_text(
+            TextGenerationRequest(
+                project_id="project-1",
+                stage=Stage.STORYBOARD,
+                brief=brief,
+                upstream_content="有效剧本正文",
+            )
+        )
+    )
+    assert "_raw_output" not in result.model_dump()
+
+
 def test_storyboard_generation_service_normalizes_duration_mismatch() -> None:
     service = ModelArkGenerationService(adapter=MismatchedStoryboardDurationAdapter())
 

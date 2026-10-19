@@ -1,11 +1,13 @@
 import asyncio
 import json
+import logging
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
+import backend.app.api.routes as routes_module
 from backend.app.api.dependencies import (
     get_asset_storage_service,
     get_composer_service,
@@ -17,8 +19,8 @@ from backend.app.api.routes import _http_error, _safe_stream_error_detail
 from backend.app.main import create_app
 from backend.app.repositories import InMemoryRepository, MySQLRepository
 from backend.app.schemas import (
-    AssetCreate,
     AssetCategory,
+    AssetCreate,
     AssetType,
     Brief,
     ErrorCode,
@@ -27,15 +29,14 @@ from backend.app.schemas import (
     StoryboardShotCreate,
     TextArtifactCreate,
 )
+from backend.app.services.assets import AssetStorageService
+from backend.app.services.composer import VideoCompositionError
 from backend.app.services.generation import (
     ModelArkGenerationService,
     StoryboardGenerationResult,
 )
 from backend.app.services.modelark import ModelArkTextParseError
-from backend.app.services.assets import AssetStorageService
-from backend.app.services.composer import VideoCompositionError
 from backend.app.services.workflow import WorkflowService
-
 from backend.tests.auth_helpers import authenticate_test_client
 
 
@@ -590,6 +591,18 @@ class FailingStoryboardGenerationService:
         raise RuntimeError("storyboard provider unavailable with sk-test-secret")
 
 
+class ParseFailingStoryboardGenerationService:
+    async def generate_storyboard(
+        self,
+        project_id: str,
+        brief: Brief,
+        script_content: str,
+        image_urls: list[str] | None = None,
+    ) -> StoryboardGenerationResult:
+        _ = (project_id, brief, script_content, image_urls)
+        raise ModelArkTextParseError("raw storyboard response must not appear")
+
+
 class UnsafeFailingTextAdapter:
     async def generate_text(self, request):
         _ = request
@@ -1104,6 +1117,60 @@ def test_storyboard_generation_failure_sanitizes_api_and_task_error(
     assert failed_task.error.detail == "RuntimeError"
     assert "sk-test-secret" not in task_error_text
     assert "storyboard provider unavailable" not in task_error_text
+
+
+def test_storyboard_stream_failure_structured_log_is_sanitized_and_indexed(
+    monkeypatch,
+    repository: InMemoryRepository,
+    project_payload: dict[str, object],
+) -> None:
+    calls: list[tuple[object, str, dict[str, object]]] = []
+
+    def capture_log_event(
+        logger_arg,
+        event: str,
+        **kwargs,
+    ) -> None:
+        calls.append((logger_arg, event, kwargs))
+
+    monkeypatch.setattr(routes_module, "log_event", capture_log_event)
+    with _client_with_generation(
+        repository,
+        ParseFailingStoryboardGenerationService(),
+    ) as client:
+        project_id = client.post("/api/projects", json=project_payload).json()["id"]
+        workflow = WorkflowService(repository)
+        workflow.write_text_artifact(
+            project_id,
+            Stage.SCRIPT,
+            content="script ready for storyboard",
+            title="Script",
+        )
+
+        response = client.post(f"/api/projects/{project_id}/storyboard")
+
+    failed_task = next(
+        task
+        for task in repository.list_project_tasks(project_id)
+        if task.stage == Stage.STORYBOARD
+    )
+    assert _sse_error(response)["detail"] == "phase=response_validation"
+    assert failed_task.error is not None
+    assert failed_task.error.detail == "phase=response_validation"
+    assert len(calls) == 1
+    logger_arg, event, kwargs = calls[0]
+    assert logger_arg is routes_module.logger
+    assert event == "text_generation.stream_failed"
+    assert kwargs["outcome"] == "failed"
+    assert kwargs["level"] == logging.ERROR
+    assert isinstance(kwargs["exception"], ModelArkTextParseError)
+    assert kwargs["project_id"] == project_id
+    assert kwargs["task_id"] == failed_task.id
+    assert kwargs["stage"] == Stage.STORYBOARD.value
+    assert kwargs["error_code"] == ErrorCode.GENERATION_FAILED.value
+    assert kwargs["error_stage"] == "response_validation"
+    assert "raw storyboard response" not in str(_sse_error(response))
+    assert "raw storyboard response" not in failed_task.error.model_dump_json()
 
 
 def test_storyboard_shot_write_failure_marks_task_failed_and_sanitizes_error(

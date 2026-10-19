@@ -17,11 +17,10 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, sta
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import ValidationError
 
-from backend.app.core.config import ConfigurationError
 from backend.app.api.dependencies import (
-    get_background_task_runner,
     get_asr_subtitle_client,
     get_asset_storage_service,
+    get_background_task_runner,
     get_composer_service,
     get_face_blur_video_client_factory,
     get_modelark_generation_service,
@@ -30,6 +29,8 @@ from backend.app.api.dependencies import (
     get_workflow_service,
     require_business_access,
 )
+from backend.app.core.config import ConfigurationError
+from backend.app.core.logging import log_event
 from backend.app.repositories import (
     AssetReferenceConflictError,
     NotFoundError,
@@ -37,6 +38,7 @@ from backend.app.repositories import (
     RevisionConflictError,
 )
 from backend.app.schemas import (
+    USER_DEFINED_ASSET_NAME_SCHEME,
     AigcAssetDirection,
     AigcNodeType,
     Asset,
@@ -44,43 +46,44 @@ from backend.app.schemas import (
     AssetRenameRequest,
     AssetRole,
     AssetType,
+    CanvasLayout,
+    CanvasLayoutUpdate,
     CharacterAssetIterationOperation,
     CharacterAssetIterationRequest,
     CharacterAssetIterationResponse,
     CharacterCard,
     CharacterCardImageGenerationResponse,
     CharacterCardUpdate,
-    CanvasLayout,
-    CanvasLayoutUpdate,
     ErrorCode,
     FaceBlurVideoRequest,
-    GenerationTask,
-    GenerationTaskCreate,
     FrozenImageGenerationInput,
-    FrozenImageReference,
-    FrozenImageReferenceRegion,
     FrozenImageLayerCompositionInput,
     FrozenImageLayerContentEditInput,
     FrozenImageLayerDecompositionInput,
+    FrozenImageReference,
+    FrozenImageReferenceRegion,
+    GenerationTask,
+    GenerationTaskCreate,
     ImageGenerationOperation,
-    ImageReferenceSelectionUpdate,
-    ImagePromptSuggestion,
-    ImagePromptSuggestionRequest,
-    ImageLayerDecompositionRequest,
     ImageLayerCompositionRequest,
     ImageLayerContentEditRequest,
+    ImageLayerDecompositionRequest,
     ImageLayerSet,
     ImageLayerSetDetail,
     ImageLayerSetUpdate,
-    ImageToImageGenerationRequest,
+    ImagePromptSuggestion,
+    ImagePromptSuggestionRequest,
     ImagePromptVersion,
     ImagePromptVersionCreate,
     ImagePromptVersionSave,
+    ImageReferenceSelectionUpdate,
+    ImageToImageGenerationRequest,
     Project,
     ProjectCreate,
     ProjectListResponse,
-    ProjectUpdate,
     ProjectType,
+    ProjectUpdate,
+    ReferenceAssetKind,
     SetCurrentImageRequest,
     Stage,
     Status,
@@ -91,18 +94,17 @@ from backend.app.schemas import (
     StoryboardShotMergeRequest,
     StoryboardShotReferenceRequest,
     StoryboardShotReferenceUploadResponse,
-    StoryboardTailFrameReferenceApplyResponse,
-    StoryboardTailFrameReferenceSkip,
     StoryboardShotVideoConfig,
     StoryboardShotVideoConfigUpdate,
     StoryboardShotVideoEditRequest,
     StoryboardShotVideoPromptOptimizeRequest,
     StoryboardShotVideoSelectionRequest,
+    StoryboardTailFrameReferenceApplyResponse,
+    StoryboardTailFrameReferenceSkip,
     TextArtifactCreate,
     TextArtifactUpdate,
-    TextToImageGenerationRequest,
     TextGenerationInputRequest,
-    ReferenceAssetKind,
+    TextToImageGenerationRequest,
     ToolAssetRole,
     ToolTask,
     ToolTaskCreate,
@@ -112,10 +114,10 @@ from backend.app.schemas import (
     ToolVideoGenerationRequest,
     ToolVideoPromptOptimizeRequest,
     ToolVideoPromptOptimizeResponse,
-    USER_DEFINED_ASSET_NAME_SCHEME,
     validate_visible_selling_copy,
 )
 from backend.app.schemas.auth import UserRole
+from backend.app.schemas.common import utc_now
 from backend.app.services.aigc_asset_naming import (
     AIGC_ASSET_NAME_SCHEME,
     AIGC_GENERATED_ASSET_NAME_SCHEME,
@@ -136,19 +138,6 @@ from backend.app.services.generation import (
     ModelArkGenerationService,
     StoryboardGenerationResult,
 )
-from backend.app.services.modelark import (
-    ModelArkProviderError,
-    ModelArkTextParseError,
-    SEEDREAM_5_PRO_MODEL,
-    ToolVideoGenerationRequest as ModelArkToolVideoGenerationRequest,
-)
-from backend.app.services.mediakit_face_blur import (
-    FaceBlurTaskStatus,
-    FaceBlurVideoClient,
-    MediaKitFaceBlurError,
-)
-from backend.app.services.video_normalizer import VideoNormalizationError, VideoNormalizer
-from backend.app.schemas.common import utc_now
 from backend.app.services.image_layers import (
     ImageLayerCompositionService,
     inspect_layer_image_content,
@@ -157,8 +146,25 @@ from backend.app.services.image_layers import (
     read_layer_set_contents,
 )
 from backend.app.services.mediakit import AsrSubtitleClient, MediaKitAsrError
+from backend.app.services.mediakit_face_blur import (
+    FaceBlurTaskStatus,
+    FaceBlurVideoClient,
+    MediaKitFaceBlurError,
+)
+from backend.app.services.modelark import (
+    SEEDREAM_5_PRO_MODEL,
+    ModelArkProviderError,
+    ModelArkTextParseError,
+)
+from backend.app.services.modelark import (
+    ToolVideoGenerationRequest as ModelArkToolVideoGenerationRequest,
+)
 from backend.app.services.subtitles import segments_to_srt
 from backend.app.services.text_streaming import SSE_HEADERS, encode_sse
+from backend.app.services.video_normalizer import (
+    VideoNormalizationError,
+    VideoNormalizer,
+)
 from backend.app.services.workflow import WorkflowError, WorkflowService
 from backend.app.video_prompt import (
     is_known_structured_video_prompt,
@@ -4229,24 +4235,34 @@ async def _stream_generation_task(
         )
         raise
     except Exception as exc:
+        detail = _safe_stream_error_detail(exc)
         failed = _fail_active_stream_task(
             task.id,
             repository,
             workflow,
-            detail=_safe_stream_error_detail(exc),
+            detail=detail,
         )
-        logger.error(
-            "text_generation_stream_failed %s",
-            json.dumps(
-                {
-                    "project_id": task.project_id,
-                    "stage": task.stage.value,
-                    "task_id": task.id,
-                    "error_type": type(exc).__name__,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ),
+        error_stage = (
+            detail.removeprefix("phase=")
+            if detail.startswith("phase=")
+            else "text_generation"
+        )
+        error_code = (
+            failed.error.code.value
+            if failed.error
+            else ErrorCode.GENERATION_FAILED.value
+        )
+        log_event(
+            logger,
+            "text_generation.stream_failed",
+            outcome="failed",
+            level=logging.ERROR,
+            exception=exc,
+            project_id=task.project_id,
+            task_id=task.id,
+            stage=task.stage.value,
+            error_code=error_code,
+            error_stage=error_stage,
         )
         yield encode_sse(
             "error",

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from functools import lru_cache
-import logging
 from typing import Iterable, Literal, Optional, Sequence
 
 from pydantic import Field, ValidationError
@@ -21,14 +21,14 @@ from ..schemas import (
     CharacterCardCreate,
     FrozenImageGenerationInput,
     FrozenImageLayerDecompositionInput,
+    FrozenImageReferenceRegion,
     ImageBboxAnnotation,
     ImageEditAnnotation,
-    FrozenImageReferenceRegion,
     ImageGenerationOperation,
     ImageLayerDecompositionSize,
     ImageOutputFormat,
-    ImagePurpose,
     ImagePromptSuggestion,
+    ImagePurpose,
     Stage,
     Status,
     StoryboardShot,
@@ -36,8 +36,8 @@ from ..schemas import (
     TargetLanguage,
     TextArtifactCreate,
 )
-from ..schemas.image_generation import COORDINATE_TAG_PATTERN
 from ..schemas.common import SchemaModel
+from ..schemas.image_generation import COORDINATE_TAG_PATTERN
 from ..video_prompt import (
     build_single_shot_video_prompt,
     expand_atomic_shots,
@@ -48,8 +48,8 @@ from ..video_prompt import (
     validate_optimized_video_prompt,
 )
 from .modelark import (
-    AigcImagePromptOptimizationRequest,
     AigcImagePromptLocalEditResult,
+    AigcImagePromptOptimizationRequest,
     AigcImagePromptSectionsResult,
     AigcTextGenerationRequest,
     BytePlusModelArkAdapter,
@@ -70,8 +70,8 @@ from .modelark import (
     ModelArkStreamEvent,
     ModelArkTextParseError,
     ProjectImageGenerationRequest,
-    SeedreamGenerationSize,
     SeedanceVideoGenerationRequest,
+    SeedreamGenerationSize,
     TextGenerationRequest,
     ToolVideoGenerationRequest,
     ToolVideoPromptOptimizationRequest,
@@ -80,12 +80,12 @@ from .modelark import (
     VideoPromptOptimizationRequest,
     VideoPromptOptimizationShotContext,
     allowed_aigc_prompt_generation_types,
+    emit_text_response_validation_failed,
 )
 from .prompt_optimization import (
     render_seedream_prompt_with_warnings,
     validate_prompt_optimization_result,
 )
-
 
 STORYBOARD_DURATION_TOLERANCE_SECONDS = 0.5
 logger = logging.getLogger(__name__)
@@ -622,11 +622,7 @@ class ModelArkGenerationService:
                 image_urls=list(image_urls or []),
             )
         )
-        shots = self._normalize_storyboard_shot_durations(
-            result.storyboard_shots,
-            brief,
-        )
-        self._validate_storyboard_shots(shots, brief)
+        shots = self._prepare_storyboard_shots(result, brief)
         artifact = TextArtifactCreate(
             project_id=project_id,
             stage=Stage.STORYBOARD,
@@ -660,11 +656,7 @@ class ModelArkGenerationService:
                 yield GenerationStreamEvent(kind="delta", delta=event.delta)
                 continue
             result = _require_generated_text_result(event)
-            shots = self._normalize_storyboard_shot_durations(
-                result.storyboard_shots,
-                brief,
-            )
-            self._validate_storyboard_shots(shots, brief)
+            shots = self._prepare_storyboard_shots(result, brief)
             yield GenerationStreamEvent(
                 kind="completed",
                 result=StoryboardGenerationResult(
@@ -1290,6 +1282,26 @@ class ModelArkGenerationService:
             shot.model_copy(update={"duration_seconds": duration})
             for shot, duration in zip(normalized, durations, strict=True)
         ]
+
+    def _prepare_storyboard_shots(
+        self,
+        result: GeneratedTextResult,
+        brief: Brief,
+    ) -> list[StoryboardShotCreate]:
+        try:
+            shots = self._normalize_storyboard_shot_durations(
+                result.storyboard_shots,
+                brief,
+            )
+            self._validate_storyboard_shots(shots, brief)
+            return shots
+        except ModelArkTextParseError as exc:
+            emit_text_response_validation_failed(
+                Stage.STORYBOARD,
+                result._raw_output,
+                exc,
+            )
+            raise
 
     @staticmethod
     def _validate_storyboard_shots(
