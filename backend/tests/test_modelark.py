@@ -951,7 +951,7 @@ def test_byteplus_adapter_generates_independent_tool_video() -> None:
     result = asyncio.run(adapter.generate_tool_video(request))
 
     assert result.url == "https://model.example/tool-generated.mp4"
-    assert result.last_frame_url is None
+    assert result.last_frame_url == "https://model.example/ignored.png"
     assert result.metadata == {
         "model": "doubao-seedance-2-0-fast-260128",
         "generation_mode": "multimodal_reference",
@@ -997,6 +997,7 @@ def test_byteplus_adapter_generates_independent_tool_video() -> None:
             "ratio": "16:9",
             "duration": -1,
             "generate_audio": True,
+            "return_last_frame": True,
             "watermark": False,
         }
     ]
@@ -1166,7 +1167,8 @@ def test_seedance_adapter_supports_all_modes_models_and_stable_media_order(
             SimpleNamespace(
                 status="succeeded",
                 content=SimpleNamespace(
-                    video_url="https://model.example/generated.mp4"
+                    video_url="https://model.example/generated.mp4",
+                    last_frame_url=" https://model.example/tail.png?signature=private ",
                 ),
             )
         ],
@@ -1182,6 +1184,9 @@ def test_seedance_adapter_supports_all_modes_models_and_stable_media_order(
     assert call["ratio"] == seedance_request.aspect_ratio
     assert call["duration"] == seedance_request.duration_seconds
     assert call["generate_audio"] is seedance_request.generate_audio
+    assert call["return_last_frame"] is True
+    assert result.last_frame_url == "https://model.example/tail.png?signature=private"
+    assert "signature=private" not in str(result.metadata)
     assert result.metadata["generation_mode"] == seedance_request.generation_mode
     assert (
         result.metadata["provider_task_id"]

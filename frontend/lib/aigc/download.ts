@@ -92,9 +92,14 @@ function getAigcAssetDownload(
     (omitFirstOrdinalSuffix && asset.ordinal === 0)
       ? ""
       : `-${asset.ordinal + 1}`;
+  const lastFrameSuffix =
+    naming.applyOrdinal &&
+    metadataText(asset, "name_variant") === "video_last_frame"
+      ? "视频尾帧"
+      : ordinalSuffix;
   const filename = utf8LimitedFilename(
     naming.basename,
-    `${ordinalSuffix}.${fileExtension}`
+    `${lastFrameSuffix}.${fileExtension}`
   );
   const url = getAssetDownloadUrlById(asset.asset_id, filename);
   if (!url) return null;
@@ -139,7 +144,8 @@ function currentGeneratedNodeName(
   asset: AigcResultAsset,
   definition?: AigcPipelineDefinition | AigcPipelineDefinitionV2
 ): string | null {
-  const nodeId = metadataText(asset, "node_id");
+  const nodeId =
+    metadataText(asset, "display_node_id") ?? metadataText(asset, "node_id");
   if (!definition || !nodeId) return null;
   const migrated = migrateAigcRunSnapshotV2(definition);
   const node = migrated.nodes.find((candidate) => candidate.id === nodeId);
@@ -148,6 +154,8 @@ function currentGeneratedNodeName(
     !(
       node.type === "text_to_image" ||
       node.type === "video_generation" ||
+      (metadataText(asset, "name_scheme") === "aigc_generated_node_v2" &&
+        (node.type === "image" || node.type === "video")) ||
       (node.type === "image_to_image" &&
         node.config.operation !== "layer_decomposition")
     )

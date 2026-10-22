@@ -75,7 +75,8 @@ const ARTIFACT_ASSET_TYPES = new Set<AssetType>([
 const IMAGE_PRODUCT_OPERATIONS = new Set([
   "text_to_image",
   "image_to_image",
-  "layer_composite"
+  "layer_composite",
+  "video_last_frame"
 ]);
 
 export interface ArtifactDisplayItem {
@@ -147,12 +148,14 @@ export function getImageOperationLabel(asset: Asset): string {
   if (operation === "text_to_image") return "文生图";
   if (operation === "image_to_image") return "图片编辑";
   if (operation === "layer_composite") return "图层合成";
+  if (operation === "video_last_frame") return "视频尾帧";
   return "图片产物";
 }
 
 function hasAvailableLastFrame(asset: Asset): boolean {
   return (
     asset.type === "storyboard_video" &&
+    !asset.metadata.last_frame_asset_id &&
     asset.metadata.last_frame_status === "available" &&
     getSafeLastFrameUrl(asset) !== null
   );

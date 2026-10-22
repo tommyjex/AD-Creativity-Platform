@@ -1395,6 +1395,7 @@ class MySQLRepository:
                 )
                 .with_for_update()
             ).all()
+            metadata_by_id = {}
             for reference in output_references:
                 asset = session.scalar(
                     select(AssetORM)
@@ -1414,9 +1415,32 @@ class MySQLRepository:
                         naming_status=naming.status.value,
                         mime_type=asset.mime_type,
                         output_ordinal=reference.ordinal,
+                        name_variant=(
+                            "video_last_frame"
+                            if reference.slot == "last_frame"
+                            or (asset.metadata_json or {}).get("name_variant")
+                            == "video_last_frame"
+                            else None
+                        ),
                     ),
                 }
                 asset.updated_at = utc_now()
+                metadata_by_id[asset.id] = asset.metadata_json
+
+            result = result.model_copy(
+                update={
+                    "assets": [
+                        item.model_copy(
+                            update={"metadata": metadata_by_id[item.asset_id]},
+                            deep=True,
+                        )
+                        if item.asset_id in metadata_by_id
+                        else item
+                        for item in result.assets
+                    ]
+                },
+                deep=True,
+            )
 
             now = utc_now()
             task.status = AigcTaskStatus.SUCCEEDED
@@ -1649,6 +1673,7 @@ class MySQLRepository:
         task_id: str,
         *,
         direction: AigcAssetDirection | None = None,
+        slot: str | None = None,
     ) -> list[AigcPipelineTaskAssetReference]:
         with self._session_factory.begin() as session:
             if session.get(AigcPipelineTaskORM, task_id) is None:
@@ -1660,6 +1685,8 @@ class MySQLRepository:
                 statement = statement.where(
                     AigcPipelineTaskAssetORM.direction == direction
                 )
+            if slot is not None:
+                statement = statement.where(AigcPipelineTaskAssetORM.slot == slot)
             rows = list(session.scalars(statement).all())
             removed = [
                 AigcPipelineTaskAssetReference(

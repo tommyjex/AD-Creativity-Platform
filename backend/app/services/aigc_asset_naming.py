@@ -123,6 +123,7 @@ def build_aigc_generated_asset_name(
     node_name: str | None,
     mime_type: str,
     output_ordinal: int,
+    name_variant: str | None = None,
 ) -> str:
     if (
         isinstance(output_ordinal, bool)
@@ -137,7 +138,11 @@ def build_aigc_generated_asset_name(
             f"unsupported AIGC output MIME type: {mime_type!r}"
         ) from exc
     basename = _sanitize_filename_part(node_name, fallback="AIGC节点")
-    suffix = extension if output_ordinal == 0 else f"-{output_ordinal + 1}{extension}"
+    suffix = (
+        f"视频尾帧{extension}"
+        if name_variant == "video_last_frame"
+        else extension if output_ordinal == 0 else f"-{output_ordinal + 1}{extension}"
+    )
     return _truncate_basename(basename, suffix)
 
 
@@ -146,6 +151,7 @@ def build_aigc_download_filename(
     basename: str | None,
     mime_type: str,
     output_ordinal: int | None = None,
+    name_variant: str | None = None,
 ) -> str:
     """Build a MIME-correct, Unicode-safe AIGC download filename."""
     try:
@@ -165,7 +171,9 @@ def build_aigc_download_filename(
             sanitized = sanitized[: -len(known_extension)].rstrip(" .-")
             break
     ordinal_suffix = (
-        ""
+        "视频尾帧"
+        if name_variant == "video_last_frame" and output_ordinal is not None
+        else ""
         if output_ordinal in {None, 0}
         else f"-{output_ordinal + 1}"
     )
@@ -184,12 +192,14 @@ def aigc_generated_output_metadata(
     naming_status: str,
     mime_type: str,
     output_ordinal: int,
+    name_variant: str | None = None,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "name": build_aigc_generated_asset_name(
             node_name=node_name,
             mime_type=mime_type,
             output_ordinal=output_ordinal,
+            name_variant=name_variant,
         ),
         "name_scheme": AIGC_GENERATED_ASSET_NAME_SCHEME,
         "generated_name": generated_name,
@@ -200,6 +210,8 @@ def aigc_generated_output_metadata(
     }
     if display_node_id is not None:
         metadata["display_node_id"] = display_node_id
+    if name_variant is not None:
+        metadata["name_variant"] = name_variant
     return metadata
 
 

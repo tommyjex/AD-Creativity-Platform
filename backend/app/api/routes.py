@@ -2251,6 +2251,11 @@ def _aigc_download_filename(
             basename=basename,
             mime_type=asset.mime_type,
             output_ordinal=output_ordinal,
+            name_variant=(
+                "video_last_frame"
+                if asset.metadata.get("name_variant") == "video_last_frame"
+                else None
+            ),
         )
     except ValueError:
         return None

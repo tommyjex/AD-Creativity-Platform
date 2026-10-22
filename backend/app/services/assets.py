@@ -374,6 +374,7 @@ class StoredAssetInput:
     metadata: dict[str, str | int | float | bool | None] | None = None
     filename: str | None = None
     validate_image_content: bool = False
+    detect_image_content: bool = False
     expected_image_dimensions: tuple[int, int] | None = None
     naming_context: AigcAssetNamingContext | None = None
 
@@ -979,7 +980,19 @@ class AssetStorageService:
                 expected_mime_type=item.mime_type,
             )
             actual_dimensions = None
-            if item.expected_image_dimensions is not None:
+            if item.detect_image_content:
+                with Image.open(BytesIO(content.content)) as image:
+                    image.load()
+                    detected_mime = {
+                        "PNG": "image/png",
+                        "JPEG": "image/jpeg",
+                        "WEBP": "image/webp",
+                    }.get(image.format)
+                    if detected_mime is None:
+                        raise ValueError("unsupported generated image format")
+                    actual_dimensions = image.size
+                content = DownloadedAsset(content.content, detected_mime)
+            elif item.expected_image_dimensions is not None:
                 actual_dimensions = _validate_image_dimensions(
                     content,
                     expected=item.expected_image_dimensions,
@@ -1084,7 +1097,8 @@ class AssetStorageService:
                 outcome="failed",
                 level=logging.WARNING,
                 operation="provider_transfer",
-                exception=exc,
+                exception=None if any(item.detect_image_content for item in items) else exc,
+                error_type=type(exc).__name__,
             )
             raise
 

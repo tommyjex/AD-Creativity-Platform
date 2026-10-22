@@ -364,6 +364,7 @@ class Repository(Protocol):
         task_id: str,
         *,
         direction: AigcAssetDirection | None = None,
+        slot: str | None = None,
     ) -> list[AigcPipelineTaskAssetReference]: ...
 
     def acquire_aigc_worker_lease(

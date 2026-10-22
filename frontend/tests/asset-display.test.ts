@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  assetMatchesKeyword,
+  buildArtifactItems,
+  getImageOperationLabel,
+  isImageProductAsset,
+  partitionWorkspaceAssets,
   getAssetContentUrlById,
   getAssetDownloadUrl,
   getSafeAssetContentUrl,
@@ -28,6 +33,39 @@ const asset = {
 } satisfies Asset;
 
 describe("asset display helpers", () => {
+  it("shows independent video tail frames as searchable AIGC images without a virtual duplicate", () => {
+    const tail: Asset = {
+      ...asset,
+      id: "tail",
+      project_id: null,
+      tool_asset_role: "output",
+      metadata: {
+        origin: "aigc",
+        operation: "video_last_frame",
+        name: "厨房清洁视频尾帧.png",
+        name_variant: "video_last_frame"
+      }
+    };
+    const video: Asset = {
+      ...tail,
+      id: "video",
+      type: "storyboard_video",
+      mime_type: "video/mp4",
+      metadata: {
+        origin: "aigc",
+        last_frame_asset_id: "tail",
+        last_frame_status: "available",
+        last_frame_url: "/api/assets/video/last-frame"
+      }
+    };
+    expect(isImageProductAsset(tail)).toBe(true);
+    expect(getImageOperationLabel(tail)).toBe("视频尾帧");
+    expect(assetMatchesKeyword(tail, "清洁视频尾帧")).toBe(true);
+    expect(partitionWorkspaceAssets([tail, video]).aigc).toHaveLength(2);
+    expect(buildArtifactItems([tail, video])).toHaveLength(1);
+    expect(getAssetDownloadUrl(tail)).toBe("/api/assets/tail/content?download=1");
+  });
+
   it("builds a backend attachment download URL for asset content", () => {
     expect(getAssetDownloadUrl(asset)).toBe(
       "/api/assets/asset%2Fwith%20space/content?download=1"

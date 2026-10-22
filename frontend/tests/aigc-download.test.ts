@@ -7,6 +7,51 @@ import {
 import type { AigcPipelineDefinitionV2 } from "@/lib/aigc/types";
 
 describe("AIGC image downloads", () => {
+  it("names a tail frame by its video role, with frozen and explicit name fallbacks", () => {
+    const tail = {
+      asset_id: "tail", ordinal: 1, mime_type: "image/jpeg",
+      download_url: "/api/assets/tail/content", available: true,
+      metadata: {
+        name_variant: "video_last_frame",
+        name_scheme: "aigc_generated_node_v2",
+        generated_name: "厨房清洁",
+        name: "厨房清洁视频尾帧.jpg"
+      }
+    };
+    expect(getAigcImageDownload(tail, "视频")?.filename).toBe("厨房清洁视频尾帧.jpg");
+    expect(getAigcImageDownload({
+      ...tail, metadata: { ...tail.metadata, generated_name: null }
+    }, "视频")?.filename).toBe("厨房清洁视频尾帧.jpg");
+    expect(getAigcImageDownload({
+      ...tail, metadata: {
+        ...tail.metadata, name_scheme: "user_defined_v1", name: "我的尾帧.png"
+      }
+    }, "视频")?.filename).toBe("我的尾帧.jpg");
+  });
+
+  it("follows the renamed video display node when downloading its tail frame", () => {
+    const definition = {
+      schemaVersion: 2,
+      nodes: [{
+        id: "video-output", type: "video", custom_name: "厨房😀清洁",
+        position: { x: 0, y: 0 }, size: { width: 280, height: 200 },
+        config: { asset_id: null, title: null }
+      }],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    } satisfies AigcPipelineDefinitionV2;
+    const download = getAigcImageDownload({
+      asset_id: "tail", ordinal: 1, mime_type: "image/webp",
+      download_url: "/api/assets/tail/content", available: true,
+      metadata: {
+        node_id: "generator", display_node_id: "video-output",
+        name_scheme: "aigc_generated_node_v2", name_variant: "video_last_frame",
+        generated_name: "旧名称"
+      }
+    }, "视频", definition);
+    expect(download?.filename).toBe("厨房😀清洁视频尾帧.webp");
+  });
+
   it("builds a controlled URL and sanitized MIME-aware filename", () => {
     const download = getAigcImageDownload(
       {

@@ -257,7 +257,11 @@ class FakeGateway:
                         AigcResultAsset(
                             asset_id=f"asset-{task.task_id}",
                             ordinal=0,
-                            mime_type="image/png",
+                            mime_type=(
+                                "video/mp4"
+                                if task.type == AigcTaskType.VIDEO_GENERATION
+                                else "image/png"
+                            ),
                             download_url=f"/api/assets/asset-{task.task_id}/content",
                         )
                     ],
@@ -2391,7 +2395,7 @@ def test_video_input_snapshot_and_hash_include_all_cache_inputs() -> None:
     assert first_hash != reordered_hash
     assert first_hash != audio_disabled_hash
     assert len(first_hash) == 64
-    assert AIGC_VIDEO_EXECUTOR_VERSION == "aigc-video-v2"
+    assert AIGC_VIDEO_EXECUTOR_VERSION == "aigc-video-v3"
     assert snapshot["video-a"] == {
         "asset_id": "asset-video-a",
         "title": None,
@@ -2723,6 +2727,16 @@ def test_incremental_run_reuses_available_video_result() -> None:
             reusable_asset_id,
             AssetType.UPLOADED_VIDEO,
         )
+        repository.create_asset(
+            AssetCreate(
+                id="reusable-tail",
+                tool_asset_role=ToolAssetRole.OUTPUT,
+                type=AssetType.GENERATED_IMAGE,
+                status=Status.SUCCEEDED,
+                mime_type="image/png",
+                object_key="aigc/reusable-tail.png",
+            )
+        )
         pipeline = repository.create_aigc_pipeline(
             AigcPipelineCreate(
                 name="video cache",
@@ -2736,7 +2750,12 @@ def test_incremental_run_reuses_available_video_result() -> None:
                         asset_id=reusable_asset_id,
                         ordinal=0,
                         mime_type="video/mp4",
-                    )
+                    ),
+                    AigcResultAsset(
+                        asset_id="reusable-tail",
+                        ordinal=1,
+                        mime_type="image/png",
+                    ),
                 ]
             }
         )
@@ -2774,6 +2793,11 @@ def test_incremental_run_reuses_available_video_result() -> None:
     assert second_video.status == AigcRunNodeStatus.REUSED
     assert second_video.reused_from_task_id == first_video.current_task_id
     assert gateway.calls["video-model"] == 1
+    assert [asset.asset_id for asset in second_video.result.assets] == [
+        "reusable-video", "reusable-tail"
+    ]
+    output = next(item for item in second.nodes if item.node_id == "video-output")
+    assert [asset.asset_id for asset in output.result.assets] == ["reusable-video"]
 
 
 def test_video_enhancement_snapshot_hash_and_cache_reuse() -> None:

@@ -142,7 +142,7 @@ AIGC_IMAGE_EXECUTOR_VERSION = "aigc-image-v3"
 AIGC_ENABLED_IMAGE_MODELS = frozenset(
     {AIGC_SEEDREAM_PRO_MODEL, AIGC_SEEDREAM_FLASH_MODEL}
 )
-AIGC_VIDEO_EXECUTOR_VERSION = "aigc-video-v2"
+AIGC_VIDEO_EXECUTOR_VERSION = "aigc-video-v3"
 AIGC_VIDEO_ENHANCEMENT_EXECUTOR_VERSION = "aigc-video-enhancement-v1"
 AIGC_VIDEO_FACE_BLUR_EXECUTOR_VERSION = "aigc-video-face-blur-v1"
 AIGC_VIDEO_SUBTITLE_EXTRACTION_EXECUTOR_VERSION = "aigc-video-subtitle-v1"
@@ -2033,17 +2033,105 @@ class AigcModelGateway:
                 ),
                 retryable=True,
             ) from exc
-        visible = self.asset_storage.with_access_url(asset)
+        last_frame: Asset | None = None
+        error_type = "MissingProviderUrl"
+        try:
+            if generated.last_frame_url and generated.last_frame_url.strip():
+                last_frame = (
+                    await self.asset_storage.upload_assets_from_sources(
+                        self.repository,
+                        [
+                            StoredAssetInput(
+                                type=AssetType.GENERATED_IMAGE,
+                                tool_asset_role=ToolAssetRole.OUTPUT,
+                                status=Status.DRAFT,
+                                stage=Stage.IMAGE,
+                                source_url=generated.last_frame_url,
+                                mime_type="image/*",
+                                detect_image_content=True,
+                                metadata={
+                                    **_safe_video_metadata(generated.metadata),
+                                    "origin": "aigc",
+                                    "aigc_role": "video_last_frame",
+                                    "operation": "video_last_frame",
+                                    "name_variant": "video_last_frame",
+                                    "source_video_asset_id": asset.id,
+                                    "pipeline_id": task.pipeline_id,
+                                    "run_id": task.run_id,
+                                    "task_id": task.task_id,
+                                    "node_id": task.node_id,
+                                    "model": params.model,
+                                    "executor_version": AIGC_VIDEO_EXECUTOR_VERSION,
+                                },
+                                naming_context=self._asset_naming_context(task),
+                            )
+                        ],
+                    )
+                )[0]
+                self.repository.add_aigc_task_assets(
+                    [
+                        AigcPipelineTaskAssetReference(
+                            task_id=task.task_id,
+                            direction=AigcAssetDirection.OUTPUT,
+                            slot="last_frame",
+                            ordinal=0,
+                            asset_id=last_frame.id,
+                        )
+                    ]
+                )
+                asset = self.repository.update_asset(
+                    asset.id,
+                    metadata={
+                        **asset.metadata,
+                        "last_frame_status": "available",
+                        "last_frame_asset_id": last_frame.id,
+                    },
+                )
+        except Exception as exc:
+            error_type = type(exc).__name__
+            if last_frame is not None:
+                self.repository.remove_aigc_task_assets(
+                    task.task_id,
+                    direction=AigcAssetDirection.OUTPUT,
+                    slot="last_frame",
+                )
+                self.asset_storage.delete_asset_objects(last_frame)
+                self.repository.delete_tool_asset(last_frame.id)
+                last_frame = None
+        if last_frame is None:
+            asset = self.repository.update_asset(
+                asset.id,
+                metadata={
+                    **asset.metadata,
+                    "last_frame_status": "unavailable",
+                    "last_frame_error_type": error_type,
+                },
+            )
+            log_event(
+                logger,
+                "aigc.video_generation.last_frame_failed",
+                outcome="failed",
+                pipeline_id=task.pipeline_id,
+                run_id=task.run_id,
+                node_id=task.node_id,
+                task_id=task.task_id,
+                error_type=error_type,
+                phase="last_frame_transfer",
+            )
         return AigcTaskResult(
             kind=AigcResultKind.ASSETS,
             naming=naming,
             assets=[
                 AigcResultAsset(
-                    asset_id=asset.id,
-                    ordinal=0,
-                    mime_type=asset.mime_type,
-                    download_url=visible.url,
+                    asset_id=output.id,
+                    ordinal=ordinal,
+                    mime_type=output.mime_type,
+                    download_url=self.asset_storage.with_access_url(output).url,
                     available=True,
+                    metadata=output.metadata,
+                )
+                for ordinal, output in enumerate(
+                    [asset, last_frame] if last_frame is not None else [asset]
                 )
             ],
         )

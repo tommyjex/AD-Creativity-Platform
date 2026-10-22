@@ -2748,7 +2748,10 @@ def _result_value_for_port(
         return result.text
     if source_handle in {"image", "video", "audio", "subtitle"}:
         available = next(
-            (item for item in result.assets if item.available),
+            (
+                item for item in result.assets
+                if item.available and _asset_matches_output_port(item, source_handle)
+            ),
             None,
         )
         if available is not None:
@@ -2775,7 +2778,10 @@ def _project_result_for_port(
     if source_handle in {"image", "video", "audio", "subtitle"}:
         return AigcTaskResult(
             kind=AigcResultKind.ASSETS,
-            assets=[item for item in result.assets if item.available],
+            assets=[
+                item for item in result.assets
+                if item.available and _asset_matches_output_port(item, source_handle)
+            ],
         )
     if source_handle == "layers" and result.layer_set is not None:
         return AigcTaskResult(
@@ -2793,6 +2799,12 @@ def _project_result_for_port(
             edited_layer=result.edited_layer,
         )
     raise ValueError(f"result does not contain output port {source_handle}")
+
+
+def _asset_matches_output_port(asset: AigcResultAsset, source_handle: str) -> bool:
+    if source_handle == "subtitle" or asset.mime_type is None:
+        return True
+    return asset.mime_type.lower().startswith(f"{source_handle}/")
 
 
 def _project_managed_text_result(

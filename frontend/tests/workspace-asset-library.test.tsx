@@ -411,6 +411,31 @@ describe("WorkspaceAssetLibrary", () => {
     );
   });
 
+  it("labels and previews independent video tail frames in the AIGC source", () => {
+    const tail = createAsset({
+      ...aigcOutputAsset,
+      id: "tail",
+      mime_type: "image/png",
+      metadata: {
+        origin: "aigc", operation: "video_last_frame",
+        name: "厨房清洁视频尾帧.png", name_variant: "video_last_frame"
+      },
+      url: "/api/assets/tail/content"
+    });
+    render(<WorkspaceAssetLibrary assets={[tail]} filters={{ source: "aigc" }} projects={[]} />);
+    expect(screen.getByText("视频尾帧", { exact: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "图片 1" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "搜索资产" }), {
+      target: { value: "清洁视频尾帧" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "放大查看厨房清洁视频尾帧.png预览" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("img")).toHaveClass("object-contain");
+    expect(within(dialog).getByRole("link", { name: "下载资产" })).toHaveAttribute(
+      "href", "http://backend.local/api/assets/tail/content?download=1"
+    );
+  });
+
   it("shows AIGC input and output with dedicated source and role labels", () => {
     render(
       <WorkspaceAssetLibrary

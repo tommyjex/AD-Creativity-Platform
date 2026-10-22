@@ -1318,6 +1318,9 @@ function ToolAssetCard({
         <dl className="mt-3 grid gap-2 border-t border-border pt-3 text-xs">
           <MetadataRow label="来源" value={sourceLabel} />
           <MetadataRow label="资产角色" value={roleLabel} />
+          {isAigc && asset.metadata.operation === "video_last_frame" ? (
+            <MetadataRow label="资产类型" value={typeLabel} />
+          ) : null}
           {isAigc ? null : <MetadataRow label="工具类型" value={typeLabel} />}
           <MetadataRow label="任务状态" value={getStatusLabel(taskStatus)} />
           <MetadataRow
@@ -1669,14 +1672,14 @@ function AssetPreviewDialog({
       <DialogContent className="max-w-4xl p-0">
         {target ? (
           <div className="flex max-h-[calc(100dvh-3rem)] flex-col">
-            <div className="grid place-items-center bg-slate-950">
+            <div className="relative grid h-[min(45dvh,28rem)] shrink-0 place-items-center bg-slate-950">
               {target.isAudio ? (
                 <audio aria-label={`${target.title}播放`} controls src={target.url} />
               ) : target.isVideo ? (
                 <video
                   aria-label={`${target.title}播放`}
                   autoPlay
-                  className="max-h-[70dvh] w-full"
+                  className="absolute inset-0 h-full w-full object-contain"
                   controls
                   playsInline
                   src={target.url}
@@ -1685,12 +1688,12 @@ function AssetPreviewDialog({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   alt={`${target.title}大图`}
-                  className="max-h-[70dvh] w-full object-contain"
+                  className="absolute inset-0 h-full w-full object-contain"
                   src={target.url}
                 />
               )}
             </div>
-            <div className="border-t border-border p-5">
+            <div className="min-h-0 overflow-y-auto border-t border-border p-5">
               <DialogHeader>
                 <DialogTitle>{target.title}</DialogTitle>
                 <DialogDescription>
@@ -1807,6 +1810,7 @@ function getToolAssetRoleLabel(
 }
 
 function getAigcAssetTypeLabel(asset: Asset): string {
+  if (asset.metadata.operation === "video_last_frame") return "视频尾帧";
   if (asset.mime_type?.startsWith("image/")) return "图片";
   if (asset.mime_type?.startsWith("video/")) return "视频";
   if (asset.mime_type?.startsWith("audio/")) return "音频";

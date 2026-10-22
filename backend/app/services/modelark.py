@@ -20,13 +20,14 @@ from pydantic import (
 
 from ..core.config import Settings, get_settings
 from ..core.logging import emit_tls_only_event
-from ..prompts import load_seedream_image_prompt
 from ..schemas import (
     AIGC_GENERATED_MEDIA_NAMING_MODEL,
     AigcGeneratedMediaName,
     AigcGeneratedMediaNamingRequest,
-    AigcImagePromptLocalEditResult,
     AigcImagePromptSection,
+    AigcImagePromptFullDesignResult as AigcImagePromptSectionsResult,
+    AigcImagePromptLocalEditResult,
+    AigcImagePromptOptimizationResult as AigcImagePromptModeResult,
     AigcPromptOptimizeRequest,
     AigcSeedreamGenerationType,
     AigcSeedreamPromptOptimizationResult,
@@ -35,20 +36,14 @@ from ..schemas import (
     CharacterAssetIterationOperation,
     ImageGenerationOperation,
     ImageGenerationSize,
+    ImagePromptSuggestion,
     ImageLayerDecompositionSize,
     ImageOutputFormat,
-    ImagePromptSuggestion,
     Stage,
     Status,
     StoryboardShotCreate,
     TargetLanguage,
     validate_visible_selling_copy,
-)
-from ..schemas import (
-    AigcImagePromptFullDesignResult as AigcImagePromptSectionsResult,
-)
-from ..schemas import (
-    AigcImagePromptOptimizationResult as AigcImagePromptModeResult,
 )
 from ..schemas.common import SchemaModel
 from ..schemas.image_dimensions import (
@@ -76,11 +71,13 @@ from ..schemas.tool_task import (
     validate_tool_video_resolution,
 )
 from ..video_prompt import MAX_VIDEO_PROMPT_LENGTH
+from ..prompts import load_seedream_image_prompt
 from .prompt_anchors import (
     extract_source_constraints,
     positive_anchor_section_index,
 )
 from .text_streaming import IncrementalJsonStringExtractor
+
 
 TEXT_GENERATION_STAGES = {Stage.STORY, Stage.SCRIPT, Stage.STORYBOARD}
 SEED_THINKING_DISABLED = {"type": "disabled"}
@@ -1874,6 +1871,7 @@ class BytePlusModelArkAdapter:
                 ratio=request.aspect_ratio,
                 duration=request.duration_seconds,
                 generate_audio=request.generate_audio,
+                return_last_frame=True,
                 watermark=False,
             )
         except Exception as exc:
@@ -1887,7 +1885,9 @@ class BytePlusModelArkAdapter:
                     phase="create",
                 )
             completed = await self._wait_for_video_task(task_id.strip())
-            video_url = getattr(getattr(completed, "content", None), "video_url", None)
+            completed_content = getattr(completed, "content", None)
+            video_url = getattr(completed_content, "video_url", None)
+            last_frame_url = getattr(completed_content, "last_frame_url", None)
             if not isinstance(video_url, str) or not video_url.strip():
                 raise ModelArkProviderError(
                     "video generation succeeded without a video URL",
@@ -1908,6 +1908,11 @@ class BytePlusModelArkAdapter:
             stage=Stage.VIDEO,
             url=video_url.strip(),
             mime_type="video/mp4",
+            last_frame_url=(
+                last_frame_url.strip()
+                if isinstance(last_frame_url, str) and last_frame_url.strip()
+                else None
+            ),
             metadata=_seedance_metadata(
                 request,
                 provider="volcengine-modelark",

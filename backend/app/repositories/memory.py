@@ -1223,6 +1223,13 @@ class InMemoryRepository:
                                     naming_status=naming.status.value,
                                     mime_type=asset.mime_type,
                                     output_ordinal=reference.ordinal,
+                                    name_variant=(
+                                        "video_last_frame"
+                                        if reference.slot == "last_frame"
+                                        or asset.metadata.get("name_variant")
+                                        == "video_last_frame"
+                                        else None
+                                    ),
                                 ),
                             },
                             "updated_at": utc_now(),
@@ -1230,6 +1237,21 @@ class InMemoryRepository:
                         deep=True,
                     )
                 )
+            metadata_by_id = {asset.id: asset.metadata for asset in assets}
+            result = result.model_copy(
+                update={
+                    "assets": [
+                        item.model_copy(
+                            update={"metadata": metadata_by_id[item.asset_id]},
+                            deep=True,
+                        )
+                        if item.asset_id in metadata_by_id
+                        else item
+                        for item in result.assets
+                    ]
+                },
+                deep=True,
+            )
             committed, accepted = self.commit_aigc_task_attempt(
                 task_id,
                 fencing_token=fencing_token,
@@ -1431,6 +1453,7 @@ class InMemoryRepository:
         task_id: str,
         *,
         direction: AigcAssetDirection | None = None,
+        slot: str | None = None,
     ) -> list[AigcPipelineTaskAssetReference]:
         with self._lock:
             if task_id not in self._aigc_tasks:
@@ -1440,6 +1463,7 @@ class InMemoryRepository:
                 for key, reference in self._aigc_task_assets.items()
                 if reference.task_id == task_id
                 and (direction is None or reference.direction == direction)
+                and (slot is None or reference.slot == slot)
             ]
             removed = [self._copy(self._aigc_task_assets[key]) for key in keys]
             for key in keys:
