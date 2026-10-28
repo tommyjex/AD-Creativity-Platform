@@ -64,6 +64,7 @@ class AssetRole(str, Enum):
 class ToolTaskType(str, Enum):
     FACE_BLUR_VIDEO = "face_blur_video"
     MULTIMODAL_VIDEO_GENERATION = "multimodal_video_generation"
+    VIDEO_SUBTITLE_TRANSLATION = "video_subtitle_translation"
 
 
 class ToolAssetRole(str, Enum):

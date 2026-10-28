@@ -8,14 +8,9 @@ import type {
   AigcPipeline,
   AigcPipelineTemplate
 } from "@/lib/aigc/types";
+import { parseAigcView } from "@/lib/aigc/workspace-view";
 
 const PAGE_SIZE = 20;
-
-export function parseAigcView(
-  view: string | string[] | undefined
-): "templates" | "pipelines" {
-  return view === "pipelines" ? "pipelines" : "templates";
-}
 
 function emptyPage<T>(): AigcPage<T> {
   return {

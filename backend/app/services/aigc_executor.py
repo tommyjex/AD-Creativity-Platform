@@ -14,6 +14,7 @@ from uuid import uuid4
 from backend.app.core.logging import log_event
 from backend.app.repositories import NotFoundError, Repository
 from backend.app.schemas import (
+    AIGC_MODEL_OUTPUT_MATERIALIZATION,
     AigcAssetDirection,
     AigcEdge,
     AigcEditedLayer,
@@ -218,6 +219,13 @@ MULTI_TRACK_ASSET_TYPES = {
     },
     "audio": {AssetType.UPLOADED_AUDIO},
     "subtitle": {AssetType.SUBTITLE},
+}
+MATERIALIZABLE_TASK_TYPES = {
+    AigcTaskType.TEXT_TO_IMAGE,
+    AigcTaskType.IMAGE_TO_IMAGE,
+    AigcTaskType.VIDEO_GENERATION,
+    AigcTaskType.VIDEO_ENHANCEMENT,
+    AigcTaskType.VIDEO_FACE_BLUR,
 }
 
 
@@ -492,10 +500,78 @@ class AigcPipelineRuntime:
                 started_at=utc_now(),
                 error=initialization_error,
             )
+        self._materialize_reused_model_outputs(created)
         await self.start()
         await self._schedule_ready_nodes(created.run.id)
         await self._finalize_run(created.run.id)
         return self.repository.get_aigc_run(created.run.id)
+
+    def _materialize_reused_model_outputs(
+        self,
+        detail: AigcPipelineRunDetail,
+    ) -> None:
+        node_by_id = {
+            node.id: node for node in detail.run.definition_snapshot.nodes
+        }
+        for run_node in detail.nodes:
+            source = node_by_id.get(run_node.node_id)
+            if (
+                run_node.status != AigcRunNodeStatus.REUSED
+                or source is None
+                or source.type not in AIGC_MODEL_OUTPUT_MATERIALIZATION
+            ):
+                continue
+            self._materialize_model_output(
+                pipeline_id=detail.run.pipeline_id,
+                run_id=detail.run.id,
+                node_id=run_node.node_id,
+                result=run_node.result,
+                phase="reuse",
+            )
+
+    def _materialize_model_output(
+        self,
+        *,
+        pipeline_id: str,
+        run_id: str,
+        node_id: str,
+        result: AigcTaskResult,
+        phase: str,
+    ) -> None:
+        try:
+            materialization = self.repository.materialize_aigc_model_output(
+                pipeline_id,
+                source_node_id=node_id,
+                run_id=run_id,
+                result=result,
+            )
+        except Exception as exc:  # noqa: BLE001 - task success is authoritative.
+            log_event(
+                logger,
+                "aigc.model_output.materialization",
+                outcome="failed",
+                level=logging.ERROR,
+                pipeline_id=pipeline_id,
+                run_id=run_id,
+                node_id=node_id,
+                phase=phase,
+                error_code="materialization_failed",
+                error_stage="definition_update",
+                error_type=type(exc).__name__,
+            )
+            return
+        log_event(
+            logger,
+            "aigc.model_output.materialization",
+            outcome="succeeded" if materialization.changed else "skipped",
+            pipeline_id=pipeline_id,
+            run_id=run_id,
+            node_id=node_id,
+            phase=phase,
+            error_code=(
+                None if materialization.changed else materialization.reason
+            ),
+        )
 
     def _cache_state(self, pipeline_id: str) -> _CacheState:
         candidates: dict[str, AigcCacheCandidate] = {}
@@ -1964,6 +2040,14 @@ class AigcPipelineRuntime:
                     result=execution.result,
                     error=None,
                     metrics=execution.metrics,
+                )
+            if accepted and task.type in MATERIALIZABLE_TASK_TYPES:
+                self._materialize_model_output(
+                    pipeline_id=task.pipeline_id,
+                    run_id=task.run_id,
+                    node_id=task.node_id,
+                    result=_committed.result,
+                    phase="execution",
                 )
             if not accepted:
                 await self._cleanup_task_outputs(task.task_id)

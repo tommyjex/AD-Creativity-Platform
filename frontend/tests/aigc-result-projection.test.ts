@@ -478,6 +478,304 @@ describe("AIGC modality Run result projection", () => {
     expect(projection?.downloadUrl).toBeNull();
   });
 
+  it("immediately projects only the matching current Run primary model output", () => {
+    const snapshot: AigcPipelineDefinitionV2 = {
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: "image-model",
+          type: "text_to_image",
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 180 },
+          config: {
+            model: "doubao-seedream-5-0-pro-260628",
+            aspect_ratio: "1:1",
+            size: "2K",
+            format: "png"
+          }
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
+    const currentDefinition: AigcPipelineDefinitionV2 = {
+      ...structuredClone(snapshot),
+      nodes: [
+        ...structuredClone(snapshot.nodes),
+        {
+          id: "generated-image",
+          type: "image",
+          custom_name: "主商品图",
+          position: { x: 320, y: 0 },
+          size: { width: 240, height: 180 },
+          config: {
+            asset_id: "primary",
+            bbox: null,
+            bbox_asset_id: null,
+            upstream_bbox: null,
+            upstream_bbox_asset_id: null,
+            title: "主商品图",
+            generated_by_model_node_id: "image-model",
+            generated_output_handle: "image",
+            generated_from_run_id: "current"
+          }
+        }
+      ],
+      edges: [
+        {
+          id: "generated-edge",
+          sourceNodeId: "image-model",
+          sourceHandle: "image",
+          targetNodeId: "generated-image",
+          targetHandle: "image"
+        }
+      ]
+    };
+    const detail = modalityRun(
+      snapshot,
+      runNode("image-model", {
+        kind: "assets",
+        text: null,
+        text_digest: null,
+        assets: [
+          {
+            asset_id: "secondary",
+            ordinal: 1,
+            mime_type: "image/png",
+            download_url: "/api/assets/secondary/content",
+            available: true
+          },
+          {
+            asset_id: "primary",
+            ordinal: 0,
+            mime_type: "image/png",
+            download_url: "/api/assets/primary/content",
+            available: true
+          }
+        ]
+      }),
+      "current"
+    );
+
+    expect(
+      projectAigcModalityRunResult(
+        detail,
+        "generated-image",
+        currentDefinition
+      )
+    ).toMatchObject({
+      asset: { asset_id: "primary", ordinal: 0 },
+      available: true,
+      downloadUrl: "/api/assets/primary/content",
+      modality: "image",
+      mode: "upstream",
+      status: "succeeded",
+      title: "主商品图"
+    });
+
+    detail.run.id = "historical";
+    expect(
+      projectAigcModalityRunResult(
+        detail,
+        "generated-image",
+        currentDefinition
+      )
+    ).toBeNull();
+  });
+
+  it("prefers an authoritative modality RunNode over immediate projection", () => {
+    const snapshot: AigcPipelineDefinitionV2 = {
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: "video-model",
+          type: "video_generation",
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 180 },
+          config: {
+            model: "doubao-seedance-2-5-260628",
+            generation_mode: "text_to_video",
+            resolution: "1080p",
+            aspect_ratio: "16:9",
+            duration_seconds: 5,
+            generate_audio: true
+          }
+        },
+        {
+          id: "generated-video",
+          type: "video",
+          position: { x: 320, y: 0 },
+          size: { width: 240, height: 180 },
+          config: {
+            asset_id: "backup",
+            title: "自动视频",
+            generated_by_model_node_id: "video-model",
+            generated_output_handle: "video",
+            generated_from_run_id: "previous-run"
+          }
+        }
+      ],
+      edges: [
+        {
+          id: "generated-edge",
+          sourceNodeId: "video-model",
+          sourceHandle: "video",
+          targetNodeId: "generated-video",
+          targetHandle: "video"
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
+    const detail = modalityRun(
+      snapshot,
+      runNode("generated-video", {
+        kind: "assets",
+        text: null,
+        text_digest: null,
+        assets: [
+          {
+            asset_id: "authoritative",
+            ordinal: 0,
+            mime_type: "video/mp4",
+            download_url: "/api/assets/authoritative/content",
+            available: true
+          }
+        ]
+      }),
+      "current"
+    );
+    detail.nodes.unshift(
+      runNode("video-model", {
+        kind: "assets",
+        text: null,
+        text_digest: null,
+        assets: [
+          {
+            asset_id: "source-result",
+            ordinal: 0,
+            mime_type: "video/mp4",
+            download_url: "/api/assets/source-result/content",
+            available: true
+          }
+        ]
+      })
+    );
+
+    expect(
+      projectAigcModalityRunResult(
+        detail,
+        "generated-video",
+        snapshot
+      )?.asset?.asset_id
+    ).toBe("authoritative");
+  });
+
+  it("rejects mismatched handles, non-primary products, and unavailable sources", () => {
+    const currentDefinition: AigcPipelineDefinitionV2 = {
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: "image-model",
+          type: "text_to_image",
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 180 },
+          config: {
+            model: "doubao-seedream-5-0-pro-260628",
+            aspect_ratio: "1:1",
+            size: "2K",
+            format: "png"
+          }
+        },
+        {
+          id: "generated-image",
+          type: "image",
+          position: { x: 320, y: 0 },
+          size: { width: 240, height: 180 },
+          config: {
+            asset_id: "backup",
+            bbox: null,
+            bbox_asset_id: null,
+            title: null,
+            generated_by_model_node_id: "image-model",
+            generated_output_handle: "image",
+            generated_from_run_id: "current"
+          }
+        }
+      ],
+      edges: [
+        {
+          id: "generated-edge",
+          sourceNodeId: "image-model",
+          sourceHandle: "image",
+          targetNodeId: "generated-image",
+          targetHandle: "image"
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
+    const detail = modalityRun(
+      {
+        ...currentDefinition,
+        nodes: [currentDefinition.nodes[0]],
+        edges: []
+      },
+      runNode("image-model", {
+        kind: "assets",
+        text: null,
+        text_digest: null,
+        assets: [
+          {
+            asset_id: "secondary-only",
+            ordinal: 1,
+            mime_type: "image/png",
+            download_url: "/api/assets/secondary/content",
+            available: true
+          }
+        ]
+      }),
+      "current"
+    );
+    expect(
+      projectAigcModalityRunResult(
+        detail,
+        "generated-image",
+        currentDefinition
+      )
+    ).toBeNull();
+
+    detail.nodes[0].result.assets = [
+      {
+        asset_id: "unavailable-primary",
+        ordinal: 0,
+        mime_type: "image/png",
+        download_url: null,
+        available: false
+      }
+    ];
+    expect(
+      projectAigcModalityRunResult(
+        detail,
+        "generated-image",
+        currentDefinition
+      )
+    ).toMatchObject({
+      asset: { asset_id: "unavailable-primary", available: false },
+      available: false,
+      downloadUrl: null
+    });
+
+    const generated = currentDefinition.nodes[1];
+    if (generated.type !== "image") throw new Error("expected image node");
+    generated.config.generated_output_handle = "video" as "image";
+    expect(
+      projectAigcModalityRunResult(
+        detail,
+        "generated-image",
+        currentDefinition
+      )
+    ).toBeNull();
+  });
+
   it("marks an upstream bbox stale when the selected run asset changes", () => {
     const value: AigcPipelineDefinitionV2 = {
       schemaVersion: 2,

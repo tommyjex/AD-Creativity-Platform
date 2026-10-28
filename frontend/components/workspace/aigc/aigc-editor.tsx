@@ -120,6 +120,7 @@ import {
   connectionValidationFeedback,
   getAigcConnectionValidationError
 } from "@/lib/aigc/connection-validation";
+import { migrateAigcRunSnapshotV2 } from "@/lib/aigc/definition-migration";
 import {
   jsonParserErrorMessage,
   jsonParserItemCount,
@@ -222,6 +223,7 @@ import {
   latestRelevantAttempt,
   type AigcLogError
 } from "@/lib/aigc/run-log";
+import { AIGC_MODEL_OUTPUT_MATERIALIZATION } from "@/lib/aigc/types";
 import type {
   AigcEdge,
   AigcImageOperation,
@@ -548,12 +550,22 @@ function AigcEditorContent({
         node.type === "json_parser" ? [node.id] : []
       )
     );
+    const materializingModelNodeIds = new Set(
+      definition.nodes.flatMap((node) =>
+        node.type in AIGC_MODEL_OUTPUT_MATERIALIZATION ? [node.id] : []
+      )
+    );
     const completedMutations = [...runDetails.values()]
       .sort((left, right) => left.run.run_number - right.run.run_number)
       .flatMap((detail) => {
       const hasParserMutation = detail.nodes.some(
         (node) =>
           parserNodeIds.has(node.node_id) &&
+          (node.status === "succeeded" || node.status === "reused")
+      );
+      const hasModelOutputMutation = detail.nodes.some(
+        (node) =>
+          materializingModelNodeIds.has(node.node_id) &&
           (node.status === "succeeded" || node.status === "reused")
       );
       const namedNodes = new Map(
@@ -570,7 +582,9 @@ function AigcEditorContent({
           ).map((nodeId) => [nodeId, generatedName] as const);
         })
       );
-        return hasParserMutation || namedNodes.size > 0
+        return hasParserMutation ||
+          hasModelOutputMutation ||
+          namedNodes.size > 0
           ? [{ runId: detail.run.id, namedNodes }]
           : [];
       });
@@ -2851,7 +2865,11 @@ function ModalityNodeConfig({
             definition as AigcPipelineDefinitionV2,
             node.id
           )
-        : projectAigcModalityRunResult(runDetail, node.id)
+        : projectAigcModalityRunResult(
+            runDetail,
+            node.id,
+            definition
+          )
       : null;
   const managedSource = managedTextSource(node, definition.nodes);
   const resolvedDisplayName =
@@ -3335,10 +3353,9 @@ function ResultPanel({
   runDetail: AigcPipelineRunDetail | undefined;
 }) {
   const snapshotDefinition = runDetail?.run.definition_snapshot;
-  const snapshotNodes =
-    snapshotDefinition?.schemaVersion === 2
-      ? snapshotDefinition.nodes
-      : [];
+  const snapshotNodes = snapshotDefinition
+    ? migrateAigcRunSnapshotV2(snapshotDefinition).nodes
+    : [];
   const currentDisplayNames = deriveAigcNodeDisplayNames(definition.nodes);
   const snapshotDisplayNames = deriveAigcNodeDisplayNames(snapshotNodes);
   const resultNodes = runDetail?.nodes.filter(
@@ -3347,6 +3364,53 @@ function ResultPanel({
         item.result.metadata?.empty === true) &&
       (!nodeId || item.node_id === nodeId)
   ) ?? [];
+  const immediateProjection =
+    runDetail && nodeId
+      ? projectAigcModalityRunResult(runDetail, nodeId, definition)
+      : null;
+  const immediateNode =
+    nodeId && immediateProjection
+      ? definition.nodes.find((node) => node.id === nodeId)
+      : undefined;
+  if (
+    runDetail &&
+    immediateProjection?.asset &&
+    immediateNode &&
+    (immediateNode.type === "image" || immediateNode.type === "video") &&
+    !runDetail.nodes.some((item) => item.node_id === immediateNode.id)
+  ) {
+    const displayName =
+      deriveAigcNodeDisplayNames(definition.nodes).get(immediateNode.id)
+        ?.displayName ?? immediateProjection.title;
+    return (
+      <div className="space-y-3">
+        <div className="border border-border bg-background p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate font-mono text-[10px] text-muted-foreground">
+              {displayName}
+            </span>
+            <Badge
+              variant={
+                immediateProjection.status === "reused" ? "info" : "success"
+              }
+            >
+              {immediateProjection.status === "reused" ? "复用" : "完成"}
+            </Badge>
+          </div>
+          <div className="mt-3">
+            <ModalityAsset
+              asset={immediateProjection.asset}
+              definition={definition}
+              nodeId={immediateNode.id}
+              runDetail={runDetail}
+              title={displayName}
+              type={immediateNode.type}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!runDetail || resultNodes.length === 0) {
     return (
       <InspectorPlaceholder
@@ -3372,7 +3436,8 @@ function ResultPanel({
           item.node_id;
         const modalityProjection = projectAigcModalityRunResult(
           runDetail,
-          item.node_id
+          item.node_id,
+          definition
         );
         const compositeProjection =
           item.result.kind === "layer_composite"
@@ -3382,6 +3447,24 @@ function ResultPanel({
                 runDetail.nodes
               )
             : null;
+        const videoLastFrameAssets =
+          sourceNode?.type === "video_generation" &&
+          item.result.kind === "assets"
+            ? item.result.assets.filter(isVideoLastFrameImage)
+            : [];
+        const videoLastFrame = videoLastFrameAssets.find(
+          (asset) =>
+            asset.available &&
+            getSafeAssetContentUrl(asset.download_url) !== null
+        );
+        const resultAssets =
+          item.result.kind === "assets" && videoLastFrameAssets.length > 0
+            ? item.result.assets.filter(
+                (asset) => !videoLastFrameAssets.includes(asset)
+              )
+            : item.result.kind === "assets"
+              ? item.result.assets
+              : [];
         return (
           <div className="border border-border bg-background p-3" key={item.node_id}>
           <div className="flex items-center justify-between gap-2">
@@ -3416,7 +3499,7 @@ function ResultPanel({
           ) : null}
           {item.result.kind === "assets" ? (
             <div className="mt-3 space-y-2">
-              {item.result.assets.map((asset) => (
+              {resultAssets.map((asset) => (
                 <ResultAsset
                   asset={asset}
                   definition={definition}
@@ -3426,6 +3509,13 @@ function ResultPanel({
                   title={sourceName}
                 />
               ))}
+              {videoLastFrame ? (
+                <VideoLastFrameResult
+                  asset={videoLastFrame}
+                  definition={definition}
+                  title={sourceName}
+                />
+              ) : null}
             </div>
           ) : null}
           {item.result.kind === "none" &&
@@ -3474,6 +3564,113 @@ function ResultPanel({
   );
 }
 
+function isVideoLastFrameImage(asset: AigcResultAsset): boolean {
+  const nameVariant = asset.metadata?.name_variant;
+  const mimeType = asset.mime_type
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase();
+  return (
+    nameVariant === "video_last_frame" &&
+    Boolean(mimeType?.startsWith("image/"))
+  );
+}
+
+function VideoLastFrameResult({
+  asset,
+  definition,
+  title
+}: {
+  asset: AigcResultAsset;
+  definition: AigcPipelineDefinitionV2;
+  title: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const resultUrl = getSafeAssetContentUrl(asset.download_url);
+  const download = getAigcImageDownload(asset, title, definition);
+  if (!resultUrl || !download) return null;
+
+  return (
+    <>
+      <section
+        aria-label="视频尾帧"
+        className="space-y-2 border border-border bg-card p-2.5"
+        role="group"
+      >
+        <div className="min-w-0">
+          <h3 className="text-xs font-semibold text-foreground">视频尾帧</h3>
+          <p
+            className="mt-1 truncate text-[11px] text-muted-foreground"
+            title={download.filename}
+          >
+            {download.filename}
+          </p>
+        </div>
+        <button
+          aria-label={`放大查看：${download.filename}`}
+          className="relative block h-44 w-full overflow-hidden border border-border bg-background"
+          onClick={() => setOpen(true)}
+          type="button"
+        >
+          {/* Signed result URL is intentionally rendered directly. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            alt={`${download.filename} 缩略图`}
+            className="absolute inset-0 h-full w-full object-contain"
+            src={resultUrl}
+          />
+        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            onClick={() => setOpen(true)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            放大查看
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <a download={download.filename} href={download.url}>
+              <Download className="h-4 w-4" />
+              下载尾帧
+            </a>
+          </Button>
+        </div>
+      </section>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="grid h-[92dvh] w-[96vw] max-w-[96vw] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-slate-700 bg-slate-950 p-0 text-white sm:rounded-xl">
+          <DialogHeader className="border-b border-white/10 px-5 py-4 pr-16">
+            <DialogTitle className="text-white">视频尾帧</DialogTitle>
+            <DialogDescription
+              className="truncate text-slate-300"
+              title={download.filename}
+            >
+              {download.filename}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative min-h-0 bg-black">
+            {/* Signed result URL is intentionally rendered directly. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt={`${download.filename} 大图`}
+              className="absolute inset-0 h-full w-full object-contain"
+              src={resultUrl}
+            />
+          </div>
+          <DialogFooter className="border-t border-white/10 px-5 py-4">
+            <Button asChild variant="outline">
+              <a download={download.filename} href={download.url}>
+                <Download className="h-4 w-4" />
+                下载尾帧
+              </a>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function ResultAsset({
   asset,
   definition,
@@ -3491,7 +3688,11 @@ function ResultAsset({
   const resultUrl = asset.available
     ? getSafeAssetContentUrl(asset.download_url)
     : null;
-  const modalityProjection = projectAigcModalityRunResult(runDetail, nodeId);
+  const modalityProjection = projectAigcModalityRunResult(
+    runDetail,
+    nodeId,
+    definition
+  );
   const sourceNode = snapshotDefinition.nodes.find(
     (candidate) => candidate.id === nodeId
   );
@@ -3723,9 +3924,14 @@ function ModalityAsset({
     ? getSafeAssetContentUrl(asset.download_url)
     : null;
   if (type === "video") {
+    const snapshotHasNode = Boolean(
+      runDetail?.run.definition_snapshot.nodes.some(
+        (node) => node.id === nodeId
+      )
+    );
     const projection = runDetail
       ? projectAigcVideoResult(
-          runDetail.run.definition_snapshot,
+          snapshotHasNode ? runDetail.run.definition_snapshot : definition,
           nodeId,
           [asset]
         )

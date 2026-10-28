@@ -136,6 +136,18 @@ class AigcNodeType(str, Enum):
     VIDEO_OUTPUT = "video_output"
 
 
+AIGC_MODEL_OUTPUT_MATERIALIZATION: dict[
+    AigcNodeType,
+    tuple[AigcNodeType, str],
+] = {
+    AigcNodeType.TEXT_TO_IMAGE: (AigcNodeType.IMAGE, "image"),
+    AigcNodeType.IMAGE_TO_IMAGE: (AigcNodeType.IMAGE, "image"),
+    AigcNodeType.VIDEO_GENERATION: (AigcNodeType.VIDEO, "video"),
+    AigcNodeType.VIDEO_ENHANCEMENT: (AigcNodeType.VIDEO, "video"),
+    AigcNodeType.VIDEO_FACE_BLUR: (AigcNodeType.VIDEO, "video"),
+}
+
+
 class AigcPortType(str, Enum):
     TEXT = "text"
     IMAGE_ASSET = "image_asset"
@@ -900,10 +912,49 @@ class TextConfig(TextInputConfig):
         return self
 
 
+def _strip_generated_model_output_field(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("generated model source fields must not be blank")
+    return stripped
+
+
 class ImageConfig(ImageInputConfig):
     title: str | None = Field(default=None, min_length=1, max_length=120)
     upstream_bbox: ImageBboxAnnotation | None = None
     upstream_bbox_asset_id: str | None = Field(default=None, min_length=1)
+    generated_by_model_node_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=120,
+        exclude_if=lambda value: value is None,
+    )
+    generated_output_handle: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        exclude_if=lambda value: value is None,
+    )
+    generated_from_run_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=120,
+        exclude_if=lambda value: value is None,
+    )
+
+    @field_validator(
+        "generated_by_model_node_id",
+        "generated_output_handle",
+        "generated_from_run_id",
+    )
+    @classmethod
+    def strip_generated_model_output_field(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        return _strip_generated_model_output_field(value)
 
     @model_validator(mode="after")
     def validate_upstream_bbox_asset_binding(self) -> "ImageConfig":
@@ -911,11 +962,69 @@ class ImageConfig(ImageInputConfig):
             self.upstream_bbox_asset_id is None
         ):
             raise ValueError("upstream_bbox_asset_mismatch")
+        _validate_generated_model_output_fields(
+            self.generated_by_model_node_id,
+            self.generated_output_handle,
+            self.generated_from_run_id,
+        )
         return self
 
 
 class VideoConfig(VideoInputConfig):
     title: str | None = Field(default=None, min_length=1, max_length=120)
+    generated_by_model_node_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=120,
+        exclude_if=lambda value: value is None,
+    )
+    generated_output_handle: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        exclude_if=lambda value: value is None,
+    )
+    generated_from_run_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=120,
+        exclude_if=lambda value: value is None,
+    )
+
+    @field_validator(
+        "generated_by_model_node_id",
+        "generated_output_handle",
+        "generated_from_run_id",
+    )
+    @classmethod
+    def strip_generated_model_output_field(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        return _strip_generated_model_output_field(value)
+
+    @model_validator(mode="after")
+    def validate_generated_model_output(self) -> "VideoConfig":
+        _validate_generated_model_output_fields(
+            self.generated_by_model_node_id,
+            self.generated_output_handle,
+            self.generated_from_run_id,
+        )
+        return self
+
+
+def _validate_generated_model_output_fields(
+    source_node_id: str | None,
+    output_handle: str | None,
+    run_id: str | None,
+) -> None:
+    values = (source_node_id, output_handle, run_id)
+    if any(value is not None for value in values) and not all(
+        value is not None for value in values
+    ):
+        raise ValueError(
+            "generated model source fields must be provided together"
+        )
 
 
 class AudioConfig(AudioInputConfig):
@@ -1953,6 +2062,53 @@ class AigcPipelineDefinitionV2(SchemaModel):
         ]
         if len(managed_keys) != len(set(managed_keys)):
             raise ValueError("managed text keys must be unique")
+        generated_media = [
+            node
+            for node in self.nodes
+            if isinstance(node, (ImageNode, VideoNode))
+            and node.config.generated_by_model_node_id is not None
+            and node.config.generated_output_handle is not None
+        ]
+        generated_media_keys = [
+            (
+                node.config.generated_by_model_node_id,
+                node.config.generated_output_handle,
+            )
+            for node in generated_media
+        ]
+        if len(generated_media_keys) != len(set(generated_media_keys)):
+            raise ValueError("generated model output keys must be unique")
+        node_by_id = {node.id: node for node in self.nodes}
+        for node in generated_media:
+            source_node_id = node.config.generated_by_model_node_id
+            output_handle = node.config.generated_output_handle
+            assert source_node_id is not None
+            assert output_handle is not None
+            source = node_by_id.get(source_node_id)
+            expected = (
+                AIGC_MODEL_OUTPUT_MATERIALIZATION.get(source.type)
+                if source is not None
+                else None
+            )
+            if (
+                expected is None
+                or expected != (node.type, output_handle)
+            ):
+                raise ValueError("generated model output source is invalid")
+            related_edges = [
+                edge
+                for edge in self.edges
+                if edge.source_node_id == source_node_id
+                and edge.target_node_id == node.id
+            ]
+            if related_edges and any(
+                edge.source_handle != output_handle
+                or edge.target_handle != output_handle
+                for edge in related_edges
+            ):
+                raise ValueError("generated model output edge is invalid")
+            if len(related_edges) > 1:
+                raise ValueError("generated model output edge must be unique")
         return self
 
 

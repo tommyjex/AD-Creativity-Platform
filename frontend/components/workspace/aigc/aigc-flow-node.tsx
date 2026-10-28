@@ -235,7 +235,11 @@ function AigcFlowNodeComponent({
             definition as AigcPipelineDefinitionV2,
             data.node.id
           )
-        : projectAigcModalityRunResult(runDetail, data.node.id)
+        : projectAigcModalityRunResult(
+            runDetail,
+            data.node.id,
+            definition
+          )
       : null;
   const modalityMode =
     modalityProjection?.mode ?? currentModalityMode;

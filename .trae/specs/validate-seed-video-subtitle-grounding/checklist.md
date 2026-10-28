@@ -1,0 +1,60 @@
+# 验收清单
+
+- [x] 仅新增后端实验能力，不开发或修改前端功能
+- [x] 实验接口为 `POST /api/experiments/video-subtitle-grounding`
+- [x] 请求接受 HTTPS `video_url` 和可选 `sampling_fps`
+- [x] `sampling_fps` 默认 2.0 且限制在 0.5 至 5.0
+- [x] 仅管理员可访问，Creator、Viewer 和未登录用户被拒绝
+- [x] 生产环境默认关闭，只有显式 opt-in 后可访问
+- [x] 实验调用不创建数据库记录、资产、Run、Task 或缓存
+- [x] URL 校验拒绝非 HTTPS、userinfo、fragment、空 host 和非法 port
+- [x] DNS 与每跳重定向校验拒绝私网、loopback、link-local、multicast、reserved、unspecified 和云元数据地址
+- [x] 重定向最多 3 次且禁止 HTTPS 降级
+- [x] 下载执行视频 MIME、Content-Length、实际字节和 512 MiB 上限校验
+- [x] 视频流式写入权限受限临时文件，不完整载入内存
+- [x] 用户 URL 不直接提交给 Provider 二次抓取
+- [x] 下载、探测、取消、超时、Provider 失败和成功后均清理临时文件
+- [x] FFprobe 返回编码宽高、旋转、展示宽高、时长、容器和 codec
+- [x] 90°/270°旋转视频交换展示宽高
+- [x] 视频时长必须大于 0 且不超过 600 秒
+- [x] 默认使用 `doubao-seed-evolving`
+- [x] 视频通过 Files API 以 `purpose=user_data` 上传
+- [x] Files 视频预处理使用请求的 `sampling_fps`
+- [x] Responses 输入使用 `input_video` File ID，不使用外部 URL
+- [x] Responses 调用关闭 thinking、temperature 为 0，并设置 Token 和超时上限
+- [x] Prompt 只识别画面硬字幕，不从音轨补全，不识别 Logo、水印、商品、UI 或场景文字
+- [x] 输出使用严格 JSON Schema，拒绝 Markdown、解释文本和额外字段
+- [x] 模型原始 BBox 完整匹配官方 `<bbox>x_min y_min x_max y_max</bbox>` 格式
+- [x] Prompt 明确 Grounding 坐标基于 1000×1000 比例空间且每个坐标范围为 `[0,999]`
+- [x] 成功结果包含字幕文字、整数毫秒起止时间和解析后的 `bbox_normalized`
+- [x] 无硬字幕时成功返回空数组，不伪造字幕
+- [x] 字幕文字 trim 后长度为 1 至 500 Unicode code point 且不含控制字符
+- [x] 时间满足 `0 <= start_ms < end_ms`
+- [x] `end_ms` 不超过视频时长加 250ms 容差
+- [x] `<bbox>` 标签解析结果恰好为 4 个整数并满足 `0 <= x_min < x_max <= 999`、`0 <= y_min < y_max <= 999`
+- [x] 数组、逗号分隔、额外文本、多个 BBox、缺失或错误标签均被拒绝
+- [x] 字幕片段最多 500 条，501 条被拒绝
+- [x] 任一非法片段导致整个模型响应失败，不静默丢弃
+- [x] 完全重复项被去重，近似片段不被擅自合并
+- [x] 片段按开始时间、结束时间和原始顺序稳定排序
+- [x] 四个像素坐标均使用官方教程的 `int(coord * dimension / 1000)` 算法
+- [x] 右下角不使用 `ceil` 扩张，像素坐标保持在展示宽高边界内且具有正面积
+- [x] 1920×1080 下 `[100,200,900,800]` 转为 `[192,216,1728,864]`
+- [x] 旋转竖屏坐标按展示空间而不是编码空间反算
+- [x] 成功响应同时返回 `bbox_normalized` 与 `bbox_pixels`
+- [x] 成功响应包含模型、展示视频元数据、usage 和总延迟
+- [x] Provider File 在成功、失败和超时后 best-effort 删除
+- [x] Files 上传、处理、Responses、解析和清理阶段具有稳定脱敏错误
+- [x] 普通日志和 API 错误不包含完整视频 URL、查询参数、字幕全文、密钥、原始响应、思考内容或堆栈
+- [x] 成功日志包含视频安全统计、采样 FPS、模型、片段数、Token 和延迟
+- [x] 响应校验失败日志包含阶段、异常类型、响应长度和安全摘要
+- [x] 原始模型输出只有显式调试开关开启时进入 TLS-only 截断日志
+- [x] Mock 测试可注入下载 Transport、FFprobe 和 ModelArk Client
+- [x] 普通 pytest 不访问外网且真实 Provider 调用数为 0
+- [x] opt-in 真实冒烟缺少 `RUN_PAID_MODELARK_SMOKE=true` 时跳过
+- [x] opt-in 冒烟从环境变量读取凭据和视频 URL，不打印 URL、密钥或完整字幕
+- [x] opt-in 冒烟至少校验响应结构、时间边界与像素坐标边界
+- [x] 现有 MediaKit 视频识别字幕节点与 SRT 资产链路行为无变化
+- [x] 现有 ModelArk 文本、图片、视频、媒体命名调用行为无回归
+- [x] 新增与相关 pytest、Ruff 致命检查、compileall 和 `git diff --check` 通过
+- [x] 未获得真实视频 URL 和计费授权时，验收记录不会声称真实 `doubao-seed-evolving` 效果已验证

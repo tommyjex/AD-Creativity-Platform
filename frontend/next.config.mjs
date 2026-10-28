@@ -12,7 +12,7 @@ const nextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   distDir: process.env.NEXT_DIST_DIR || ".next",
   experimental: {
-    proxyClientMaxBodySize: "200mb",
+    proxyClientMaxBodySize: "512mb",
     proxyTimeout: 900_000
   },
   reactStrictMode: true,

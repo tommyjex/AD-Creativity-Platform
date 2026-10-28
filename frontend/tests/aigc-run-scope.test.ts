@@ -307,6 +307,90 @@ describe("AIGC Run projection selection", () => {
     );
   });
 
+  it("loads the exact provenance Run for a newly materialized media node", () => {
+    const source = {
+      id: "image-model",
+      type: "text_to_image",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        model: "doubao-seedream-5-0-pro-260628",
+        aspect_ratio: "1:1",
+        size: "2K",
+        format: "png"
+      }
+    } as const;
+    const currentDefinition: AigcPipelineDefinitionV2 = {
+      schemaVersion: 2,
+      nodes: [
+        source,
+        {
+          id: "generated-image",
+          type: "image",
+          position: { x: 320, y: 0 },
+          size: { width: 240, height: 160 },
+          config: {
+            asset_id: "asset-current",
+            bbox: null,
+            bbox_asset_id: null,
+            title: null,
+            generated_by_model_node_id: source.id,
+            generated_output_handle: "image",
+            generated_from_run_id: "materializing-run"
+          }
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
+    const snapshot: AigcPipelineDefinitionV2 = {
+      ...currentDefinition,
+      nodes: [source]
+    };
+    const materializingRun = run("materializing-run", {
+      definition: snapshot,
+      mode: "full",
+      runNumber: 10,
+      startNodeId: null,
+      status: "succeeded"
+    });
+    const historicalRun = run("historical-before-node", {
+      definition: snapshot,
+      mode: "full",
+      runNumber: 9,
+      startNodeId: null,
+      status: "succeeded"
+    });
+    const runDetails = new Map([
+      [materializingRun.id, detail(materializingRun)],
+      [historicalRun.id, detail(historicalRun)]
+    ]);
+
+    expect(
+      selectAigcProjectionRunIds(
+        currentDefinition,
+        [historicalRun, materializingRun],
+        null
+      )
+    ).toContain(materializingRun.id);
+    expect(
+      createAigcRunProjection(
+        currentDefinition,
+        [historicalRun, materializingRun],
+        runDetails,
+        null
+      ).displayRunForNode("generated-image")?.run.id
+    ).toBe(materializingRun.id);
+    expect(
+      createAigcRunProjection(
+        currentDefinition,
+        [historicalRun, materializingRun],
+        runDetails,
+        historicalRun.id
+      ).displayRunForNode("generated-image")
+    ).toBeNull();
+  });
+
   it("maps each node to its own active Run", () => {
     const projection = createAigcRunProjection(
       definitionV2,

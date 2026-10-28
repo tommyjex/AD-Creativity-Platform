@@ -202,6 +202,11 @@ export function createAigcEditorStore(
         remote,
         resolved?.authoritativeNodeNames
       );
+    const selectedNodeId = resolveSelectedNodeId(
+      state.selectedNodeId,
+      state.definition,
+      next.definition
+    );
     serverSnapshot = remote;
     set({
       ...structuredClone(next),
@@ -209,11 +214,7 @@ export function createAigcEditorStore(
       future: dirty ? state.future.map(rebaseHistory) : [],
       past: dirty ? state.past.map(rebaseHistory) : [],
       revision: payload.revision,
-      selectedNodeId:
-        state.selectedNodeId &&
-        next.definition.nodes.some((node) => node.id === state.selectedNodeId)
-          ? state.selectedNodeId
-          : null
+      selectedNodeId
     });
     return "applied";
   },
@@ -602,10 +603,21 @@ export function createAigcEditorStore(
     const detachesManagedText =
       removedEdge?.sourceHandle === "items" &&
       removedEdge.targetHandle === "text";
+    const generatedTarget = removedEdge
+      ? state.definition.nodes.find(
+          (node) => node.id === removedEdge.targetNodeId
+        )
+      : undefined;
+    const detachesGeneratedMedia =
+      removedEdge !== undefined &&
+      generatedTarget !== undefined &&
+      systemEdgeKey(removedEdge, state.definition.nodes) !== null &&
+      (generatedTarget.type === "image" ||
+        generatedTarget.type === "video");
     const definition = {
       ...state.definition,
       edges: state.definition.edges.filter((edge) => edge.id !== edgeId),
-      nodes: detachesManagedText
+      nodes: detachesManagedText || detachesGeneratedMedia
         ? state.definition.nodes.map((node) =>
             node.id === removedEdge.targetNodeId &&
             node.type === "text" &&
@@ -620,6 +632,18 @@ export function createAigcEditorStore(
                     generated_from_run_id: null
                   }
                 }
+              : node.id === removedEdge.targetNodeId &&
+                  (node.type === "image" || node.type === "video") &&
+                  detachesGeneratedMedia
+                ? {
+                    ...node,
+                    config: {
+                      ...node.config,
+                      generated_by_model_node_id: null,
+                      generated_output_handle: null,
+                      generated_from_run_id: null
+                    }
+                  } as AigcV2Node
               : node
           )
         : state.definition.nodes
@@ -794,24 +818,12 @@ function mergeAigcServerDefinition(
     managedIdRemap.set(node.id, remoteNode.id);
     const baseNode = baseManaged.get(key);
     return [
-      {
-        ...structuredClone(remoteNode),
-        custom_name: authoritativeNodeNames.has(node.id)
-          ? authoritativeNodeNames.get(node.id) ??
-            remoteNode.custom_name ??
-            null
-          : node.custom_name ?? null,
-        position: structuredClone(
-          baseNode && pointsEqual(node.position, baseNode.position)
-            ? remoteNode.position
-            : node.position
-        ),
-        size: structuredClone(
-          baseNode && sizesEqual(node.size, baseNode.size)
-            ? remoteNode.size
-            : node.size
-        )
-      } as AigcV2Node
+      mergeManagedNode(
+        baseNode,
+        node,
+        remoteNode,
+        authoritativeNodeNames
+      )
     ];
   });
   for (const serverNode of server.nodes) {
@@ -908,27 +920,132 @@ function mergeAigcServerDefinition(
 
 function managedNodeKey(node: AigcV2Node): string | null {
   if (
-    node.type !== "text" ||
-    typeof node.config.generated_by_parser_node_id !== "string" ||
-    typeof node.config.generated_item_index !== "number"
+    node.type === "text" &&
+    typeof node.config.generated_by_parser_node_id === "string" &&
+    typeof node.config.generated_item_index === "number"
   ) {
-    return null;
+    return [
+      "parser",
+      node.config.generated_by_parser_node_id,
+      node.config.generated_item_index
+    ].join("\u0000");
   }
-  return `${node.config.generated_by_parser_node_id}\u0000${node.config.generated_item_index}`;
+  if (
+    (node.type === "image" || node.type === "video") &&
+    typeof node.config.generated_by_model_node_id === "string" &&
+    node.config.generated_output_handle === node.type
+  ) {
+    return [
+      "model-output",
+      node.config.generated_by_model_node_id,
+      node.config.generated_output_handle
+    ].join("\u0000");
+  }
+  return null;
 }
 
 function systemEdgeKey(
   edge: AigcEdge,
   nodes: readonly AigcV2Node[]
 ): string | null {
-  if (edge.sourceHandle !== "items" || edge.targetHandle !== "text") {
-    return null;
-  }
   const target = nodes.find((node) => node.id === edge.targetNodeId);
   const managedKey = target ? managedNodeKey(target) : null;
-  return managedKey?.startsWith(`${edge.sourceNodeId}\u0000`)
-    ? managedKey
-    : null;
+  if (!target || !managedKey) return null;
+  if (
+    target.type === "text" &&
+    edge.sourceNodeId === target.config.generated_by_parser_node_id &&
+    edge.sourceHandle === "items" &&
+    edge.targetHandle === "text"
+  ) {
+    return managedKey;
+  }
+  if (
+    (target.type === "image" || target.type === "video") &&
+    edge.sourceNodeId === target.config.generated_by_model_node_id &&
+    edge.sourceHandle === target.config.generated_output_handle &&
+    edge.targetHandle === target.type
+  ) {
+    return managedKey;
+  }
+  return null;
+}
+
+function mergeManagedNode(
+  base: AigcV2Node | undefined,
+  local: AigcV2Node,
+  server: AigcV2Node,
+  authoritativeNodeNames: ReadonlyMap<string, string>
+): AigcV2Node {
+  const merged = {
+    ...structuredClone(server),
+    custom_name: authoritativeNodeNames.has(local.id)
+      ? authoritativeNodeNames.get(local.id) ??
+        server.custom_name ??
+        null
+      : local.custom_name ?? null,
+    position: structuredClone(
+      base && pointsEqual(local.position, base.position)
+        ? server.position
+        : local.position
+    ),
+    size: structuredClone(
+      base && sizesEqual(local.size, base.size)
+        ? server.size
+        : local.size
+    )
+  } as AigcV2Node;
+  if (
+    base &&
+    (local.type === "image" || local.type === "video") &&
+    local.type === base.type &&
+    server.type === local.type
+  ) {
+    const authoritative = new Set([
+      "asset_id",
+      "generated_by_model_node_id",
+      "generated_output_handle",
+      "generated_from_run_id"
+    ]);
+    const baseConfig = base.config as unknown as Record<string, unknown>;
+    const localConfig = local.config as unknown as Record<string, unknown>;
+    const mergedConfig = structuredClone(
+      server.config
+    ) as unknown as Record<string, unknown>;
+    for (const [key, value] of Object.entries(localConfig)) {
+      if (
+        !authoritative.has(key) &&
+        !valuesEqual(value, baseConfig[key])
+      ) {
+        mergedConfig[key] = structuredClone(value);
+      }
+    }
+    merged.config = mergedConfig as AigcV2Node["config"];
+  }
+  return merged;
+}
+
+function resolveSelectedNodeId(
+  selectedNodeId: string | null,
+  previous: Readonly<AigcPipelineDefinitionV2>,
+  next: Readonly<AigcPipelineDefinitionV2>
+): string | null {
+  if (!selectedNodeId) return null;
+  if (next.nodes.some((node) => node.id === selectedNodeId)) {
+    return selectedNodeId;
+  }
+  const previousNode = previous.nodes.find(
+    (node) => node.id === selectedNodeId
+  );
+  const key = previousNode ? managedNodeKey(previousNode) : null;
+  return (
+    (key
+      ? next.nodes.find((node) => managedNodeKey(node) === key)?.id
+      : null) ?? null
+  );
+}
+
+function valuesEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function edgeSignature(edge: AigcEdge): string {

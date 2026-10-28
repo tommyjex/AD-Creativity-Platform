@@ -30,7 +30,7 @@ describe("Next.js API rewrites", () => {
   });
 
   it("allows large uploads to outlive the default 30-second proxy timeout", () => {
-    expect(nextConfig.experimental.proxyClientMaxBodySize).toBe("200mb");
+    expect(nextConfig.experimental.proxyClientMaxBodySize).toBe("512mb");
     expect(nextConfig.experimental.proxyTimeout).toBe(900_000);
   });
 

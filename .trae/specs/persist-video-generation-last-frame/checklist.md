@@ -42,4 +42,27 @@
 - [x] 前端定向 Vitest、TypeScript、ESLint 和 production build 通过
 - [x] Playwright 在桌面、平板和手机视口通过，无新增重叠或水平溢出
 
+## 结果页尾帧增量验收
+
+- [x] 视频生成节点右侧“结果”页先显示主视频，再显示独立“视频尾帧”图片区块
+- [x] 尾帧通过 `name_variant=video_last_frame` 和图片 MIME 被可靠识别，不依赖数组位置猜测角色
+- [x] 尾帧标题明确显示“视频尾帧”，不显示为 `生成结果 2`
+- [x] 尾帧缩略图使用固定媒体区和 `object-contain`，竖图与横图均不裁切、不拉伸
+- [x] 尾帧区块提供“放大查看”和“下载尾帧”操作
+- [x] 点击尾帧缩略图或“放大查看”在应用内 Dialog 打开，不跳转新标签页
+- [x] 放大 Dialog 使用 `object-contain` 完整展示尾帧，并显示当前尾帧名称
+- [x] Dialog 支持关闭按钮、Escape 和遮罩关闭，关闭后保留当前节点、结果 Tab 与滚动上下文
+- [x] 结果区和 Dialog 均可下载尾帧，且使用现有受控资产内容端点
+- [x] 前端建议下载名与后端 `Content-Disposition` 一致
+- [x] 节点后续改名、冻结名称回退和 `user_defined_v1` 显式重命名继续按既有优先级生效
+- [x] 尾帧缺失或不可用时主视频仍正常显示，不渲染空白卡片、损坏图片或不可用下载按钮
+- [x] 历史仅含视频资产的 Run 无需迁移且结果页行为保持不变
+- [x] 下游 `video` 与 `video_output` 节点结果只显示主视频，不重复显示尾帧
+- [x] 本次变更不新增 `last_frame` 输出 Handle，不修改后端接口、资产模型或 Run 数据结构
+- [x] 普通图片多产物、视频、音频和字幕结果展示无回归
+- [x] Mock 验收不调用真实视频生成、命名或 TOS 服务
+- [x] 相关 Vitest、TypeScript、ESLint、production build 和 `git diff --check` 通过
+- [x] Playwright 在 `1440x900`、`834x1112`、`390x844` 验证通过，无重叠或水平溢出
+- [x] 长 Unicode 尾帧名称在缩略图、Dialog 和下载按钮区域不溢出容器
+
 验证范围、命令与证据见 [validation.md](validation.md)。云存储与 Provider 均使用 Mock，未进行生产调用。

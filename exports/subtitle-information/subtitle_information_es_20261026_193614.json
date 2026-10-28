@@ -1,0 +1,1660 @@
+{
+  "exported_at_beijing": "2026-10-26T20:07:29.998772+08:00",
+  "workspace_id": "bf2d204f-27ba-49ea-9ea1-532a4524a574",
+  "render_task_id": "17d1503e-8adc-479f-9680-60ba1009a617",
+  "extraction_task_id": "1b40439b-7946-4bce-bb3e-78880aca6ae0",
+  "render_completed_at_beijing": "2026-10-26T19:36:14+08:00",
+  "source_language": "auto",
+  "target_language": "es",
+  "reference_video": {
+    "fps": 30.0,
+    "width": 1920,
+    "height": 1080,
+    "rotation": 0,
+    "has_audio": true,
+    "duration_ms": 147667
+  },
+  "output_video": {
+    "fps": 29.99999993227991,
+    "width": 1920,
+    "height": 1080,
+    "rotation": 0,
+    "has_audio": true,
+    "duration_ms": 147667
+  },
+  "field_notes": {
+    "coordinate_order": "[x_min, y_min, x_max, y_max]，左上角为原点",
+    "normalized_coordinates": "基于 0..999 的比例空间；像素坐标以对应视频展示尺寸为准",
+    "reference_coordinates": "字幕提取任务保存的参考视频坐标",
+    "render_coordinates": "成功压制时编译并提交的目标视频坐标",
+    "original_font_size": "VLM 不输出精确原字体字号，仅输出 font_height_ratio；未伪造原字号",
+    "estimated_font_size_px": "按目标文字框高度及所选字体度量拟合的估算字号",
+    "submitted_font_size_px": "完整译文经过框宽/框高拟合后实际提交 MediaKit 的字号",
+    "preset_font_metrics": "ALi_PuHui 条目使用所选字体作本地估算；不是精确的预置字体度量或成片验收",
+    "time": "字幕时间单位为毫秒，任务和导出时间为北京时间"
+  },
+  "segments": [
+    {
+      "segment_id": "debae718-2993-4fd3-9e71-fcf2404f905c",
+      "text": "Unboxing and First Use",
+      "translated_text": "Desembalaje y primer uso",
+      "start_ms": 0,
+      "end_ms": 3500,
+      "bbox_normalized": [
+        162,
+        276,
+        835,
+        390
+      ],
+      "reference_bbox_pixels": [
+        311,
+        298,
+        1603,
+        421
+      ],
+      "render_bbox_pixels": [
+        311,
+        298,
+        1605,
+        422
+      ],
+      "font_height_ratio": 0.085,
+      "estimated_font_size_px": 100,
+      "submitted_font_size_px": 100,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "headline",
+      "alignment": "center",
+      "background_color": "#DADADA",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "5363247a-fc52-4fc5-b3ba-7f0873ce477c",
+      "text": "FLOOR ONE STRETCH S6",
+      "translated_text": "FLOOR ONE STRETCH S6",
+      "start_ms": 0,
+      "end_ms": 3500,
+      "bbox_normalized": [
+        136,
+        450,
+        861,
+        546
+      ],
+      "reference_bbox_pixels": [
+        261,
+        486,
+        1653,
+        589
+      ],
+      "render_bbox_pixels": [
+        261,
+        486,
+        1655,
+        590
+      ],
+      "font_height_ratio": 0.075,
+      "estimated_font_size_px": 84,
+      "submitted_font_size_px": 84,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "headline",
+      "alignment": "center",
+      "background_color": "#A99273",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "7698a347-45ab-472b-b26b-513d77e5cb0a",
+      "text": "Welcome to the tutorial video for FLOOR ONE STRETCH S6.",
+      "translated_text": "Bienvenido al video tutorial del FLOOR ONE STRETCH S6.",
+      "start_ms": 4500,
+      "end_ms": 7000,
+      "bbox_normalized": [
+        51,
+        830,
+        953,
+        890
+      ],
+      "reference_bbox_pixels": [
+        97,
+        896,
+        1829,
+        961
+      ],
+      "render_bbox_pixels": [
+        98,
+        897,
+        1832,
+        962
+      ],
+      "font_height_ratio": 0.04,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "628dad49-60af-49c9-b8ca-792064cfdb8c",
+      "text": "We will guide you through the unboxing and",
+      "translated_text": "Lo guiaremos a través del desembalaje y",
+      "start_ms": 7500,
+      "end_ms": 9000,
+      "bbox_normalized": [
+        148,
+        780,
+        845,
+        840
+      ],
+      "reference_bbox_pixels": [
+        284,
+        842,
+        1622,
+        907
+      ],
+      "render_bbox_pixels": [
+        284,
+        843,
+        1624,
+        908
+      ],
+      "font_height_ratio": 0.04,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "b4736d73-69ce-4510-9a14-a37ed4390bf3",
+      "text": "initial setup process of FLOOR ONE STRETCH S6.",
+      "translated_text": "el proceso de configuración inicial del FLOOR ONE STRETCH S6.",
+      "start_ms": 7500,
+      "end_ms": 9000,
+      "bbox_normalized": [
+        128,
+        870,
+        869,
+        930
+      ],
+      "reference_bbox_pixels": [
+        245,
+        939,
+        1668,
+        1004
+      ],
+      "render_bbox_pixels": [
+        246,
+        941,
+        1670,
+        1005
+      ],
+      "font_height_ratio": 0.04,
+      "estimated_font_size_px": 51,
+      "submitted_font_size_px": 46,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "ec2a83c6-bb36-4a13-b305-9be145b91cd6",
+      "text": "Charging & Drying dock",
+      "translated_text": "Base de carga y secado",
+      "start_ms": 9500,
+      "end_ms": 12000,
+      "bbox_normalized": [
+        308,
+        880,
+        690,
+        945
+      ],
+      "reference_bbox_pixels": [
+        591,
+        950,
+        1324,
+        1020
+      ],
+      "render_bbox_pixels": [
+        592,
+        951,
+        1326,
+        1022
+      ],
+      "font_height_ratio": 0.04,
+      "estimated_font_size_px": 57,
+      "submitted_font_size_px": 57,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "22d61089-2b1b-4706-a77a-ddb6ab5b374e",
+      "text": "Transparent Tray",
+      "translated_text": "Bandeja transparente",
+      "start_ms": 14000,
+      "end_ms": 16500,
+      "bbox_normalized": [
+        368,
+        890,
+        630,
+        950
+      ],
+      "reference_bbox_pixels": [
+        706,
+        961,
+        1209,
+        1026
+      ],
+      "render_bbox_pixels": [
+        707,
+        962,
+        1211,
+        1027
+      ],
+      "font_height_ratio": 0.04,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 48,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "132c2808-d4d9-440d-944a-5ac8e3d8841c",
+      "text": "Main Body",
+      "translated_text": "Cuerpo principal",
+      "start_ms": 19500,
+      "end_ms": 22000,
+      "bbox_normalized": [
+        412,
+        890,
+        585,
+        950
+      ],
+      "reference_bbox_pixels": [
+        791,
+        961,
+        1123,
+        1026
+      ],
+      "render_bbox_pixels": [
+        792,
+        962,
+        1124,
+        1027
+      ],
+      "font_height_ratio": 0.04,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 40,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "e0f2cc02-7551-4028-8b62-d49eb8db4f47",
+      "text": "Main Body",
+      "translated_text": "Cuerpo principal",
+      "start_ms": 24000,
+      "end_ms": 31000,
+      "bbox_normalized": [
+        445,
+        35,
+        553,
+        70
+      ],
+      "reference_bbox_pixels": [
+        854,
+        37,
+        1061,
+        75
+      ],
+      "render_bbox_pixels": [
+        855,
+        38,
+        1063,
+        76
+      ],
+      "font_height_ratio": 0.025,
+      "estimated_font_size_px": 30,
+      "submitted_font_size_px": 25,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#DADADA",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "6e6e1413-1d49-430e-904a-22c28d396151",
+      "text": "Charging & Drying dock",
+      "translated_text": "Base de carga y secado",
+      "start_ms": 24000,
+      "end_ms": 31000,
+      "bbox_normalized": [
+        625,
+        630,
+        835,
+        670
+      ],
+      "reference_bbox_pixels": [
+        1200,
+        680,
+        1603,
+        723
+      ],
+      "render_bbox_pixels": [
+        1201,
+        681,
+        1605,
+        724
+      ],
+      "font_height_ratio": 0.025,
+      "estimated_font_size_px": 34,
+      "submitted_font_size_px": 33,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#DADADA",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "1876f069-b166-456e-b2f2-e1e318f0c399",
+      "text": "Transparent Tray",
+      "translated_text": "Bandeja transparente",
+      "start_ms": 24000,
+      "end_ms": 31000,
+      "bbox_normalized": [
+        855,
+        850,
+        982,
+        885
+      ],
+      "reference_bbox_pixels": [
+        1641,
+        918,
+        1885,
+        955
+      ],
+      "render_bbox_pixels": [
+        1643,
+        919,
+        1887,
+        957
+      ],
+      "font_height_ratio": 0.025,
+      "estimated_font_size_px": 30,
+      "submitted_font_size_px": 23,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#DADADA",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "7c64db7e-3c38-4367-863a-b3f650326b80",
+      "text": "Introduction Book",
+      "translated_text": "Libro de introducción",
+      "start_ms": 25000,
+      "end_ms": 31000,
+      "bbox_normalized": [
+        438,
+        910,
+        590,
+        945
+      ],
+      "reference_bbox_pixels": [
+        840,
+        982,
+        1132,
+        1020
+      ],
+      "render_bbox_pixels": [
+        842,
+        984,
+        1134,
+        1022
+      ],
+      "font_height_ratio": 0.025,
+      "estimated_font_size_px": 30,
+      "submitted_font_size_px": 28,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "ebae756e-6105-465c-88bd-f7133e36c1c7",
+      "text": "Brush Roller",
+      "translated_text": "Rodillo de cepillo",
+      "start_ms": 26000,
+      "end_ms": 31000,
+      "bbox_normalized": [
+        322,
+        915,
+        430,
+        950
+      ],
+      "reference_bbox_pixels": [
+        618,
+        988,
+        825,
+        1026
+      ],
+      "render_bbox_pixels": [
+        619,
+        989,
+        826,
+        1027
+      ],
+      "font_height_ratio": 0.025,
+      "estimated_font_size_px": 30,
+      "submitted_font_size_px": 24,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "af8367b3-96bf-4c57-b4de-cca263dbb7ae",
+      "text": "Cleaning Solution",
+      "translated_text": "Solución de limpieza",
+      "start_ms": 27500,
+      "end_ms": 31000,
+      "bbox_normalized": [
+        218,
+        575,
+        372,
+        615
+      ],
+      "reference_bbox_pixels": [
+        418,
+        621,
+        714,
+        664
+      ],
+      "render_bbox_pixels": [
+        419,
+        622,
+        715,
+        665
+      ],
+      "font_height_ratio": 0.025,
+      "estimated_font_size_px": 34,
+      "submitted_font_size_px": 29,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#DADADA",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "a8005ca4-c300-4c08-8267-2423eb05c4cc",
+      "text": "Dry Filter",
+      "translated_text": "Filtro seco",
+      "start_ms": 29000,
+      "end_ms": 31000,
+      "bbox_normalized": [
+        242,
+        890,
+        335,
+        925
+      ],
+      "reference_bbox_pixels": [
+        464,
+        961,
+        643,
+        999
+      ],
+      "render_bbox_pixels": [
+        465,
+        962,
+        644,
+        1000
+      ],
+      "font_height_ratio": 0.025,
+      "estimated_font_size_px": 30,
+      "submitted_font_size_px": 30,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "0788e1b2-4931-4ede-8b79-144ff1d06436",
+      "text": "Cleaning Tool",
+      "translated_text": "Herramienta de limpieza",
+      "start_ms": 30000,
+      "end_ms": 31000,
+      "bbox_normalized": [
+        150,
+        770,
+        285,
+        805
+      ],
+      "reference_bbox_pixels": [
+        288,
+        831,
+        547,
+        869
+      ],
+      "render_bbox_pixels": [
+        288,
+        832,
+        548,
+        870
+      ],
+      "font_height_ratio": 0.025,
+      "estimated_font_size_px": 30,
+      "submitted_font_size_px": 21,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#DADADA",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "4e7d975e-6983-422b-a3d2-401fc8bc4a36",
+      "text": "Tube",
+      "translated_text": "Tubo",
+      "start_ms": 30500,
+      "end_ms": 31000,
+      "bbox_normalized": [
+        88,
+        910,
+        135,
+        945
+      ],
+      "reference_bbox_pixels": [
+        168,
+        982,
+        259,
+        1020
+      ],
+      "render_bbox_pixels": [
+        169,
+        984,
+        259,
+        1022
+      ],
+      "font_height_ratio": 0.025,
+      "estimated_font_size_px": 30,
+      "submitted_font_size_px": 30,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#B9A784",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "5ab4b21a-3b3a-4cb0-b3d2-4fc4d0efa9d4",
+      "text": "Assemble the Transparent Tray",
+      "translated_text": "Arme la bandeja transparente",
+      "start_ms": 32500,
+      "end_ms": 35500,
+      "bbox_normalized": [
+        75,
+        780,
+        553,
+        840
+      ],
+      "reference_bbox_pixels": [
+        144,
+        842,
+        1061,
+        907
+      ],
+      "render_bbox_pixels": [
+        144,
+        843,
+        1063,
+        908
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#C8B896",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "7f060430-8e7e-4205-b419-05bb68279069",
+      "text": "Rotate to lock",
+      "translated_text": "Gire para bloquear",
+      "start_ms": 32500,
+      "end_ms": 35500,
+      "bbox_normalized": [
+        75,
+        870,
+        303,
+        925
+      ],
+      "reference_bbox_pixels": [
+        144,
+        939,
+        581,
+        999
+      ],
+      "render_bbox_pixels": [
+        144,
+        941,
+        582,
+        1000
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 47,
+      "submitted_font_size_px": 46,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#C8B896",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "6f89b2b3-da28-4c5f-a952-73a4e1fbbc20",
+      "text": "Assemble the handle",
+      "translated_text": "Arme el mango",
+      "start_ms": 36500,
+      "end_ms": 38500,
+      "bbox_normalized": [
+        58,
+        800,
+        375,
+        855
+      ],
+      "reference_bbox_pixels": [
+        111,
+        864,
+        720,
+        923
+      ],
+      "render_bbox_pixels": [
+        111,
+        865,
+        721,
+        924
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 47,
+      "submitted_font_size_px": 47,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#ECECEC",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "d2213805-45a1-4cb9-8620-a51e9fd12b83",
+      "text": "Insert it into the appliance until you hear a click",
+      "translated_text": "Insértelo en el aparato hasta que oiga un clic",
+      "start_ms": 36500,
+      "end_ms": 38500,
+      "bbox_normalized": [
+        58,
+        880,
+        803,
+        940
+      ],
+      "reference_bbox_pixels": [
+        111,
+        950,
+        1541,
+        1015
+      ],
+      "render_bbox_pixels": [
+        111,
+        951,
+        1543,
+        1016
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#ECECEC",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "d9d0cd92-88e7-4fb1-b98a-187b13f46da8",
+      "text": "Put the machine on the dock to charge",
+      "translated_text": "Coloque la máquina en la base para cargarla",
+      "start_ms": 39000,
+      "end_ms": 40500,
+      "bbox_normalized": [
+        58,
+        860,
+        688,
+        920
+      ],
+      "reference_bbox_pixels": [
+        111,
+        928,
+        1320,
+        993
+      ],
+      "render_bbox_pixels": [
+        111,
+        930,
+        1322,
+        995
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#C8B896",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "b3ce65cc-ceb7-4527-adf1-34ba602c948f",
+      "text": "WiFi connection",
+      "translated_text": "Conexión WiFi",
+      "start_ms": 42500,
+      "end_ms": 63500,
+      "bbox_normalized": [
+        102,
+        820,
+        342,
+        875
+      ],
+      "reference_bbox_pixels": [
+        195,
+        885,
+        656,
+        945
+      ],
+      "render_bbox_pixels": [
+        196,
+        886,
+        657,
+        946
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 48,
+      "submitted_font_size_px": 48,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#ECECEC",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "db18a80c-adb6-49bd-a5d6-a550ebbdf139",
+      "text": "Filling the clean water tank",
+      "translated_text": "Llenado del tanque de agua limpia",
+      "start_ms": 64000,
+      "end_ms": 67500,
+      "bbox_normalized": [
+        48,
+        780,
+        470,
+        840
+      ],
+      "reference_bbox_pixels": [
+        92,
+        842,
+        902,
+        907
+      ],
+      "render_bbox_pixels": [
+        92,
+        843,
+        903,
+        908
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 47,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#B9C7B0",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "c853ac23-06d8-4a58-89c3-901280cd1991",
+      "text": "*Only use water under 140°F/60℃.",
+      "translated_text": "*Use solo agua a menos de 140 °F/60 ℃.",
+      "start_ms": 64000,
+      "end_ms": 67500,
+      "bbox_normalized": [
+        48,
+        870,
+        575,
+        930
+      ],
+      "reference_bbox_pixels": [
+        92,
+        939,
+        1104,
+        1004
+      ],
+      "render_bbox_pixels": [
+        92,
+        941,
+        1105,
+        1005
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 51,
+      "submitted_font_size_px": 51,
+      "font_type": "ALi_PuHui",
+      "font_metrics_verified": false,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#B9C7B0",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "missing_glyphs",
+        "font_fallback",
+        "font_metrics_unverified",
+        "preset_glyph_coverage_unverified"
+      ]
+    },
+    {
+      "segment_id": "a6b9d44f-f1b5-4c4c-95f1-5de26e2e9944",
+      "text": "Pour in the cleaning solution of Tineco",
+      "translated_text": "Vierta la solución de limpieza de Tineco",
+      "start_ms": 68500,
+      "end_ms": 72000,
+      "bbox_normalized": [
+        42,
+        780,
+        625,
+        840
+      ],
+      "reference_bbox_pixels": [
+        80,
+        842,
+        1200,
+        907
+      ],
+      "render_bbox_pixels": [
+        81,
+        843,
+        1201,
+        908
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#B9C7B0",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "52efa7e2-b0e9-4a62-8c55-8c48736901b4",
+      "text": "*DO NOT USE ANY OTHER CLEANING SOLUTION",
+      "translated_text": "*NO USE NINGUNA OTRA SOLUCIÓN DE LIMPIEZA",
+      "start_ms": 68500,
+      "end_ms": 72000,
+      "bbox_normalized": [
+        42,
+        870,
+        770,
+        930
+      ],
+      "reference_bbox_pixels": [
+        80,
+        939,
+        1478,
+        1004
+      ],
+      "render_bbox_pixels": [
+        81,
+        941,
+        1480,
+        1005
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 51,
+      "submitted_font_size_px": 51,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#B9C7B0",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "af79ab47-90b6-4cab-9303-4e8c7e7c43da",
+      "text": "Assemble the clean water tank",
+      "translated_text": "Arme el tanque de agua limpia",
+      "start_ms": 72500,
+      "end_ms": 74500,
+      "bbox_normalized": [
+        68,
+        780,
+        550,
+        840
+      ],
+      "reference_bbox_pixels": [
+        130,
+        842,
+        1056,
+        907
+      ],
+      "render_bbox_pixels": [
+        131,
+        843,
+        1057,
+        908
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#C8B896",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "728ba052-8c90-4bc5-9386-9e483dcfc2f7",
+      "text": "*THE CLEAN WATER TANK IS ABOVE THE BRUSH HEAD",
+      "translated_text": "*EL TANQUE DE AGUA LIMPIA ESTÁ SOBRE EL CABEZAL DEL CEPILLO",
+      "start_ms": 72500,
+      "end_ms": 74500,
+      "bbox_normalized": [
+        68,
+        870,
+        875,
+        930
+      ],
+      "reference_bbox_pixels": [
+        130,
+        939,
+        1680,
+        1004
+      ],
+      "render_bbox_pixels": [
+        131,
+        941,
+        1682,
+        1005
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 51,
+      "submitted_font_size_px": 49,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#C8B896",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "4452dfc0-9422-4246-b54d-99aa44f17972",
+      "text": "Press the power button and the appliance will",
+      "translated_text": "Pulse el botón de encendido y el aparato se",
+      "start_ms": 76500,
+      "end_ms": 79000,
+      "bbox_normalized": [
+        58,
+        780,
+        785,
+        840
+      ],
+      "reference_bbox_pixels": [
+        111,
+        842,
+        1507,
+        907
+      ],
+      "render_bbox_pixels": [
+        111,
+        843,
+        1509,
+        908
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#ECECEC",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "362822fb-a9d0-4d07-847a-fbaee68c0863",
+      "text": "start in AUTO Mode by default.",
+      "translated_text": "iniciará en el modo AUTO de forma predeterminada.",
+      "start_ms": 76500,
+      "end_ms": 79000,
+      "bbox_normalized": [
+        58,
+        870,
+        535,
+        930
+      ],
+      "reference_bbox_pixels": [
+        111,
+        939,
+        1027,
+        1004
+      ],
+      "render_bbox_pixels": [
+        111,
+        941,
+        1028,
+        1005
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 51,
+      "submitted_font_size_px": 35,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#ECECEC",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "607ce6c0-0911-466e-8bd3-0a778d357ae7",
+      "text": "Switch into other modes",
+      "translated_text": "Cambie a otros modos",
+      "start_ms": 84500,
+      "end_ms": 85500,
+      "bbox_normalized": [
+        92,
+        840,
+        465,
+        900
+      ],
+      "reference_bbox_pixels": [
+        176,
+        907,
+        892,
+        972
+      ],
+      "render_bbox_pixels": [
+        177,
+        908,
+        894,
+        973
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#ECECEC",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "8fe0ab0d-0980-483b-ac8d-739f9eceb8f1",
+      "text": "MAX MOOD",
+      "translated_text": "MODO MAX",
+      "start_ms": 86000,
+      "end_ms": 87500,
+      "bbox_normalized": [
+        395,
+        830,
+        602,
+        890
+      ],
+      "reference_bbox_pixels": [
+        758,
+        896,
+        1155,
+        961
+      ],
+      "render_bbox_pixels": [
+        759,
+        897,
+        1157,
+        962
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#A99B89",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "0b923e11-d69b-4454-9f69-90c103ceb660",
+      "text": "SUCTION MOOD",
+      "translated_text": "MODO SUCCIÓN",
+      "start_ms": 92000,
+      "end_ms": 94000,
+      "bbox_normalized": [
+        368,
+        840,
+        630,
+        900
+      ],
+      "reference_bbox_pixels": [
+        706,
+        907,
+        1209,
+        972
+      ],
+      "render_bbox_pixels": [
+        707,
+        908,
+        1211,
+        973
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "center",
+      "background_color": "#A99B89",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "8f139626-8d03-4c6a-9e48-8bca202306eb",
+      "text": "180° Lay-flat for cleaning hidden area",
+      "translated_text": "Posición plana de 180° para limpiar zonas ocultas",
+      "start_ms": 101000,
+      "end_ms": 103500,
+      "bbox_normalized": [
+        82,
+        880,
+        685,
+        940
+      ],
+      "reference_bbox_pixels": [
+        157,
+        950,
+        1315,
+        1015
+      ],
+      "render_bbox_pixels": [
+        158,
+        951,
+        1317,
+        1016
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 48,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#C8B896",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "fd0042c7-30bd-4113-aa22-bfca73bf857d",
+      "text": "Triple-sided edge cleaning",
+      "translated_text": "Limpieza de bordes por tres lados",
+      "start_ms": 109500,
+      "end_ms": 112500,
+      "bbox_normalized": [
+        88,
+        870,
+        512,
+        930
+      ],
+      "reference_bbox_pixels": [
+        168,
+        939,
+        983,
+        1004
+      ],
+      "render_bbox_pixels": [
+        169,
+        941,
+        984,
+        1005
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 51,
+      "submitted_font_size_px": 50,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#C8B896",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "67148f3c-6bd6-478c-9d4d-42d0f2123899",
+      "text": "Dock your FLOOR ONE STRETCH S6",
+      "translated_text": "Conecte su FLOOR ONE STRETCH S6 a la base",
+      "start_ms": 115000,
+      "end_ms": 117500,
+      "bbox_normalized": [
+        82,
+        870,
+        575,
+        930
+      ],
+      "reference_bbox_pixels": [
+        157,
+        939,
+        1104,
+        1004
+      ],
+      "render_bbox_pixels": [
+        158,
+        941,
+        1105,
+        1005
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 51,
+      "submitted_font_size_px": 43,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#ECECEC",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "e8a348f1-8a22-476d-9553-58d0d34d2286",
+      "text": "Start the FlashDry self-cleaning",
+      "translated_text": "Inicie la autolimpieza FlashDry",
+      "start_ms": 118000,
+      "end_ms": 121500,
+      "bbox_normalized": [
+        88,
+        840,
+        575,
+        900
+      ],
+      "reference_bbox_pixels": [
+        168,
+        907,
+        1104,
+        972
+      ],
+      "render_bbox_pixels": [
+        169,
+        908,
+        1105,
+        973
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 52,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#A99B89",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "a594d00e-d49d-4d9a-9576-7115a587ac26",
+      "text": "The Brush Roller is totally dried",
+      "translated_text": "El rodillo del cepillo está completamente seco",
+      "start_ms": 129500,
+      "end_ms": 132500,
+      "bbox_normalized": [
+        78,
+        830,
+        535,
+        890
+      ],
+      "reference_bbox_pixels": [
+        149,
+        896,
+        1027,
+        961
+      ],
+      "render_bbox_pixels": [
+        150,
+        897,
+        1028,
+        962
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 39,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#C8B896",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "c4ceb3db-3ff1-4a48-8062-65eb6b176836",
+      "text": "Clean the dirty water tank",
+      "translated_text": "Limpie el depósito de agua sucia",
+      "start_ms": 135500,
+      "end_ms": 147000,
+      "bbox_normalized": [
+        52,
+        770,
+        475,
+        830
+      ],
+      "reference_bbox_pixels": [
+        99,
+        831,
+        912,
+        896
+      ],
+      "render_bbox_pixels": [
+        100,
+        832,
+        913,
+        897
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 50,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#ECECEC",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "79789105-03e6-47b1-8ed6-44c6d34cff54",
+      "text": "Use the cleaning tool to remove remaining debris",
+      "translated_text": "Utilice la herramienta de limpieza para eliminar los residuos restantes",
+      "start_ms": 135500,
+      "end_ms": 147000,
+      "bbox_normalized": [
+        52,
+        860,
+        842,
+        920
+      ],
+      "reference_bbox_pixels": [
+        99,
+        928,
+        1616,
+        993
+      ],
+      "render_bbox_pixels": [
+        100,
+        930,
+        1618,
+        995
+      ],
+      "font_height_ratio": 0.035,
+      "estimated_font_size_px": 52,
+      "submitted_font_size_px": 45,
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_metrics_verified": true,
+      "visual_role": "body",
+      "alignment": "left",
+      "background_color": "#ECECEC",
+      "panel_color": "#333333B3",
+      "text_color": "#FFFFFFFF",
+      "excluded": false,
+      "warnings": [
+        "font_url_version_unverified",
+        "font_size_reduced"
+      ]
+    }
+  ]
+}

@@ -1,7 +1,8 @@
-import type {
-  AigcBbox,
-  AigcBboxPromptReference,
-  AigcPipelineDefinitionV2
+import {
+  AIGC_MODEL_OUTPUT_MATERIALIZATION,
+  type AigcBbox,
+  type AigcBboxPromptReference,
+  type AigcPipelineDefinitionV2
 } from "@/lib/aigc/types";
 
 const LEGACY_MODALITY_TYPES = new Set([
@@ -245,7 +246,10 @@ function normalizeImageConfig(
           "bbox_asset_id",
           "title",
           "upstream_bbox",
-          "upstream_bbox_asset_id"
+          "upstream_bbox_asset_id",
+          "generated_by_model_node_id",
+          "generated_output_handle",
+          "generated_from_run_id"
         ]
       : ["asset_id", "bbox", "bbox_asset_id"]
   );
@@ -273,19 +277,33 @@ function normalizeImageConfig(
       120
     ),
     upstream_bbox: upstreamBbox,
-    upstream_bbox_asset_id: upstreamBboxAssetId
+    upstream_bbox_asset_id: upstreamBboxAssetId,
+    ...normalizeGeneratedModelOutput(config, "image")
   };
 }
 
 function normalizeMediaConfig(
   value: unknown,
   title: string | null | undefined,
-  allowStoredTitle = true
+  allowStoredTitle = true,
+  generatedModality?: "video"
 ): Record<string, unknown> {
   const config = record(value, "node config");
   exactKeys(
     config,
-    allowStoredTitle ? ["asset_id", "title"] : ["asset_id"]
+    allowStoredTitle
+      ? [
+          "asset_id",
+          "title",
+          ...(generatedModality
+            ? [
+                "generated_by_model_node_id",
+                "generated_output_handle",
+                "generated_from_run_id"
+              ]
+            : [])
+        ]
+      : ["asset_id"]
   );
   return {
     asset_id: nullableString(config.asset_id, "asset_id"),
@@ -293,7 +311,61 @@ function normalizeMediaConfig(
       title === undefined ? config.title : title,
       "title",
       120
-    )
+    ),
+    ...(generatedModality
+      ? normalizeGeneratedModelOutput(config, generatedModality)
+      : {})
+  };
+}
+
+function normalizeGeneratedModelOutput(
+  config: Record<string, unknown>,
+  modality: "image" | "video"
+): Record<string, unknown> {
+  const keys = [
+    "generated_by_model_node_id",
+    "generated_output_handle",
+    "generated_from_run_id"
+  ] as const;
+  const populated = keys.map(
+    (key) => config[key] !== undefined && config[key] !== null
+  );
+  if (!populated.some(Boolean)) return {};
+  if (!populated.every(Boolean)) {
+    throw new AigcDefinitionMigrationError(
+      "generated model source fields are invalid"
+    );
+  }
+  const sourceNodeId = nullableString(
+    config.generated_by_model_node_id,
+    "generated_by_model_node_id",
+    120
+  );
+  const outputHandle = nullableString(
+    config.generated_output_handle,
+    "generated_output_handle",
+    80
+  );
+  const runId = nullableString(
+    config.generated_from_run_id,
+    "generated_from_run_id",
+    120
+  );
+  if (
+    sourceNodeId === null ||
+    outputHandle !== modality ||
+    runId === null ||
+    !sourceNodeId.trim() ||
+    !runId.trim()
+  ) {
+    throw new AigcDefinitionMigrationError(
+      "generated model source fields are invalid"
+    );
+  }
+  return {
+    generated_by_model_node_id: sourceNodeId.trim(),
+    generated_output_handle: outputHandle,
+    generated_from_run_id: runId.trim()
   };
 }
 
@@ -320,7 +392,12 @@ function normalizeNode(
     if (type === "text") migrated.config = normalizeTextConfig(config, undefined);
     if (type === "image") migrated.config = normalizeImageConfig(config, undefined);
     if (type === "video" || type === "audio") {
-      migrated.config = normalizeMediaConfig(config, undefined);
+      migrated.config = normalizeMediaConfig(
+        config,
+        undefined,
+        true,
+        type === "video" ? "video" : undefined
+      );
     }
     if (type === "json_parser") {
       migrated.config = normalizeJsonParserConfig(config);
@@ -463,6 +540,42 @@ export function migrateAigcDefinitionV2(
   if (new Set(managedKeys).size !== managedKeys.length) {
     throw new AigcDefinitionMigrationError(
       "managed text keys must be unique"
+    );
+  }
+  const nodesById = new Map(
+    normalizedNodes.map((node) => [String(node.id), node])
+  );
+  const generatedKeys = normalizedNodes.flatMap((node) => {
+    if (node.type !== "image" && node.type !== "video") return [];
+    const config = record(node.config, "node config");
+    if (
+      typeof config.generated_by_model_node_id !== "string" ||
+      typeof config.generated_output_handle !== "string"
+    ) {
+      return [];
+    }
+    const source = nodesById.get(config.generated_by_model_node_id);
+    const mapping =
+      source &&
+      AIGC_MODEL_OUTPUT_MATERIALIZATION[
+        source.type as keyof typeof AIGC_MODEL_OUTPUT_MATERIALIZATION
+      ];
+    if (
+      !mapping ||
+      mapping.nodeType !== node.type ||
+      mapping.outputHandle !== config.generated_output_handle
+    ) {
+      throw new AigcDefinitionMigrationError(
+        "generated model output source is invalid"
+      );
+    }
+    return [
+      `${config.generated_by_model_node_id}\u0000${config.generated_output_handle}`
+    ];
+  });
+  if (new Set(generatedKeys).size !== generatedKeys.length) {
+    throw new AigcDefinitionMigrationError(
+      "generated model output keys must be unique"
     );
   }
 

@@ -214,6 +214,7 @@ def _rebuild_sqlite_pipelines_without_template_foreign_key(bind: Engine) -> None
 
 
 def _apply_additive_migrations(bind: Engine) -> None:
+    _migrate_subtitle_translation(bind)
     _expand_pipeline_task_type(bind)
     _add_aigc_error_columns(bind)
 
@@ -460,6 +461,22 @@ def _apply_additive_migrations(bind: Engine) -> None:
                     "ON generation_tasks (retry_of_task_id)"
                 )
             )
+
+
+def _migrate_subtitle_translation(bind: Engine) -> None:
+    inspector = inspect(bind)
+    columns = {column["name"] for column in inspector.get_columns("subtitle_translation_workspaces")}
+    if "persistence_version" not in columns:
+        with bind.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE subtitle_translation_workspaces "
+                "ADD COLUMN persistence_version INTEGER NOT NULL DEFAULT 1"
+            ))
+    task_type = next(column for column in inspector.get_columns("tool_tasks") if column["name"] == "type")
+    length = getattr(task_type["type"], "length", None)
+    if bind.dialect.name == "mysql" and length is not None and length < 32:
+        with bind.begin() as connection:
+            connection.execute(text("ALTER TABLE tool_tasks MODIFY COLUMN type VARCHAR(32) NOT NULL"))
 
 
 def _expand_pipeline_task_type(bind: Engine) -> None:

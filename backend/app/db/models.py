@@ -636,6 +636,18 @@ class GenerationTaskORM(Base):
     output_text_artifact: Mapped[Optional[TextArtifactORM]] = relationship()
 
 
+class SubtitleWorkspaceORM(Base):
+    __tablename__ = "subtitle_translation_workspaces"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    persistence_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    history: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
 class ToolTaskORM(Base):
     __tablename__ = "tool_tasks"
 

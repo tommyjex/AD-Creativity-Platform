@@ -54,6 +54,7 @@ def test_database_initialization_creates_expected_tables(tmp_path) -> None:
         "project_briefs",
         "projects",
         "storyboard_shots",
+        "subtitle_translation_workspaces",
         "text_artifacts",
         "tool_task_input_assets",
         "tool_tasks",

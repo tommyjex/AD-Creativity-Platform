@@ -222,6 +222,86 @@ describe("AIGC definition v1 to v2 migration", () => {
     expect(migrateAigcRunSnapshotV2(migrated)).toEqual(migrated);
   });
 
+  it("preserves and normalizes generated image and video source metadata", () => {
+    const migrated = migrateAigcDefinitionV2({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: "image-model",
+          type: "text_to_image",
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 160 },
+          config: {}
+        },
+        {
+          id: "image-output",
+          type: "image",
+          position: { x: 320, y: 0 },
+          size: { width: 240, height: 160 },
+          config: {
+            asset_id: "asset-image",
+            generated_by_model_node_id: " image-model ",
+            generated_output_handle: "image",
+            generated_from_run_id: " run-image "
+          }
+        },
+        {
+          id: "video-model",
+          type: "video_generation",
+          position: { x: 0, y: 240 },
+          size: { width: 240, height: 160 },
+          config: {}
+        },
+        {
+          id: "video-output",
+          type: "video",
+          position: { x: 320, y: 240 },
+          size: { width: 240, height: 160 },
+          config: {
+            asset_id: "asset-video",
+            generated_by_model_node_id: "video-model",
+            generated_output_handle: "video",
+            generated_from_run_id: "run-video"
+          }
+        }
+      ],
+      edges: []
+    });
+
+    expect(migrated.nodes[1]?.config).toMatchObject({
+      generated_by_model_node_id: "image-model",
+      generated_output_handle: "image",
+      generated_from_run_id: "run-image"
+    });
+    expect(migrated.nodes[3]?.config).toMatchObject({
+      generated_by_model_node_id: "video-model",
+      generated_output_handle: "video",
+      generated_from_run_id: "run-video"
+    });
+    expect(migrateAigcRunSnapshotV2(migrated)).toEqual(migrated);
+
+    const local = migrateAigcDefinitionV2({
+      schemaVersion: 2,
+      nodes: [
+        {
+          id: "local",
+          type: "image",
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 160 },
+          config: {
+            generated_by_model_node_id: null,
+            generated_output_handle: null,
+            generated_from_run_id: null
+          }
+        }
+      ],
+      edges: []
+    });
+    expect(local.nodes[0]?.config).not.toHaveProperty(
+      "generated_by_model_node_id"
+    );
+  });
+
   it("uses a dedicated migration error for malformed roots", () => {
     expect(() => migrateAigcDefinitionV2(null)).toThrow(
       AigcDefinitionMigrationError

@@ -8,8 +8,6 @@ import json
 import logging
 import math
 import re
-import time
-import urllib.request
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from time import perf_counter
@@ -799,31 +797,7 @@ class AigcModelGateway:
         self,
         task: AigcPipelineTaskAttempt,
     ) -> AigcTaskResult:
-        # #region debug-point B-C:image-params-before-validation
-        if task.node_id == "image_to_image-ed8c7b37-d0b9-4328-9470-51c713aeb55b":
-            try:
-                urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:7777/event", data=json.dumps({"sessionId": "image-input-invalid", "runId": "post-fix", "hypothesisId": "B-C", "location": "backend/app/services/aigc_gateway.py:_execute_image", "msg": "[DEBUG] Image params before validation", "data": {"task_type": task.type.value, "param_keys": sorted(task.params), "model": task.params.get("model"), "size": task.params.get("size"), "operation": task.params.get("operation"), "reference_count": len(task.params.get("reference_asset_ids", [])) if isinstance(task.params.get("reference_asset_ids"), list) else None}, "ts": int(time.time() * 1000)}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-            except Exception:
-                pass
-        # #endregion
-        try:
-            params = AigcImageExecutionParams.model_validate(task.params)
-        except Exception as exc:
-            # #region debug-point B-C:image-params-validation-failed
-            if task.node_id == "image_to_image-ed8c7b37-d0b9-4328-9470-51c713aeb55b":
-                try:
-                    urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:7777/event", data=json.dumps({"sessionId": "image-input-invalid", "runId": "post-fix", "hypothesisId": "B-C", "location": "backend/app/services/aigc_gateway.py:_execute_image", "msg": "[DEBUG] Image params validation failed", "data": {"error_type": type(exc).__name__, "error": str(exc)[:1000]}, "ts": int(time.time() * 1000)}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-                except Exception:
-                    pass
-            # #endregion
-            raise
-        # #region debug-point B-C:image-params-validation-succeeded
-        if task.node_id == "image_to_image-ed8c7b37-d0b9-4328-9470-51c713aeb55b":
-            try:
-                urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:7777/event", data=json.dumps({"sessionId": "image-input-invalid", "runId": "post-fix", "hypothesisId": "B-C", "location": "backend/app/services/aigc_gateway.py:_execute_image", "msg": "[DEBUG] Image params validation succeeded", "data": {"model": params.model, "size": params.size, "reference_count": len(params.reference_asset_ids)}, "ts": int(time.time() * 1000)}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-            except Exception:
-                pass
-        # #endregion
+        params = AigcImageExecutionParams.model_validate(task.params)
         if params.model not in AIGC_ENABLED_IMAGE_MODELS:
             raise ValueError("image model is not enabled")
         source_url: str | None = None
@@ -834,13 +808,6 @@ class AigcModelGateway:
             resolved_inputs = []
             for asset_id in params.reference_asset_ids:
                 asset = self.repository.get_asset(asset_id)
-                # #region debug-point A-B-E:reference-asset
-                if task.node_id == "image_to_image-ed8c7b37-d0b9-4328-9470-51c713aeb55b":
-                    try:
-                        urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:7777/event", data=json.dumps({"sessionId": "image-input-invalid", "runId": "post-fix", "hypothesisId": "A-B-E", "location": "backend/app/services/aigc_gateway.py:_execute_image", "msg": "[DEBUG] Reference asset loaded", "data": {"asset_id": asset.id, "asset_role": asset.asset_role.value, "status": asset.status.value, "type": asset.type.value, "mime_type": asset.mime_type, "has_object_key": bool(asset.object_key), "has_url": bool(asset.url)}, "ts": int(time.time() * 1000)}).encode(), headers={"Content-Type": "application/json"}), timeout=0.2).read()
-                    except Exception:
-                        pass
-                # #endregion
                 if (
                     asset.asset_role != AssetRole.PUBLIC
                     or asset.status != Status.SUCCEEDED

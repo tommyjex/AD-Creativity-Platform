@@ -106,7 +106,8 @@ export type AssetRole = "public" | "internal_base" | "internal_layer";
 export type ToolAssetRole = "input" | "output";
 export type ToolTaskType =
   | "face_blur_video"
-  | "multimodal_video_generation";
+  | "multimodal_video_generation"
+  | "video_subtitle_translation";
 
 export const ASSET_CATEGORIES = ["character", "scene", "reference"] as const;
 
@@ -141,6 +142,7 @@ export const ERROR_CODES = [
   "not_found",
   "dependency_missing",
   "task_conflict",
+  "revision_conflict",
   "invalid_state",
   "generation_failed",
   "external_service_error",
@@ -681,6 +683,79 @@ export interface ToolVideoPromptOptimizeRequest {
 
 export interface ToolVideoPromptOptimizeResponse {
   optimized_prompt: string;
+}
+
+export type SubtitleLanguage = "en" | "de" | "fr" | "es" | "it" | "pt" | "zh" | "ja";
+export type SubtitleOperation = "extract" | "translate" | "render";
+export interface SubtitleStyle {
+  font?: string | null;
+  font_size_px?: number | null;
+  text_color?: string | null;
+  background_color?: string | null;
+  alignment?: "left" | "center" | "right" | null;
+}
+export interface SubtitleSegment {
+  segment_id: string;
+  text: string;
+  translated_text: string | null;
+  translation_status: "pending" | "succeeded" | "failed";
+  start_ms: number;
+  end_ms: number;
+  bbox_normalized: [number, number, number, number];
+  bbox_pixels: [number, number, number, number];
+  visual_role: string;
+  font_height_ratio: number;
+  alignment: "left" | "center" | "right";
+  block_id: string;
+  line_index: number;
+  background_color: string | null;
+  estimated_font_size_px?: number | null;
+  effective_font_size_px?: number | null;
+  recommended_text_color?: string | null;
+  render_bbox_pixels?: [number, number, number, number] | null;
+  font_type?: string | null;
+  font_sha256?: string | null;
+  warnings: string[];
+  excluded: boolean;
+  style: SubtitleStyle;
+}
+export interface SubtitleVideoMetadata {
+  width: number;
+  height: number;
+  duration_ms: number;
+  rotation: number;
+  fps?: number | null;
+  has_audio: boolean;
+}
+export interface SubtitleWorkspace {
+  id: string;
+  name: string;
+  reference_video_asset_id: string | null;
+  clean_video_asset_id: string | null;
+  source_language: SubtitleLanguage | "auto";
+  target_language: SubtitleLanguage;
+  reference_video: SubtitleVideoMetadata | null;
+  clean_video: SubtitleVideoMetadata | null;
+  segments: SubtitleSegment[];
+  revision: number;
+  stage: "draft" | "extracting" | "extracted" | "translating" | "review_ready" | "rendering" | "succeeded" | "failed";
+  active_task_id: string | null;
+  stage_task_ids: Partial<Record<SubtitleOperation, string>>;
+  output_asset_id: string | null;
+  warnings: string[];
+  created_at: DateTimeString;
+  updated_at: DateTimeString;
+}
+export interface SubtitleWorkspaceCreate {
+  name?: string;
+  reference_video_asset_id?: string | null;
+  clean_video_asset_id?: string | null;
+  source_language?: SubtitleLanguage | "auto";
+  target_language: SubtitleLanguage;
+}
+export interface SubtitleWorkspacePatch extends Partial<SubtitleWorkspaceCreate> {
+  expected_revision: number;
+  segments?: SubtitleSegment[];
 }
 
 export interface CharacterCard {

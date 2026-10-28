@@ -46,3 +46,32 @@ npm run build
 浏览器 fixture：`backend/mock_video_last_frame_acceptance_app.py`（端口 `8040`），使用本地对象接口经真实资产内容代理提供图片。前端端口 `3040`，设置 `BACKEND_INTERNAL_BASE_URL=http://127.0.0.1:8040`、空 `NEXT_PUBLIC_BACKEND_BASE_URL`，再运行 `.venv/bin/python frontend/scripts/verify-video-last-frame.py`。
 
 浏览器 fixture 显式关闭 TLS 外部发送，并替换 Provider 和对象存储；验证命名调用一次，不调用真实生成、命名或 TOS 服务。以上为 Mock 集成验收，未执行生产生成或真实云存储验收。
+
+## Task 6/7 增量验证
+
+- 修复 `ResultPanel` 只识别 schema v2 Run snapshot 的缺陷，统一通过 `migrateAigcRunSnapshotV2` 分类 schema v1/v2 视频生成节点。
+- 修正新增测试中的无效 Radix 遮罩事件模拟、下游标题假设和 TypeScript 空值收窄；真实遮罩关闭由 Playwright 覆盖。
+- 为通过 Next 16 路由类型检查，将既有页面导出 `parseAigcView` 移至 `lib/aigc/workspace-view.ts`，行为及测试不变。
+- 定向首轮 `npm run test -- tests/aigc-editor.test.tsx` 暴露缺陷后，修复复跑为 93/93。
+- 最终相关回归：
+
+```bash
+npm run test -- tests/aigc-editor.test.tsx tests/aigc-download.test.ts tests/aigc-result-projection.test.ts tests/aigc-flow-node.test.tsx tests/aigc-flow-node-v2.test.tsx tests/aigc-acceptance.test.tsx tests/aigc-workspace.test.tsx
+# 7 files passed, 190 tests passed
+npm run typecheck
+# passed
+npm run lint
+# passed, 0 warnings
+npm run build
+# passed; compile, TypeScript, 13/13 static pages
+```
+
+- 浏览器命令：
+
+```bash
+NEXT_DIST_DIR=.next-task67 npm run dev -- --hostname 127.0.0.1 --port 3041
+AIGC_ACCEPTANCE_URL=http://127.0.0.1:3041 node scripts/verify-aigc-video-last-frame-result.mjs
+```
+
+- Playwright 结果：`1440x900`、`834x1112`、`390x844` 共 3/3 通过，`providerCalls=0`。资产数组以尾帧在前的逆序返回，仍按 `name_variant=video_last_frame` 与图片 MIME 分类；验证视频在前、尾帧在后、明确角色标题、固定 `object-contain` 媒体区、缩略图/按钮打开 Dialog、关闭按钮/Escape/遮罩关闭后上下文保持、结果区和 Dialog 两处下载链接及受控端点响应、长 Unicode 文件名与 `Content-Disposition` 一致、下游无重复尾帧、无操作重叠或水平溢出。
+- 确定性 fixture 仅拦截本地认证、Run 和受控资产内容端点；未调用 Provider、命名、真实 TOS 或其他外部 API。报告和截图位于 `frontend/test-results/video-last-frame-result/`。

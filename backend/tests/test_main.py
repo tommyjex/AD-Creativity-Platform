@@ -6,6 +6,7 @@ import backend.app.main as main_module
 from backend.app.api.dependencies import (
     get_aigc_pipeline_runtime,
     get_asset_storage_service,
+    get_background_task_runner,
     get_media_inspector_service,
     get_modelark_generation_service,
     get_multitrack_client_factory,
@@ -16,6 +17,22 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.main import create_app
 from backend.app.repositories import InMemoryRepository
 from backend.app.services.assets import AssetStorageService
+
+
+@pytest.fixture(autouse=True)
+def offline_lifecycle_dependencies(
+    monkeypatch, repository, test_asset_storage, background_task_runner
+):
+    factory = create_app
+
+    def create_offline_app():
+        app = factory()
+        app.dependency_overrides[get_repository] = lambda: repository
+        app.dependency_overrides[get_asset_storage_service] = lambda: test_asset_storage
+        app.dependency_overrides[get_background_task_runner] = lambda: background_task_runner
+        return app
+
+    monkeypatch.setitem(globals(), "create_app", create_offline_app)
 
 
 class RuntimeLifecycleProbe:

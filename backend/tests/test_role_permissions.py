@@ -227,7 +227,10 @@ def test_every_api_route_declares_an_authentication_policy() -> None:
                 continue
             if key in authenticated_auth:
                 assert require_authenticated in calls, key
-            elif route.path.startswith("/api/admin/"):
+            elif route.path.startswith((
+                "/api/admin/",
+                "/api/experiments/",
+            )):
                 assert require_admin in calls, key
             else:
                 assert require_business_access in calls, key

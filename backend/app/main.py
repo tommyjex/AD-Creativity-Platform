@@ -13,8 +13,10 @@ from fastapi.responses import JSONResponse
 
 from .api.dependencies import (
     discard_aigc_pipeline_runtime,
+    discard_subtitle_translation_service,
     get_aigc_pipeline_runtime,
     get_asset_storage_service,
+    get_background_task_runner,
     get_face_blur_video_client_factory,
     get_media_inspector_service,
     get_modelark_generation_service,
@@ -22,6 +24,7 @@ from .api.dependencies import (
     get_repository,
     get_video_enhancement_client_factory,
     get_video_ocr_client_factory,
+    initialize_subtitle_translation_service,
 )
 from .api.router import api_router
 from .core.config import ConfigurationError, get_settings, normalize_http_origin
@@ -126,10 +129,22 @@ async def _lifespan(application: FastAPI):
         if repository is not None:
             discard_aigc_pipeline_runtime(repository)
         raise
+    subtitle_repository = repository
+    subtitle_service = None
     try:
+        subtitle_repository = repository or await _resolve_dependency(application, get_repository)
+        subtitle_service = initialize_subtitle_translation_service(
+            subtitle_repository,
+            await _resolve_dependency(application, get_asset_storage_service),
+            await _resolve_dependency(application, get_background_task_runner),
+        )
+        subtitle_service.recover()
+        subtitle_service._recovered = True
         yield
     finally:
         try:
+            if subtitle_service is not None:
+                await subtitle_service.stop()
             await runtime.stop()
             log_event(
                 logger,
@@ -153,6 +168,8 @@ async def _lifespan(application: FastAPI):
                 await tls_sink.aclose()
             if repository is not None:
                 discard_aigc_pipeline_runtime(repository)
+            if subtitle_repository is not None:
+                discard_subtitle_translation_service(subtitle_repository)
 
 
 def create_app() -> FastAPI:

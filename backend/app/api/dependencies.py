@@ -38,10 +38,14 @@ from backend.app.services.mediakit_video_enhancement import (
 )
 from backend.app.services.mediakit_video_ocr import MediaKitVideoOcrClient
 from backend.app.services.video_normalizer import VideoNormalizer, get_video_normalizer
+from backend.app.services.video_subtitle_grounding import (
+    VideoSubtitleGroundingService,
+)
 from backend.app.services.workflow import WorkflowService
 
 _aigc_runtimes: WeakKeyDictionary[object, AigcPipelineRuntime] = WeakKeyDictionary()
 _auth_services: WeakKeyDictionary[object, AuthService] = WeakKeyDictionary()
+_subtitle_services: WeakKeyDictionary[object, object] = WeakKeyDictionary()
 
 
 @lru_cache
@@ -270,9 +274,42 @@ def get_video_normalizer_service() -> VideoNormalizer:
     return get_video_normalizer()
 
 
+def get_video_subtitle_grounding_service(
+    settings: Settings = Depends(get_settings),
+) -> VideoSubtitleGroundingService:
+    return VideoSubtitleGroundingService(settings=settings)
+
+
 def get_asr_subtitle_client() -> AsrSubtitleClient:
     return create_asr_subtitle_client()
 
 
 def get_background_task_runner() -> BackgroundTaskRunner:
     return BackgroundTaskRunner()
+
+
+async def get_subtitle_translation_service(
+    repository: Repository = Depends(get_repository),
+    asset_storage: AssetStorageService = Depends(get_asset_storage_service),
+    runner: BackgroundTaskRunner = Depends(get_background_task_runner),
+    principal=Depends(require_business_access),
+):
+    service = initialize_subtitle_translation_service(repository, asset_storage, runner)
+    if principal.user.role != UserRole.VIEWER and not getattr(service, "_recovered", False):
+        service.recover()
+        service._recovered = True
+    return service
+
+
+def initialize_subtitle_translation_service(repository, asset_storage, runner):
+    from backend.app.services.subtitle_translation import SubtitleTranslationService
+
+    service = _subtitle_services.get(repository)
+    if service is None:
+        service = SubtitleTranslationService(repository, asset_storage, runner=runner)
+        _subtitle_services[repository] = service
+    return service
+
+
+def discard_subtitle_translation_service(repository):
+    return _subtitle_services.pop(repository, None)

@@ -54,8 +54,12 @@ from backend.app.schemas import (
     ToolTaskCreate,
     ToolTaskInputAsset,
 )
+from backend.app.repositories.aigc_model_output import (
+    ModelOutputMaterialization,
+)
 from backend.app.schemas.auth import AuthSession, UserRecord, UserRole
 from backend.app.schemas.enums import ReferenceAssetKind, Stage, Status, ToolTaskType
+from backend.app.schemas.subtitle_translation import SubtitleWorkspace
 
 
 class NotFoundError(KeyError):
@@ -104,6 +108,18 @@ def multitrack_subtitle_asset_slot(track_id: str, element_id: str) -> str:
 
 
 class Repository(Protocol):
+    def create_subtitle_workspace(self, workspace: SubtitleWorkspace) -> SubtitleWorkspace: ...
+
+    def get_subtitle_workspace(self, workspace_id: str) -> SubtitleWorkspace: ...
+
+    def list_subtitle_workspaces(self) -> list[SubtitleWorkspace]: ...
+
+    def list_subtitle_workspace_history(self, workspace_id: str) -> list[dict]: ...
+
+    def mutate_subtitle_workspace(self, workspace_id: str, mutation) -> SubtitleWorkspace: ...
+
+    def create_subtitle_output_asset(self, data: AssetCreate) -> Asset: ...
+
     def count_users(self) -> int: ...
 
     def create_initial_admin(
@@ -229,6 +245,15 @@ class Repository(Protocol):
         pipeline_id: str,
         data: AigcPipelineUpdate,
     ) -> AigcPipeline: ...
+
+    def materialize_aigc_model_output(
+        self,
+        pipeline_id: str,
+        *,
+        source_node_id: str,
+        run_id: str,
+        result: AigcTaskResult,
+    ) -> ModelOutputMaterialization: ...
 
     def update_aigc_pipeline_thumbnail(
         self,

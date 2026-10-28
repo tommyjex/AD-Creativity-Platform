@@ -60,6 +60,18 @@ export type AigcNodeType = (typeof AIGC_NODE_TYPES)[number];
 export type AigcV2NodeType = (typeof AIGC_V2_NODE_TYPES)[number];
 export type AigcNodeCategory = "input" | "model" | "control" | "output";
 export type AigcV2NodeCategory = "modality" | "model" | "control";
+export const AIGC_MODEL_OUTPUT_MATERIALIZATION = {
+  text_to_image: { nodeType: "image", outputHandle: "image" },
+  image_to_image: { nodeType: "image", outputHandle: "image" },
+  video_generation: { nodeType: "video", outputHandle: "video" },
+  video_enhancement: { nodeType: "video", outputHandle: "video" },
+  video_face_blur: { nodeType: "video", outputHandle: "video" }
+} as const satisfies Partial<
+  Record<
+    AigcV2NodeType,
+    { nodeType: "image" | "video"; outputHandle: "image" | "video" }
+  >
+>;
 export type AigcPortType =
   | "text"
   | "image_asset"
@@ -337,10 +349,16 @@ export interface ImageConfig extends ImageInputConfig {
   title: string | null;
   upstream_bbox?: AigcBbox | null;
   upstream_bbox_asset_id?: string | null;
+  generated_by_model_node_id?: string | null;
+  generated_output_handle?: "image" | null;
+  generated_from_run_id?: string | null;
 }
 
 export interface VideoConfig extends VideoInputConfig {
   title: string | null;
+  generated_by_model_node_id?: string | null;
+  generated_output_handle?: "video" | null;
+  generated_from_run_id?: string | null;
 }
 
 export interface AudioConfig extends AudioInputConfig {

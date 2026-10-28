@@ -44,7 +44,13 @@
     "/tmp/task8-next/types/**/*.ts",
     "/tmp/task8-next/dev/types/**/*.ts",
     "/tmp/task8-next-final/types/**/*.ts",
-    "/tmp/task8-next-final/dev/types/**/*.ts"
+    "/tmp/task8-next-final/dev/types/**/*.ts",
+    ".next-subtitle-adaptive/types/**/*.ts",
+    ".next-subtitle-adaptive/dev/types/**/*.ts",
+    "/tmp/ad-creativity-subtitle-opacity-next/types/**/*.ts",
+    "/tmp/ad-creativity-subtitle-opacity-next/dev/types/**/*.ts",
+    "/tmp/ad-creativity-subtitle-warnings-next/types/**/*.ts",
+    "/tmp/ad-creativity-subtitle-warnings-next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

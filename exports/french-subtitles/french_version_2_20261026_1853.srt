@@ -1,0 +1,215 @@
+1
+00:00:00,000 --> 00:00:02,000
+Déballage et mode d’emploi
+
+2
+00:00:00,000 --> 00:00:02,000
+FLOOR ONE i7 HotWash
+
+3
+00:00:02,500 --> 00:00:04,500
+Déballage
+
+4
+00:00:08,000 --> 00:00:10,500
+Manuel d’instructions
+
+5
+00:00:11,000 --> 00:00:12,500
+Station de charge (pour l’aspirateur laveur de sol)
+
+6
+00:00:13,000 --> 00:00:14,000
+Brosse rotative ×2
+
+7
+00:00:14,500 --> 00:00:16,500
+Filtre sec ×2
+
+8
+00:00:17,000 --> 00:00:17,500
+Outil de nettoyage
+
+9
+00:00:18,000 --> 00:00:18,500
+Solution nettoyante
+
+10
+00:00:19,000 --> 00:00:20,000
+Aspirateur laveur de sol
+
+11
+00:00:20,500 --> 00:00:23,500
+Poignée
+
+12
+00:00:24,000 --> 00:00:26,000
+Désodorisante
+
+13
+00:00:24,000 --> 00:00:26,000
+Filtre sec ×2
+
+14
+00:00:24,000 --> 00:00:26,000
+Poignée
+
+15
+00:00:24,000 --> 00:00:26,000
+Brosse à rouleaux*2
+
+16
+00:00:24,000 --> 00:00:26,000
+Nettoyeur de sol
+
+17
+00:00:24,000 --> 00:00:26,000
+Outil de nettoyage
+
+18
+00:00:24,000 --> 00:00:26,000
+Station de charge
+
+19
+00:00:24,000 --> 00:00:26,000
+et solution nettoyante
+
+20
+00:00:24,000 --> 00:00:26,000
+(pour nettoyeur de sol)
+
+21
+00:00:26,500 --> 00:00:28,000
+Installer
+
+22
+00:00:28,500 --> 00:00:31,500
+Insérez la poignée dans le nettoyeur de sol jusqu’à ce qu’elle s’enclenche.
+
+23
+00:00:38,500 --> 00:00:40,500
+Commencer le nettoyage
+
+24
+00:00:41,000 --> 00:00:43,500
+Retirez le réservoir d’eau propre.
+
+25
+00:00:44,000 --> 00:00:45,000
+Ouvrez le bouchon du réservoir.
+
+26
+00:00:45,500 --> 00:00:46,500
+Remplissez le réservoir d’eau propre avec de l’eau du robinet propre.
+
+27
+00:00:47,000 --> 00:00:49,500
+Ajoutez la solution nettoyante Tineco conformément aux instructions.
+
+28
+00:00:54,000 --> 00:01:00,000
+Insérez le rouleau-brosse dans son support et fixez-le en place.
+
+29
+00:01:00,500 --> 00:01:03,000
+Réinstallez le réservoir d’eau propre.
+
+30
+00:01:03,500 --> 00:01:05,500
+Appuyez sur la tête de nettoyage avec le pied et tirez la poignée vers l’arrière.
+
+31
+00:01:06,000 --> 00:01:07,500
+Appuyez sur le bouton d’alimentation pour commencer le nettoyage.
+
+32
+00:01:08,000 --> 00:01:12,000
+Commencez à nettoyer les saletés humides et sèches du quotidien.
+
+33
+00:01:12,500 --> 00:01:14,500
+Appuyez sur le bouton de mode pour changer de mode de nettoyage.
+
+34
+00:01:22,500 --> 00:01:26,500
+Conception pliable à 180°
+
+35
+00:01:22,500 --> 00:01:26,500
+Se glisse sous les meubles bas pour nettoyer la poussière cachée.
+
+36
+00:01:27,000 --> 00:01:32,500
+Nettoyage des bords
+
+37
+00:01:27,000 --> 00:01:32,500
+Nettoie près des murs et des plinthes.
+
+38
+00:01:33,000 --> 00:01:34,000
+Auto-nettoyage
+
+39
+00:01:34,500 --> 00:01:36,500
+Placez l’appareil sur la station de charge après utilisation.
+
+40
+00:01:37,000 --> 00:01:39,000
+Appuyez sur le bouton d’auto-nettoyage pour lancer le cycle de nettoyage.
+
+41
+00:01:39,500 --> 00:01:42,500
+Système d’auto-nettoyage
+
+42
+00:01:39,500 --> 00:01:42,500
+Nettoie automatiquement le rouleau-brosse et le circuit interne.
+
+43
+00:01:43,000 --> 00:01:44,000
+Entretien
+
+44
+00:01:44,500 --> 00:01:46,000
+Retirez le réservoir d’eau sale.
+
+45
+00:01:46,500 --> 00:01:48,000
+Retirez le filtre sec.
+
+46
+00:01:48,500 --> 00:01:50,500
+Rincez le filtre sec à l’eau propre.
+
+47
+00:01:51,000 --> 00:01:52,000
+Ouvrez le couvercle du réservoir d’eau sale.
+
+48
+00:01:52,500 --> 00:01:55,500
+Videz l’eau sale et retirez les débris.
+
+49
+00:01:56,000 --> 00:01:57,500
+Utilisez l’outil de nettoyage pour retirer les débris restants.
+
+50
+00:01:58,000 --> 00:01:59,000
+Rincez soigneusement le réservoir d’eau sale.
+
+51
+00:01:59,500 --> 00:02:02,500
+Laissez toutes les pièces sécher complètement à l’air avant le remontage.
+
+52
+00:02:03,000 --> 00:02:06,500
+Réinstallez le couvercle du réservoir et le filtre sec.
+
+53
+00:02:07,000 --> 00:02:09,500
+Réinstallez le réservoir d’eau sale.
+
+54
+00:02:11,500 --> 00:02:16,500
+FLOOR ONE i7 Hotwash

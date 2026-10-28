@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import {
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -27,6 +28,7 @@ import {
 } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ReadOnlyNotice } from "@/components/auth/read-only-notice";
+import { SubtitleTranslationPanel } from "@/components/workspace/subtitle-translation/panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -91,7 +93,7 @@ const VIDEO_ASPECT_RATIO_OPTIONS: Array<[ToolVideoGenerationRequest["aspect_rati
 const selectClassName =
   "flex h-10 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm transition-all focus-visible:border-primary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15";
 
-type ToolTab = "face-blur" | "video-generation";
+type ToolTab = "face-blur" | "video-generation" | "subtitle-translation";
 
 export function ToolsWorkspace({
   initialAssets,
@@ -108,6 +110,13 @@ export function ToolsWorkspace({
   const [tasks, setTasks] = useState(initialTasks);
   const [feedback, setFeedback] = useState<string | null>(initialError ?? null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const subtitleDirty = useRef(false);
+  const onSubtitleDirtyChange = useCallback((dirty: boolean) => { subtitleDirty.current = dirty; }, []);
+  function changeTab(next: ToolTab) {
+    if (next !== tab && subtitleDirty.current && !window.confirm("离开字幕工具将放弃未保存校对，继续？")) return;
+    subtitleDirty.current = false;
+    setTab(next);
+  }
 
   async function refresh() {
     setIsRefreshing(true);
@@ -137,7 +146,7 @@ export function ToolsWorkspace({
             视频工具
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            独立处理人物打码与全模态参考生视频，全部素材和结果会归档至工具资产。
+            独立处理人物打码、全模态参考生视频与字幕翻译，全部素材和结果会归档至工具资产。
           </p>
           {!canWrite ? <ReadOnlyNotice className="mt-3 max-w-xl" /> : null}
         </div>
@@ -162,13 +171,19 @@ export function ToolsWorkspace({
           active={tab === "face-blur"}
           icon={<Video className="h-4 w-4" />}
           label="视频人物打码"
-          onClick={() => setTab("face-blur")}
+          onClick={() => changeTab("face-blur")}
         />
         <ToolTabButton
           active={tab === "video-generation"}
           icon={<Film className="h-4 w-4" />}
           label="全模态参考生视频"
-          onClick={() => setTab("video-generation")}
+          onClick={() => changeTab("video-generation")}
+        />
+        <ToolTabButton
+          active={tab === "subtitle-translation"}
+          icon={<Film className="h-4 w-4" />}
+          label="视频字幕翻译"
+          onClick={() => changeTab("subtitle-translation")}
         />
       </div>
 
@@ -182,8 +197,10 @@ export function ToolsWorkspace({
       <div className="mt-6">
         {tab === "face-blur" ? (
           <FaceBlurPanel assets={assets} canWrite={canWrite} onAssetsChange={setAssets} onFeedback={setFeedback} onTasksChange={setTasks} tasks={tasks} />
-        ) : (
+        ) : tab === "video-generation" ? (
           <VideoGenerationPanel assets={assets} canWrite={canWrite} onAssetsChange={setAssets} onFeedback={setFeedback} onTasksChange={setTasks} tasks={tasks} />
+        ) : (
+          <SubtitleTranslationPanel assets={assets} canWrite={canWrite} onAssetsChange={setAssets} onDirtyChange={onSubtitleDirtyChange} />
         )}
       </div>
     </section>

@@ -1,0 +1,2309 @@
+{
+  "source_language": "auto",
+  "target_language": "fr",
+  "reference_video": {
+    "fps": 25.0,
+    "width": 1920,
+    "height": 1080,
+    "rotation": 0,
+    "has_audio": true,
+    "duration_ms": 137120
+  },
+  "output_video": {
+    "fps": 25.0,
+    "width": 1920,
+    "height": 1080,
+    "rotation": 0,
+    "has_audio": true,
+    "duration_ms": 137120
+  },
+  "extraction_task_id": "2d2b94e8-d30d-4734-8735-d0aa305c1308",
+  "translation_task_id": "d2d1417b-aa62-45fe-a0e7-728874335016",
+  "render_task_id": "c5ab0ad9-c2a9-4956-aa2d-de85c4bae501",
+  "completed_at_beijing": "2026-10-26T17:27:52+08:00",
+  "coordinate_notes": {
+    "order": "[x_min, y_min, x_max, y_max]；左上角为原点",
+    "bbox_pixels": "原提取坐标，单位为参考视频像素",
+    "bbox_normalized": "原提取归一化坐标，范围 0..999",
+    "render_bbox_pixels": "压制排版坐标，单位为输出视频像素",
+    "time": "start_ms 和 end_ms 单位为毫秒",
+    "font_size": "字号字段为排版估算值与提交值，并非 VLM 精确测得的原字体字号",
+    "source": "成功压制任务的字幕快照，segments 字段及顺序原样保留；不含供应商模型原始响应"
+  },
+  "segments": [
+    {
+      "text": "Unboxing and How to Use",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 2000,
+      "block_id": "intro_title_1",
+      "excluded": false,
+      "start_ms": 0,
+      "warnings": [],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "92bc043a-1fdd-49ac-afbc-1a8c290d86b0",
+      "bbox_pixels": [
+        336,
+        291,
+        1580,
+        394
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        175,
+        270,
+        823,
+        365
+      ],
+      "translated_text": "Déballage et mode d’emploi",
+      "background_color": "#000000",
+      "font_height_ratio": 0.09,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "FLOOR ONE i7 HotWash",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 2000,
+      "block_id": "intro_title_1",
+      "excluded": false,
+      "start_ms": 0,
+      "warnings": [],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 1,
+      "segment_id": "25421f36-ac85-4ce8-80dd-772ab3694e37",
+      "bbox_pixels": [
+        380,
+        491,
+        1532,
+        588
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        198,
+        455,
+        798,
+        545
+      ],
+      "translated_text": "FLOOR ONE i7 HotWash",
+      "background_color": "#000000",
+      "font_height_ratio": 0.085,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Unboxing",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 4500,
+      "block_id": "unboxing_title",
+      "excluded": false,
+      "start_ms": 2500,
+      "warnings": [],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "a6a6352f-6e5b-47cd-8a03-6180e74caf2a",
+      "bbox_pixels": [
+        773,
+        491,
+        1142,
+        577
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        403,
+        455,
+        595,
+        535
+      ],
+      "translated_text": "Déballage",
+      "background_color": "#FFFFFF",
+      "font_height_ratio": 0.07,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Instruction Manual",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 10500,
+      "block_id": "label_manual",
+      "excluded": false,
+      "start_ms": 8000,
+      "warnings": [],
+      "alignment": "right",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "b6c5ddbe-ef05-4eb8-836b-e3f84885a89e",
+      "bbox_pixels": [
+        1363,
+        934,
+        1737,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        710,
+        865,
+        905,
+        900
+      ],
+      "translated_text": "Manuel d’instructions",
+      "background_color": "#A88B5E",
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Charging Dock (for Floor Washer)",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 12500,
+      "block_id": "label_dock",
+      "excluded": false,
+      "start_ms": 11000,
+      "warnings": [],
+      "alignment": "right",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "fefd54d9-c306-4215-9659-d33497e0f642",
+      "bbox_pixels": [
+        1065,
+        934,
+        1728,
+        977
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        555,
+        865,
+        900,
+        905
+      ],
+      "translated_text": "Station de charge (pour le nettoyeur de sol)",
+      "background_color": "#8E744F",
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Roller Brush ×2",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 14000,
+      "block_id": "label_roller",
+      "excluded": false,
+      "start_ms": 13000,
+      "warnings": [],
+      "alignment": "right",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "442df7f6-09ea-466d-b6e2-3120c2fe5b10",
+      "bbox_pixels": [
+        1440,
+        934,
+        1724,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        750,
+        865,
+        898,
+        900
+      ],
+      "translated_text": "Brosse rotative × 2",
+      "background_color": "#9B8158",
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Dry Filter ×2",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 16500,
+      "block_id": "label_filter",
+      "excluded": false,
+      "start_ms": 14500,
+      "warnings": [],
+      "alignment": "right",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "34084a25-d652-4482-822d-ccb7cdb995b4",
+      "bbox_pixels": [
+        1493,
+        934,
+        1724,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        778,
+        865,
+        898,
+        900
+      ],
+      "translated_text": "Filtre sec × 2",
+      "background_color": "#A08A63",
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Cleaning Tool",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 17500,
+      "block_id": "label_tool",
+      "excluded": false,
+      "start_ms": 17000,
+      "warnings": [],
+      "alignment": "right",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "56077a25-cd11-4a38-a75c-c50a32101c0a",
+      "bbox_pixels": [
+        1455,
+        934,
+        1728,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        758,
+        865,
+        900,
+        900
+      ],
+      "translated_text": "Outil de nettoyage",
+      "background_color": "#9C865F",
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Cleaning Solution",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 18500,
+      "block_id": "label_solution",
+      "excluded": false,
+      "start_ms": 18000,
+      "warnings": [],
+      "alignment": "right",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "1aa67ae8-65fb-459e-b5f3-9d453fb21b69",
+      "bbox_pixels": [
+        1372,
+        934,
+        1737,
+        977
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        715,
+        865,
+        905,
+        905
+      ],
+      "translated_text": "Solution nettoyante",
+      "background_color": "#8E7651",
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Floor Washer",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 20000,
+      "block_id": "label_washer",
+      "excluded": false,
+      "start_ms": 19000,
+      "warnings": [],
+      "alignment": "right",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "c142a8c9-1552-421c-be44-6dcd46114dd0",
+      "bbox_pixels": [
+        1464,
+        934,
+        1737,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        763,
+        865,
+        905,
+        900
+      ],
+      "translated_text": "Nettoyeur de sol",
+      "background_color": "#8E7651",
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Handle",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 23000,
+      "block_id": "label_handle",
+      "excluded": false,
+      "start_ms": 20500,
+      "warnings": [],
+      "alignment": "right",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "f8a0b7f9-4fae-4527-8d55-31c8ab795003",
+      "bbox_pixels": [
+        1580,
+        939,
+        1737,
+        977
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        823,
+        870,
+        905,
+        905
+      ],
+      "translated_text": "Poignée",
+      "background_color": "#9C865F",
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Deodorizing",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 26000,
+      "block_id": "layout_solution",
+      "excluded": false,
+      "start_ms": 23500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "08fe826b-a766-4943-b66f-7da6691349ef",
+      "bbox_pixels": [
+        604,
+        145,
+        735,
+        170
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        315,
+        135,
+        383,
+        158
+      ],
+      "translated_text": "Désodorisante",
+      "background_color": "#B9A78B",
+      "font_height_ratio": 0.02,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "& Cleaning Solution",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 26000,
+      "block_id": "layout_solution",
+      "excluded": false,
+      "start_ms": 23500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 1,
+      "segment_id": "75d1c0c2-73f6-41e9-ba74-62cb9e0e5c06",
+      "bbox_pixels": [
+        595,
+        167,
+        777,
+        192
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        310,
+        155,
+        405,
+        178
+      ],
+      "translated_text": "et solution nettoyante",
+      "background_color": "#B9A78B",
+      "font_height_ratio": 0.02,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Floor Washer",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 26000,
+      "block_id": "layout_washer",
+      "excluded": false,
+      "start_ms": 23500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "9b70f154-a12c-41ab-81c9-07e00ad2100d",
+      "bbox_pixels": [
+        1171,
+        216,
+        1315,
+        240
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        610,
+        200,
+        685,
+        223
+      ],
+      "translated_text": "Nettoyeur de sol",
+      "background_color": "#B9A78B",
+      "font_height_ratio": 0.02,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Dry Filter*2",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 26000,
+      "block_id": "layout_filter",
+      "excluded": false,
+      "start_ms": 23500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "efe05a2b-76a8-4bd5-96de-b4cc88ca25d6",
+      "bbox_pixels": [
+        345,
+        280,
+        470,
+        305
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        180,
+        260,
+        245,
+        283
+      ],
+      "translated_text": "Filtre sec × 2",
+      "background_color": "#B9A78B",
+      "font_height_ratio": 0.02,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Handle",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 26000,
+      "block_id": "layout_handle",
+      "excluded": false,
+      "start_ms": 23500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "cc02ee4c-8dfa-4e61-ab51-a1b406daaec9",
+      "bbox_pixels": [
+        336,
+        642,
+        418,
+        667
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        175,
+        595,
+        218,
+        618
+      ],
+      "translated_text": "Poignée",
+      "background_color": "#B9A78B",
+      "font_height_ratio": 0.02,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Roller brush*2",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 26000,
+      "block_id": "layout_roller",
+      "excluded": false,
+      "start_ms": 23500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "9e93adf0-c619-4387-9abc-e3b2dd39bc2a",
+      "bbox_pixels": [
+        700,
+        610,
+        844,
+        635
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        365,
+        565,
+        440,
+        588
+      ],
+      "translated_text": "Brosse rotative*2",
+      "background_color": "#B9A78B",
+      "font_height_ratio": 0.02,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Cleaning Tool",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 26000,
+      "block_id": "layout_tool",
+      "excluded": false,
+      "start_ms": 23500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "142f005a-b674-4b11-b0f8-bd5b40a8f8c5",
+      "bbox_pixels": [
+        994,
+        577,
+        1132,
+        602
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        518,
+        535,
+        590,
+        558
+      ],
+      "translated_text": "Outil de nettoyage",
+      "background_color": "#B9A78B",
+      "font_height_ratio": 0.02,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Charging Dock",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 26000,
+      "block_id": "layout_dock",
+      "excluded": false,
+      "start_ms": 23500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "edfbad60-3f77-4d82-b7ac-460ee6803c9b",
+      "bbox_pixels": [
+        1244,
+        561,
+        1397,
+        586
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        648,
+        520,
+        728,
+        543
+      ],
+      "translated_text": "Station de charge",
+      "background_color": "#B9A78B",
+      "font_height_ratio": 0.02,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "(for Floor Washer)",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 26000,
+      "block_id": "layout_dock",
+      "excluded": false,
+      "start_ms": 23500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 1,
+      "segment_id": "57d308cb-099b-4893-8d44-78288b998cc2",
+      "bbox_pixels": [
+        1238,
+        583,
+        1440,
+        608
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        645,
+        540,
+        750,
+        563
+      ],
+      "translated_text": "(pour l’aspirateur laveur)",
+      "background_color": "#B9A78B",
+      "font_height_ratio": 0.02,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Install",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 28000,
+      "block_id": "install_title",
+      "excluded": false,
+      "start_ms": 26500,
+      "warnings": [],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "63ff7d4b-b686-4970-9bdb-da8a604ee061",
+      "bbox_pixels": [
+        835,
+        496,
+        1080,
+        567
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        435,
+        460,
+        563,
+        525
+      ],
+      "translated_text": "Installation",
+      "background_color": "#FFFFFF",
+      "font_height_ratio": 0.06,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Insert the handle into the floor washer until it clicks into place.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 31500,
+      "block_id": "instruction_insert_handle",
+      "excluded": false,
+      "start_ms": 28500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "7c798adf-de11-4faf-84b4-317fcf3faa76",
+      "bbox_pixels": [
+        355,
+        928,
+        1560,
+        969
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        185,
+        860,
+        813,
+        898
+      ],
+      "translated_text": "Insérez la poignée dans l’aspirateur laveur jusqu’à ce qu’elle s’enclenche.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Start Cleaning",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 40500,
+      "block_id": "start_title",
+      "excluded": false,
+      "start_ms": 38500,
+      "warnings": [],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "d91c0887-dbc6-40e2-ba42-c93d8a8e4f07",
+      "bbox_pixels": [
+        691,
+        502,
+        1228,
+        577
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        360,
+        465,
+        640,
+        535
+      ],
+      "translated_text": "Commencer le nettoyage",
+      "background_color": "#FFFFFF",
+      "font_height_ratio": 0.06,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Remove the Clean Water Tank.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 43500,
+      "block_id": "instruction_remove_clean_tank",
+      "excluded": false,
+      "start_ms": 41000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "d7f545fa-9c40-469d-a0c1-070c1670cb4d",
+      "bbox_pixels": [
+        662,
+        934,
+        1253,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        345,
+        865,
+        653,
+        900
+      ],
+      "translated_text": "Retirez le réservoir d’eau propre.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Open the tank cap.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 45000,
+      "block_id": "instruction_open_cap",
+      "excluded": false,
+      "start_ms": 44000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "920815a4-faf6-4fcc-8ee3-1e58105b2cd7",
+      "bbox_pixels": [
+        758,
+        934,
+        1157,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        395,
+        865,
+        603,
+        900
+      ],
+      "translated_text": "Ouvrez le bouchon du réservoir.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Fill the Clean Water Tank with clean tap water.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 46500,
+      "block_id": "instruction_fill_water",
+      "excluded": false,
+      "start_ms": 45500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "262f60b1-f21b-46d6-89fa-90cac4286681",
+      "bbox_pixels": [
+        518,
+        928,
+        1416,
+        969
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        270,
+        860,
+        738,
+        898
+      ],
+      "translated_text": "Remplissez le réservoir d’eau propre avec de l’eau du robinet propre.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Add Tineco Cleaning Solution as directed.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 49500,
+      "block_id": "instruction_add_solution",
+      "excluded": false,
+      "start_ms": 47000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "1644e778-b751-4ffe-826c-4305aa498b5b",
+      "bbox_pixels": [
+        547,
+        923,
+        1368,
+        966
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        285,
+        855,
+        713,
+        895
+      ],
+      "translated_text": "Ajoutez la solution nettoyante Tineco conformément aux instructions.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Insert the brush roller into the holder and secure it in place.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 60000,
+      "block_id": "instruction_insert_roller",
+      "excluded": false,
+      "start_ms": 54000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "a21f3dc1-1811-4529-97c9-722486a576fa",
+      "bbox_pixels": [
+        374,
+        928,
+        1541,
+        969
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        195,
+        860,
+        803,
+        898
+      ],
+      "translated_text": "Insérez la brosse rotative dans son support et fixez-la en place.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Reinstall the Clean Water Tank.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 63000,
+      "block_id": "instruction_reinstall_clean_tank",
+      "excluded": false,
+      "start_ms": 60500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "00d0a74c-90f4-492c-a147-734333a8e080",
+      "bbox_pixels": [
+        652,
+        934,
+        1263,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        340,
+        865,
+        658,
+        900
+      ],
+      "translated_text": "Réinstallez le réservoir d’eau propre.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Step on the floorhead and pull the handle backward.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 65500,
+      "block_id": "instruction_step_pull",
+      "excluded": false,
+      "start_ms": 63500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "5cecf800-6953-47b6-a491-a786c3a8de4a",
+      "bbox_pixels": [
+        432,
+        934,
+        1484,
+        975
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        225,
+        865,
+        773,
+        903
+      ],
+      "translated_text": "Appuyez sur la tête de nettoyage au sol et tirez la poignée vers l’arrière.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Press the power button to start cleaning.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 67500,
+      "block_id": "instruction_power",
+      "excluded": false,
+      "start_ms": 66000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "19daec8a-6589-496f-80f5-a3d8ea2817af",
+      "bbox_pixels": [
+        566,
+        928,
+        1349,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        295,
+        860,
+        703,
+        900
+      ],
+      "translated_text": "Appuyez sur le bouton d’alimentation pour commencer le nettoyage.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Start cleaning everyday wet and dry messes.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 72000,
+      "block_id": "instruction_clean_messes",
+      "excluded": false,
+      "start_ms": 68000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "a73ab0a8-96fa-40dd-b173-680532c3d762",
+      "bbox_pixels": [
+        528,
+        934,
+        1388,
+        975
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        275,
+        865,
+        723,
+        903
+      ],
+      "translated_text": "Commencez à nettoyer les salissures humides et sèches quotidiennes.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Press the mode button to switch cleaning modes.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 74500,
+      "block_id": "instruction_mode",
+      "excluded": false,
+      "start_ms": 72500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "be4df7de-2ae3-47af-94b2-491e2278c97b",
+      "bbox_pixels": [
+        489,
+        928,
+        1426,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        255,
+        860,
+        743,
+        900
+      ],
+      "translated_text": "Appuyez sur le bouton de mode pour changer de mode de nettoyage.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "180° Lay-Flat Design",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 86500,
+      "block_id": "feature_layflat",
+      "excluded": false,
+      "start_ms": 82500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "cd9d3795-9863-4c7e-95c7-8f8a6274c31d",
+      "bbox_pixels": [
+        182,
+        869,
+        672,
+        918
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        95,
+        805,
+        350,
+        850
+      ],
+      "translated_text": "Conception pliable à 180°",
+      "background_color": null,
+      "font_height_ratio": 0.04,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Slides under low furniture to clean hidden dust.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 86500,
+      "block_id": "feature_layflat",
+      "excluded": false,
+      "start_ms": 82500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 1,
+      "segment_id": "e25a8746-379d-46dd-b2c0-bf3bc93af22e",
+      "bbox_pixels": [
+        182,
+        928,
+        1094,
+        969
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        95,
+        860,
+        570,
+        898
+      ],
+      "translated_text": "Se glisse sous les meubles bas pour nettoyer la poussière cachée.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Edge Cleaning",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 92500,
+      "block_id": "feature_edge",
+      "excluded": false,
+      "start_ms": 87000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "4179420c-6a6a-424a-aee3-f2bad9b19483",
+      "bbox_pixels": [
+        182,
+        869,
+        547,
+        918
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        95,
+        805,
+        285,
+        850
+      ],
+      "translated_text": "Nettoyage des bords",
+      "background_color": null,
+      "font_height_ratio": 0.04,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Cleans close along walls and baseboards.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 92500,
+      "block_id": "feature_edge",
+      "excluded": false,
+      "start_ms": 87000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 1,
+      "segment_id": "29679543-0a04-4cd3-b579-ea3465380aae",
+      "bbox_pixels": [
+        182,
+        928,
+        1008,
+        969
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        95,
+        860,
+        525,
+        898
+      ],
+      "translated_text": "Nettoie près des murs et des plinthes.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Self-cleaning",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 94000,
+      "block_id": "selfclean_title",
+      "excluded": false,
+      "start_ms": 93000,
+      "warnings": [],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "32838929-c74c-4bec-99fe-c41fd391c67d",
+      "bbox_pixels": [
+        710,
+        502,
+        1209,
+        577
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        370,
+        465,
+        630,
+        535
+      ],
+      "translated_text": "Auto-nettoyage",
+      "background_color": "#FFFFFF",
+      "font_height_ratio": 0.06,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Place the appliance on the charging dock after use.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 96500,
+      "block_id": "instruction_place_dock",
+      "excluded": false,
+      "start_ms": 94500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "e4217afb-5601-4014-9ce9-34d9e919d401",
+      "bbox_pixels": [
+        432,
+        928,
+        1484,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        225,
+        860,
+        773,
+        900
+      ],
+      "translated_text": "Placez l’appareil sur la station de charge après utilisation.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Press the self-cleaning button to start the cleaning cycle.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 99000,
+      "block_id": "instruction_selfclean_button",
+      "excluded": false,
+      "start_ms": 97000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "47f7ab76-1671-4f28-8e80-b1831d7d1387",
+      "bbox_pixels": [
+        403,
+        928,
+        1512,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        210,
+        860,
+        788,
+        900
+      ],
+      "translated_text": "Appuyez sur le bouton d’auto-nettoyage pour lancer le cycle de nettoyage.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Self-Cleaning System",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 102500,
+      "block_id": "feature_selfclean",
+      "excluded": false,
+      "start_ms": 99500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "46db1397-170c-4cac-9691-a5cfe8a69021",
+      "bbox_pixels": [
+        182,
+        869,
+        700,
+        918
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        95,
+        805,
+        365,
+        850
+      ],
+      "translated_text": "Système d’auto-nettoyage",
+      "background_color": null,
+      "font_height_ratio": 0.04,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Cleans the brush roller and internal pathway automatically.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 102500,
+      "block_id": "feature_selfclean",
+      "excluded": false,
+      "start_ms": 99500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "left",
+      "font_type": null,
+      "line_index": 1,
+      "segment_id": "8da2d9e4-a5fc-4a5e-acf4-938c96438a05",
+      "bbox_pixels": [
+        182,
+        928,
+        1353,
+        969
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        95,
+        860,
+        705,
+        898
+      ],
+      "translated_text": "Nettoie automatiquement le rouleau-brosse et le passage interne.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Maintain",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 104000,
+      "block_id": "maintain_title",
+      "excluded": false,
+      "start_ms": 103000,
+      "warnings": [],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "d8a127e0-b971-4802-a689-ee413cb69479",
+      "bbox_pixels": [
+        787,
+        502,
+        1132,
+        577
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        410,
+        465,
+        590,
+        535
+      ],
+      "translated_text": "Entretien",
+      "background_color": "#FFFFFF",
+      "font_height_ratio": 0.06,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Remove the Dirty Water Tank.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 106000,
+      "block_id": "instruction_remove_dirty_tank",
+      "excluded": false,
+      "start_ms": 104500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "42dcea64-498f-4f65-83b3-61a7b100a5a2",
+      "bbox_pixels": [
+        662,
+        934,
+        1253,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        345,
+        865,
+        653,
+        900
+      ],
+      "translated_text": "Retirez le réservoir d’eau sale.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Remove the dry filter.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 108000,
+      "block_id": "instruction_remove_dry_filter",
+      "excluded": false,
+      "start_ms": 106500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "4f99672d-ef0f-41a6-9c96-ad29bf8e6f08",
+      "bbox_pixels": [
+        729,
+        934,
+        1186,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        380,
+        865,
+        618,
+        900
+      ],
+      "translated_text": "Retirez le filtre sec.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Rinse the dry filter with clean water.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 110500,
+      "block_id": "instruction_rinse_filter",
+      "excluded": false,
+      "start_ms": 108500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "3221f1cb-2fbf-4fe9-9df5-fecf51c761b2",
+      "bbox_pixels": [
+        604,
+        934,
+        1311,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        315,
+        865,
+        683,
+        900
+      ],
+      "translated_text": "Rincez le filtre sec à l’eau propre.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Open the Dirty Water Tank lid.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 112000,
+      "block_id": "instruction_open_dirty_lid",
+      "excluded": false,
+      "start_ms": 111000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "99264d95-9f6f-47ad-98ca-51271b041134",
+      "bbox_pixels": [
+        652,
+        934,
+        1263,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        340,
+        865,
+        658,
+        900
+      ],
+      "translated_text": "Ouvrez le couvercle du réservoir d’eau sale.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Empty the dirty water and remove debris.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 115500,
+      "block_id": "instruction_empty_debris",
+      "excluded": false,
+      "start_ms": 112500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "271659e4-ea5d-47af-b6fe-3eb0342e4e12",
+      "bbox_pixels": [
+        566,
+        934,
+        1349,
+        975
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        295,
+        865,
+        703,
+        903
+      ],
+      "translated_text": "Videz l’eau sale et retirez les débris.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Use the cleaning tool to remove remaining debris.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 117500,
+      "block_id": "instruction_cleaning_tool",
+      "excluded": false,
+      "start_ms": 116000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "784bf56c-c046-42b0-8de9-a47361ab3f09",
+      "bbox_pixels": [
+        489,
+        934,
+        1426,
+        975
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        255,
+        865,
+        743,
+        903
+      ],
+      "translated_text": "Utilisez l’outil de nettoyage pour retirer les débris restants.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Rinse the Dirty Water Tank thoroughly.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 119000,
+      "block_id": "instruction_rinse_tank",
+      "excluded": false,
+      "start_ms": 118000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "8536b8e4-9407-42c6-8582-ba03d5c6e22d",
+      "bbox_pixels": [
+        595,
+        934,
+        1320,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        310,
+        865,
+        688,
+        900
+      ],
+      "translated_text": "Rincez soigneusement le réservoir d’eau sale.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Allow all parts to air-dry completely before reassembly.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 122500,
+      "block_id": "instruction_airdry",
+      "excluded": false,
+      "start_ms": 119500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "9fdb0768-e573-4f27-9c60-7847ebf5c1d3",
+      "bbox_pixels": [
+        432,
+        928,
+        1484,
+        969
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        225,
+        860,
+        773,
+        898
+      ],
+      "translated_text": "Laissez toutes les pièces sécher complètement à l’air avant le remontage.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Reinstall the tank lid and dry filter.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 126500,
+      "block_id": "instruction_reinstall_lid_filter",
+      "excluded": false,
+      "start_ms": 123000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "77a5f03b-7d46-4725-ad17-1d1aec0469d6",
+      "bbox_pixels": [
+        624,
+        934,
+        1292,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        325,
+        865,
+        673,
+        900
+      ],
+      "translated_text": "Réinstallez le couvercle du réservoir et le filtre sec.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "Reinstall the Dirty Water Tank.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 129500,
+      "block_id": "instruction_reinstall_dirty_tank",
+      "excluded": false,
+      "start_ms": 127000,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "7791d7dc-661e-4e4e-ac74-04c651bd3d60",
+      "bbox_pixels": [
+        662,
+        934,
+        1253,
+        972
+      ],
+      "font_sha256": null,
+      "visual_role": "body",
+      "bbox_normalized": [
+        345,
+        865,
+        653,
+        900
+      ],
+      "translated_text": "Réinstallez le réservoir d’eau sale.",
+      "background_color": null,
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    },
+    {
+      "text": "FLOOR ONE i7 Hotwash",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 136500,
+      "block_id": "end_product_name",
+      "excluded": false,
+      "start_ms": 131500,
+      "warnings": [
+        "background_color_unavailable"
+      ],
+      "alignment": "center",
+      "font_type": null,
+      "line_index": 0,
+      "segment_id": "c20d7f95-c7ab-4475-8ddf-dc673c240556",
+      "bbox_pixels": [
+        412,
+        502,
+        1503,
+        588
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        215,
+        465,
+        783,
+        545
+      ],
+      "translated_text": "FLOOR ONE i7 Hotwash",
+      "background_color": null,
+      "font_height_ratio": 0.07,
+      "render_bbox_pixels": null,
+      "translation_status": "succeeded",
+      "effective_font_size_px": null,
+      "estimated_font_size_px": null,
+      "recommended_text_color": null
+    }
+  ]
+}

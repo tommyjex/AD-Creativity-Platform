@@ -1,17 +1,18 @@
 import { migrateAigcRunSnapshotV2 } from "@/lib/aigc/definition-migration";
-import type {
-  AigcEditedLayer,
-  AigcLayer,
-  AigcLayerSet,
-  AigcPipelineDefinition,
-  AigcPipelineDefinitionV2,
-  AigcPipelineRunDetail,
-  AigcPipelineRunNode,
-  AigcResultAsset,
-  AigcRunNodeStatus,
-  AigcV2Node,
-  AigcVideoFaceBlurMaskMode,
-  AigcVideoFaceBlurMaskStrength
+import {
+  AIGC_MODEL_OUTPUT_MATERIALIZATION,
+  type AigcEditedLayer,
+  type AigcLayer,
+  type AigcLayerSet,
+  type AigcPipelineDefinition,
+  type AigcPipelineDefinitionV2,
+  type AigcPipelineRunDetail,
+  type AigcPipelineRunNode,
+  type AigcResultAsset,
+  type AigcRunNodeStatus,
+  type AigcV2Node,
+  type AigcVideoFaceBlurMaskMode,
+  type AigcVideoFaceBlurMaskStrength
 } from "@/lib/aigc/types";
 
 type AigcModality = "audio" | "image" | "text" | "video";
@@ -96,20 +97,98 @@ export interface AigcLayerCompositeResultProjection {
 
 export function projectAigcModalityRunResult(
   runDetail: AigcPipelineRunDetail,
-  nodeId: string
+  nodeId: string,
+  currentDefinition?: AigcPipelineDefinitionV2
 ): AigcModalityRunResultProjection | null {
-  const definition = migrateAigcRunSnapshotV2(
+  const snapshotDefinition = migrateAigcRunSnapshotV2(
     runDetail.run.definition_snapshot
   );
-  const node = definition.nodes.find((candidate) => candidate.id === nodeId);
-  if (!node || !isModalityNode(node)) return null;
-
-  const runNode = runDetail.nodes.find(
-    (candidate) => candidate.node_id === nodeId
+  const snapshotNode = snapshotDefinition.nodes.find(
+    (candidate) => candidate.id === nodeId
   );
-  if (!runNode) return null;
+  if (snapshotNode) {
+    if (!isModalityNode(snapshotNode)) return null;
+    const runNode = runDetail.nodes.find(
+      (candidate) => candidate.node_id === nodeId
+    );
+    if (!runNode) return null;
+    return modalityProjection(
+      snapshotNode,
+      snapshotDefinition,
+      runNode
+    );
+  }
 
-  const asset = runNode.result.assets[0];
+  const currentNode = currentDefinition?.nodes.find(
+    (candidate) => candidate.id === nodeId
+  );
+  if (
+    !currentDefinition ||
+    !currentNode ||
+    (currentNode.type !== "image" && currentNode.type !== "video") ||
+    currentNode.config.generated_from_run_id !== runDetail.run.id ||
+    typeof currentNode.config.generated_by_model_node_id !== "string" ||
+    currentNode.config.generated_output_handle !== currentNode.type
+  ) {
+    return null;
+  }
+  const sourceNode = snapshotDefinition.nodes.find(
+    (candidate) =>
+      candidate.id === currentNode.config.generated_by_model_node_id
+  );
+  const mapping =
+    sourceNode &&
+    AIGC_MODEL_OUTPUT_MATERIALIZATION[
+      sourceNode.type as keyof typeof AIGC_MODEL_OUTPUT_MATERIALIZATION
+    ];
+  if (
+    !mapping ||
+    mapping.nodeType !== currentNode.type ||
+    mapping.outputHandle !== currentNode.config.generated_output_handle ||
+    !currentDefinition.edges.some(
+      (edge) =>
+        edge.sourceNodeId === sourceNode.id &&
+        edge.sourceHandle === mapping.outputHandle &&
+        edge.targetNodeId === currentNode.id &&
+        edge.targetHandle === mapping.nodeType
+    )
+  ) {
+    return null;
+  }
+  const sourceRunNode = runDetail.nodes.find(
+    (candidate) => candidate.node_id === sourceNode.id
+  );
+  if (
+    !sourceRunNode ||
+    (sourceRunNode.status !== "succeeded" &&
+      sourceRunNode.status !== "reused")
+  ) {
+    return null;
+  }
+  const primaryAsset = sourceRunNode.result.assets.find(
+    (asset) =>
+      asset.ordinal === 0 &&
+      asset.mime_type
+        ?.trim()
+        .toLowerCase()
+        .startsWith(`${mapping.outputHandle}/`)
+  );
+  if (!primaryAsset) return null;
+  return modalityProjection(
+    currentNode,
+    currentDefinition,
+    sourceRunNode,
+    primaryAsset
+  );
+}
+
+function modalityProjection(
+  node: Extract<AigcV2Node, { type: AigcModality }>,
+  definition: AigcPipelineDefinitionV2,
+  runNode: AigcPipelineRunNode,
+  projectedAsset?: AigcResultAsset
+): AigcModalityRunResultProjection {
+  const asset = projectedAsset ?? runNode.result.assets[0];
   const available = Boolean(asset?.available);
   return {
     asset,

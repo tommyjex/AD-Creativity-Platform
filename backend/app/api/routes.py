@@ -25,6 +25,7 @@ from backend.app.api.dependencies import (
     get_face_blur_video_client_factory,
     get_modelark_generation_service,
     get_repository,
+    get_subtitle_translation_service,
     get_video_normalizer_service,
     get_workflow_service,
     require_business_access,
@@ -1358,6 +1359,12 @@ def create_tool_task(
     payload: ToolTaskCreate,
     repository: Repository = Depends(get_repository),
 ) -> ToolTask:
+    if payload.type == ToolTaskType.VIDEO_SUBTITLE_TRANSLATION:
+        raise _http_error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            ErrorCode.VALIDATION_ERROR,
+            "create subtitle stages through the workspace stage endpoint",
+        )
     try:
         return repository.create_tool_task(payload)
     except ValueError as exc:
@@ -1404,6 +1411,7 @@ async def get_tool_task(
     face_blur_client_factory: Callable[[], FaceBlurVideoClient] = Depends(
         get_face_blur_video_client_factory
     ),
+    subtitle_service=Depends(get_subtitle_translation_service),
 ) -> ToolTask:
     try:
         task = repository.get_tool_task(task_id)
@@ -1575,11 +1583,18 @@ async def retry_tool_task(
     face_blur_client_factory: Callable[[], FaceBlurVideoClient] = Depends(
         get_face_blur_video_client_factory
     ),
+    subtitle_service=Depends(get_subtitle_translation_service),
 ) -> ToolTask:
     try:
         failed = repository.get_tool_task(task_id)
         if failed.status != Status.FAILED:
             raise WorkflowError(ErrorCode.INVALID_STATE, "tool task is not retryable")
+        if failed.type == ToolTaskType.VIDEO_SUBTITLE_TRANSLATION:
+            try:
+                return subtitle_service.retry(task_id)
+            except (ValueError, RevisionConflictError) as exc:
+                raise _http_error(status.HTTP_409_CONFLICT, ErrorCode.INVALID_STATE,
+                                  "subtitle stage is not retryable; reload the current workspace") from exc
         video_payload = (
             ToolVideoGenerationRequest.model_validate(failed.input_snapshot)
             if failed.type == ToolTaskType.MULTIMODAL_VIDEO_GENERATION

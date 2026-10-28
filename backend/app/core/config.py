@@ -1,3 +1,4 @@
+import math
 from functools import lru_cache
 from os import getenv
 from urllib.parse import urlsplit
@@ -67,6 +68,31 @@ def _parse_nonnegative_int_env(name: str, default: int) -> int:
     return value
 
 
+def _parse_bounded_float_env(
+    name: str,
+    default: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    raw_value = getenv(name)
+    if raw_value is None:
+        return default
+
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise ConfigurationError(
+            f"{name} must be between {minimum} and {maximum}."
+        ) from exc
+
+    if not math.isfinite(value) or not minimum <= value <= maximum:
+        raise ConfigurationError(
+            f"{name} must be between {minimum} and {maximum}."
+        )
+    return value
+
+
 def _parse_bool_env(name: str, default: bool) -> bool:
     raw_value = getenv(name)
     if raw_value is None:
@@ -132,6 +158,47 @@ class Settings(BaseModel):
     ark_image_timeout_seconds: int = Field(default=600, gt=0)
     ark_video_timeout_seconds: int = Field(default=1800, gt=0)
     ark_video_poll_interval_seconds: int = Field(default=3, gt=0)
+    enable_experimental_video_subtitle_grounding: bool = False
+    enable_experimental_video_subtitle_grounding_debug: bool = False
+    video_subtitle_grounding_model: str = Field(
+        default="doubao-seed-evolving",
+        min_length=1,
+    )
+    video_subtitle_grounding_sampling_fps: float = Field(
+        default=2.0,
+        ge=0.5,
+        le=5.0,
+        allow_inf_nan=False,
+    )
+    video_subtitle_grounding_download_max_bytes: int = Field(
+        default=512 * 1024 * 1024,
+        gt=0,
+    )
+    video_subtitle_grounding_download_connect_timeout_seconds: int = Field(
+        default=10,
+        gt=0,
+    )
+    video_subtitle_grounding_download_read_timeout_seconds: int = Field(
+        default=60,
+        gt=0,
+    )
+    video_subtitle_grounding_download_total_timeout_seconds: int = Field(
+        default=600,
+        gt=0,
+    )
+    video_subtitle_grounding_max_redirects: int = Field(default=3, ge=0)
+    video_subtitle_grounding_file_processing_timeout_seconds: int = Field(
+        default=600,
+        gt=0,
+    )
+    video_subtitle_grounding_model_timeout_seconds: int = Field(
+        default=600,
+        gt=0,
+    )
+    video_subtitle_grounding_max_output_tokens: int = Field(
+        default=16384,
+        gt=0,
+    )
     aigc_video_concurrency: int = Field(default=1, gt=0)
     aigc_video_timeout_seconds: int = Field(default=1800, gt=0)
     aigc_video_transfer_max_bytes: int = Field(
@@ -336,6 +403,82 @@ class Settings(BaseModel):
             ark_video_poll_interval_seconds=_parse_positive_int_env(
                 "ARK_VIDEO_POLL_INTERVAL_SECONDS",
                 cls.model_fields["ark_video_poll_interval_seconds"].default,
+            ),
+            enable_experimental_video_subtitle_grounding=_parse_strict_bool_env(
+                "ENABLE_EXPERIMENTAL_VIDEO_SUBTITLE_GROUNDING",
+                False,
+            ),
+            enable_experimental_video_subtitle_grounding_debug=(
+                _parse_strict_bool_env(
+                    "ENABLE_EXPERIMENTAL_VIDEO_SUBTITLE_GROUNDING_DEBUG",
+                    False,
+                )
+            ),
+            video_subtitle_grounding_model=getenv(
+                "VIDEO_SUBTITLE_GROUNDING_MODEL",
+                cls.model_fields["video_subtitle_grounding_model"].default,
+            ),
+            video_subtitle_grounding_sampling_fps=_parse_bounded_float_env(
+                "VIDEO_SUBTITLE_GROUNDING_SAMPLING_FPS",
+                cls.model_fields["video_subtitle_grounding_sampling_fps"].default,
+                minimum=0.5,
+                maximum=5.0,
+            ),
+            video_subtitle_grounding_download_max_bytes=_parse_positive_int_env(
+                "VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_MAX_BYTES",
+                cls.model_fields[
+                    "video_subtitle_grounding_download_max_bytes"
+                ].default,
+            ),
+            video_subtitle_grounding_download_connect_timeout_seconds=(
+                _parse_positive_int_env(
+                    "VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_CONNECT_TIMEOUT_SECONDS",
+                    cls.model_fields[
+                        "video_subtitle_grounding_download_connect_timeout_seconds"
+                    ].default,
+                )
+            ),
+            video_subtitle_grounding_download_read_timeout_seconds=(
+                _parse_positive_int_env(
+                    "VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_READ_TIMEOUT_SECONDS",
+                    cls.model_fields[
+                        "video_subtitle_grounding_download_read_timeout_seconds"
+                    ].default,
+                )
+            ),
+            video_subtitle_grounding_download_total_timeout_seconds=(
+                _parse_positive_int_env(
+                    "VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_TOTAL_TIMEOUT_SECONDS",
+                    cls.model_fields[
+                        "video_subtitle_grounding_download_total_timeout_seconds"
+                    ].default,
+                )
+            ),
+            video_subtitle_grounding_max_redirects=_parse_nonnegative_int_env(
+                "VIDEO_SUBTITLE_GROUNDING_MAX_REDIRECTS",
+                cls.model_fields["video_subtitle_grounding_max_redirects"].default,
+            ),
+            video_subtitle_grounding_file_processing_timeout_seconds=(
+                _parse_positive_int_env(
+                    "VIDEO_SUBTITLE_GROUNDING_FILE_PROCESSING_TIMEOUT_SECONDS",
+                    cls.model_fields[
+                        "video_subtitle_grounding_file_processing_timeout_seconds"
+                    ].default,
+                )
+            ),
+            video_subtitle_grounding_model_timeout_seconds=(
+                _parse_positive_int_env(
+                    "VIDEO_SUBTITLE_GROUNDING_MODEL_TIMEOUT_SECONDS",
+                    cls.model_fields[
+                        "video_subtitle_grounding_model_timeout_seconds"
+                    ].default,
+                )
+            ),
+            video_subtitle_grounding_max_output_tokens=_parse_positive_int_env(
+                "VIDEO_SUBTITLE_GROUNDING_MAX_OUTPUT_TOKENS",
+                cls.model_fields[
+                    "video_subtitle_grounding_max_output_tokens"
+                ].default,
             ),
             aigc_video_concurrency=_parse_positive_int_env(
                 "AIGC_VIDEO_CONCURRENCY",

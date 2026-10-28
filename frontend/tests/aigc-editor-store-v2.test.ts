@@ -908,6 +908,251 @@ describe("AIGC v2 editor store", () => {
     });
   });
 
+  it("rebases a dirty generated media node by source key and remaps its edges", () => {
+    const source: AigcV2Node = {
+      id: "image-model",
+      type: "text_to_image",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        model: "doubao-seedream-5-0-pro-260628",
+        aspect_ratio: "1:1",
+        size: "2K",
+        format: "png"
+      }
+    };
+    const managed = modalityNode("generated-old", "image");
+    if (managed.type !== "image") throw new Error("expected image node");
+    managed.config = {
+      ...managed.config,
+      asset_id: "asset-old",
+      title: "服务端旧标题",
+      generated_by_model_node_id: source.id,
+      generated_output_handle: "image",
+      generated_from_run_id: "run-1"
+    };
+    const downstream = modalityNode("downstream", "image");
+    const initial = definition(
+      [source, managed, downstream],
+      [
+        {
+          id: "system-old",
+          sourceNodeId: source.id,
+          sourceHandle: "image",
+          targetNodeId: managed.id,
+          targetHandle: "image"
+        }
+      ]
+    );
+    const store = createAigcEditorStore({
+      definition: initial,
+      description: "",
+      entityId: "pipeline-generated",
+      mode: "pipeline",
+      name: "自动图片",
+      revision: 1
+    });
+    store.getState().moveNode(managed.id, { x: 704, y: 96 });
+    store.getState().resizeNode(managed.id, { width: 360, height: 260 });
+    store.getState().setNodeCustomName(managed.id, "用户命名");
+    store.getState().updateNodeConfig(managed.id, {
+      ...managed.config,
+      title: "用户标题"
+    });
+    expect(
+      store.getState().connect({
+        id: "generated-downstream",
+        sourceNodeId: managed.id,
+        sourceHandle: "image",
+        targetNodeId: downstream.id,
+        targetHandle: "image"
+      })
+    ).toBe(true);
+    store.getState().setViewport({ x: 120, y: 64, zoom: 0.85 });
+
+    const remoteManaged = structuredClone(managed);
+    remoteManaged.id = "generated-new";
+    remoteManaged.position = { x: 320, y: 32 };
+    remoteManaged.config = {
+      ...remoteManaged.config,
+      asset_id: "asset-new",
+      title: "服务端新标题",
+      generated_from_run_id: "run-2"
+    };
+    store.getState().applyServerRevision({
+      definition: definition(
+        [source, remoteManaged, downstream],
+        [
+          {
+            id: "system-new",
+            sourceNodeId: source.id,
+            sourceHandle: "image",
+            targetNodeId: remoteManaged.id,
+            targetHandle: "image"
+          }
+        ]
+      ),
+      description: "",
+      name: "自动图片",
+      revision: 2
+    });
+
+    const state = store.getState();
+    expect(state.dirty).toBe(true);
+    expect(state.revision).toBe(2);
+    expect(state.definition.viewport).toEqual({ x: 120, y: 64, zoom: 0.85 });
+    expect(
+      state.definition.nodes.find((node) => node.id === "generated-new")
+    ).toMatchObject({
+      custom_name: "用户命名",
+      position: { x: 704, y: 96 },
+      size: { width: 360, height: 260 },
+      config: {
+        asset_id: "asset-new",
+        title: "用户标题",
+        generated_by_model_node_id: source.id,
+        generated_output_handle: "image",
+        generated_from_run_id: "run-2"
+      }
+    });
+    expect(state.definition.nodes.some((node) => node.id === managed.id)).toBe(
+      false
+    );
+    expect(state.definition.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "system-new",
+          targetNodeId: "generated-new"
+        }),
+        expect.objectContaining({
+          id: "generated-downstream",
+          sourceNodeId: "generated-new"
+        })
+      ])
+    );
+  });
+
+  it("detaches generated media atomically while preserving its backup asset", () => {
+    const source: AigcV2Node = {
+      id: "video-model",
+      type: "video_generation",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        model: "doubao-seedance-2-5-260628",
+        generation_mode: "text_to_video",
+        resolution: "1080p",
+        aspect_ratio: "16:9",
+        duration_seconds: 5,
+        generate_audio: true
+      }
+    };
+    const managed = modalityNode("generated-video", "video");
+    if (managed.type !== "video") throw new Error("expected video node");
+    managed.config = {
+      ...managed.config,
+      asset_id: "video-backup",
+      title: "成片",
+      generated_by_model_node_id: source.id,
+      generated_output_handle: "video",
+      generated_from_run_id: "run-video"
+    };
+    const edge: AigcEdge = {
+      id: "generated-video-edge",
+      sourceNodeId: source.id,
+      sourceHandle: "video",
+      targetNodeId: managed.id,
+      targetHandle: "video"
+    };
+    const store = createAigcEditorStore({
+      definition: definition([source, managed], [edge]),
+      description: "",
+      entityId: "pipeline-video",
+      mode: "pipeline",
+      name: "自动视频",
+      revision: 1
+    });
+
+    store.getState().removeEdge(edge.id);
+    expect(store.getState().definition.edges).toEqual([]);
+    expect(store.getState().definition.nodes[1]).toMatchObject({
+      config: {
+        asset_id: "video-backup",
+        title: "成片",
+        generated_by_model_node_id: null,
+        generated_output_handle: null,
+        generated_from_run_id: null
+      }
+    });
+
+    store.getState().undo();
+    expect(store.getState().definition.edges).toEqual([edge]);
+    expect(store.getState().definition.nodes[1]).toMatchObject({
+      config: {
+        asset_id: "video-backup",
+        generated_by_model_node_id: source.id,
+        generated_output_handle: "video",
+        generated_from_run_id: "run-video"
+      }
+    });
+  });
+
+  it("keeps selection when a clean generated node is remapped by the server", () => {
+    const source: AigcV2Node = {
+      id: "image-model",
+      type: "text_to_image",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 160 },
+      config: {
+        model: "doubao-seedream-5-0-pro-260628",
+        aspect_ratio: "1:1",
+        size: "2K",
+        format: "png"
+      }
+    };
+    const local = modalityNode("generated-local", "image");
+    const remote = modalityNode("generated-remote", "image");
+    if (local.type !== "image" || remote.type !== "image") {
+      throw new Error("expected image nodes");
+    }
+    for (const node of [local, remote]) {
+      node.config = {
+        ...node.config,
+        asset_id: "asset",
+        generated_by_model_node_id: source.id,
+        generated_output_handle: "image",
+        generated_from_run_id: "run-1"
+      };
+    }
+    const store = createAigcEditorStore({
+      definition: definition([source, local]),
+      description: "",
+      entityId: "pipeline-clean",
+      mode: "pipeline",
+      name: "自动图片",
+      revision: 1
+    });
+    store.getState().selectNode(local.id);
+
+    store.getState().applyServerRevision({
+      definition: {
+        ...definition([source, remote]),
+        viewport: { x: 10, y: 20, zoom: 0.75 }
+      },
+      description: "服务端",
+      name: "服务端",
+      revision: 2
+    });
+
+    expect(store.getState()).toMatchObject({
+      dirty: false,
+      selectedNodeId: remote.id,
+      definition: {
+        viewport: { x: 10, y: 20, zoom: 0.75 }
+      }
+    });
+  });
+
   it("stores upstream bbox bindings without overwriting the local fallback", () => {
     const image = modalityNode("image", "image");
     if (image.type !== "image") throw new Error("expected image node");

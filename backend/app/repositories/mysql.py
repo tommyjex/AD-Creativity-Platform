@@ -125,6 +125,11 @@ from .aigc_json_parser import (
     detach_removed_json_parser_edges,
     materialize_json_parser_definition,
 )
+from .aigc_model_output import (
+    ModelOutputMaterialization,
+    detach_removed_model_output_edges,
+    materialize_model_output_definition,
+)
 from .base import (
     ActiveRunConflictError,
     AigcPipelineThumbnailOutput,
@@ -146,7 +151,10 @@ ACTIVE_AIGC_RUN_STATUSES = frozenset(
 )
 
 
-class MySQLRepository:
+from .subtitle_translation import SQLSubtitleWorkspaceRepository
+
+
+class MySQLRepository(SQLSubtitleWorkspaceRepository):
     """SQLAlchemy-backed repository compatible with InMemoryRepository."""
 
     def __init__(self, session_factory: sessionmaker[Session] | None = None) -> None:
@@ -617,8 +625,8 @@ class MySQLRepository:
                 raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
             if pipeline.revision != data.expected_revision:
                 raise RevisionConflictError("AIGC pipeline revision conflict")
-            definition = detach_removed_json_parser_edges(
-                data.definition,
+            definition = detach_removed_model_output_edges(
+                detach_removed_json_parser_edges(data.definition),
             )
             candidate = AigcPipeline(
                 id=pipeline.id,
@@ -648,6 +656,61 @@ class MySQLRepository:
             )
             session.flush()
             return self._aigc_pipeline_from_orm(pipeline)
+
+    def materialize_aigc_model_output(
+        self,
+        pipeline_id: str,
+        *,
+        source_node_id: str,
+        run_id: str,
+        result: AigcTaskResult,
+    ) -> ModelOutputMaterialization:
+        with self._session_factory.begin() as session:
+            pipeline = session.scalar(
+                select(AigcPipelineORM)
+                .where(
+                    AigcPipelineORM.id == pipeline_id,
+                    AigcPipelineORM.deleted_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if pipeline is None:
+                raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+            current = self._aigc_pipeline_from_orm(pipeline)
+            materialization = materialize_model_output_definition(
+                current.definition,
+                source_node_id=source_node_id,
+                run_id=run_id,
+                result=result,
+            )
+            if not materialization.changed:
+                return materialization
+            candidate = current.model_copy(
+                update={
+                    "definition": materialization.definition,
+                    "revision": current.revision + 1,
+                    "updated_at": utc_now(),
+                },
+                deep=True,
+            )
+            references = self._aigc_asset_references_for_pipeline(
+                session,
+                candidate,
+            )
+            pipeline.definition_json = materialization.definition.model_dump(
+                mode="json",
+                by_alias=True,
+            )
+            pipeline.schema_version = materialization.definition.schema_version
+            pipeline.revision = candidate.revision
+            pipeline.updated_at = candidate.updated_at
+            self._replace_aigc_pipeline_assets(
+                session,
+                pipeline_id,
+                references,
+            )
+            session.flush()
+            return materialization
 
     def update_aigc_pipeline_thumbnail(
         self,

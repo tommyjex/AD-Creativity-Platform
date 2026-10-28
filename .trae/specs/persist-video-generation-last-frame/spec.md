@@ -12,6 +12,7 @@ AIGC 画布使用的共享 Seedance 入口目前未显式请求和解析尾帧�
 - 尾帧资产记录来源视频、Pipeline、Run、Node、Task、Provider 和命名状态等可追溯元数据，并建立 `output:last_frame` 任务资产关系。
 - Run 结果中视频保持 ordinal `0`，尾帧使用 ordinal `1`；现有 `video` 输出端口和下游视频连接语义保持不变。
 - 资产库将该图片识别为“视频尾帧”图片产物，可预览、搜索和下载。
+- AIGC 视频生成节点的右侧“结果”页在主视频下方展示独立“视频尾帧”结果，支持应用内放大查看和受控下载。
 - Provider 未返回尾帧或尾帧转存失败时，已成功的视频主产物仍可成功发布；系统记录脱敏的结构化失败状态，但不创建不可用尾帧资产。
 - 本期不新增画布 `last_frame` 输出 Handle，不改变现有视频生成节点连线契约。
 
@@ -30,6 +31,8 @@ AIGC 画布使用的共享 Seedance 入口目前未显式请求和解析尾帧�
   - `frontend/lib/asset-display.ts`
   - `frontend/lib/aigc/download.ts`
   - `frontend/components/workspace/workspace-asset-library.tsx`
+  - `frontend/components/workspace/aigc/aigc-editor.tsx`
+  - `frontend/tests/aigc-editor.test.tsx`
   - 相关后端、前端与 Playwright 测试
 
 ### 现状与范围
@@ -144,6 +147,49 @@ AIGC 画布使用的共享 Seedance 入口目前未显式请求和解析尾帧�
 - **AND** 预览使用 `object-contain` 保持原始宽高比
 - **AND** 用户可以按 `xxx视频尾帧` 搜索该资产
 
+### Requirement: 视频生成节点结果页展示尾帧
+
+系统 SHALL 在 AIGC `video_generation` 节点的右侧“结果”页中，将可用的独立尾帧资产显示为主视频的配套图片结果。
+
+#### Scenario: 新 Run 同时包含视频和尾帧
+
+- **WHEN** 用户选择一个已完成且结果中包含视频 ordinal `0` 与尾帧 ordinal `1` 的视频生成节点
+- **AND** 用户打开右侧“结果”页
+- **THEN** 结果页先显示现有主视频播放器、视频元数据和“下载视频”按钮
+- **AND** 在主视频结果下方显示标题为“视频尾帧”的独立图片区块
+- **AND** 尾帧缩略图使用稳定媒体区和 `object-contain`，保持原始宽高比
+- **AND** 尾帧区块显示“放大查看”和“下载尾帧”两个明确操作
+- **AND** 尾帧不得被误标为第二个普通图片结果或 `生成结果 2`
+
+#### Scenario: 放大查看尾帧
+
+- **WHEN** 用户点击结果页中的尾帧缩略图或“放大查看”
+- **THEN** 系统在应用内 Dialog 中显示尾帧大图
+- **AND** 大图使用 `object-contain`，不得裁切、拉伸或跳转到新浏览器标签页
+- **AND** Dialog 显示当前尾帧名称，并提供关闭和下载操作
+- **AND** 用户点击遮罩、关闭按钮或按 Escape 后返回原结果页，滚动位置和当前节点选择保持不变
+
+#### Scenario: 从结果页下载尾帧
+
+- **WHEN** 用户点击结果页尾帧区块或放大 Dialog 中的下载操作
+- **THEN** 下载通过现有受控资产内容端点完成
+- **AND** 建议文件名与后端 `Content-Disposition` 一致
+- **AND** 文件名遵循当前视频节点显示名称、冻结名称和用户显式资产名称的既有优先级
+
+#### Scenario: 尾帧缺失或不可用
+
+- **WHEN** 视频生成成功但该 Run 未包含可用尾帧资产
+- **THEN** 结果页继续正常显示主视频及其下载操作
+- **AND** 不显示空白尾帧卡片、损坏图片或不可用下载按钮
+- **AND** 历史仅含视频资产的 Run 行为保持不变
+
+#### Scenario: 下游视频节点查看结果
+
+- **WHEN** 视频生成结果连接到 `video` 或 `video_output` 节点
+- **THEN** 下游节点和其结果页继续只显示主视频
+- **AND** 尾帧只在拥有该独立尾帧资产的原始视频生成节点结果中展示
+- **AND** 本变更不新增 `last_frame` 输出 Handle，也不改变现有连线契约
+
 #### Scenario: 下载尾帧
 
 - **WHEN** 用户从节点结果、运行记录或资产库下载尾帧资产
@@ -178,6 +224,8 @@ AIGC 画布使用的共享 Seedance 入口目前未显式请求和解析尾帧�
 - **THEN** 视频模态投影仍使用 ordinal `0` 的视频资产
 - **AND** 缓存命中复用视频和尾帧两个可用资产
 - **AND** 删除或清理任务输出时同时清理两个资产及对象
+- **AND** 原始视频生成节点的结果页展示主视频与独立尾帧
+- **AND** 下游视频模态节点仍只投影主视频，不重复展示尾帧
 
 ## REMOVED Requirements
 

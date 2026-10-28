@@ -93,6 +93,11 @@ from .aigc_json_parser import (
     detach_removed_json_parser_edges,
     materialize_json_parser_definition,
 )
+from .aigc_model_output import (
+    ModelOutputMaterialization,
+    detach_removed_model_output_edges,
+    materialize_model_output_definition,
+)
 from .base import (
     ActiveRunConflictError,
     AigcPipelineThumbnailOutput,
@@ -140,7 +145,10 @@ ACTIVE_AIGC_RUN_STATUSES = frozenset(
 )
 
 
-class InMemoryRepository:
+from .subtitle_translation import MemorySubtitleWorkspaceRepository
+
+
+class InMemoryRepository(MemorySubtitleWorkspaceRepository):
     """Process-local repository for the first backend slice.
 
     The repository keeps project aggregates in sync with the normalized maps so
@@ -547,8 +555,8 @@ class InMemoryRepository:
                 raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
             if current.revision != data.expected_revision:
                 raise RevisionConflictError("AIGC pipeline revision conflict")
-            definition = detach_removed_json_parser_edges(
-                data.definition,
+            definition = detach_removed_model_output_edges(
+                detach_removed_json_parser_edges(data.definition),
             )
             updated = AigcPipeline.model_validate(
                 {
@@ -563,6 +571,58 @@ class InMemoryRepository:
             self._aigc_pipelines[pipeline_id] = updated
             self._replace_aigc_pipeline_assets(pipeline_id, references)
             return self._copy(updated)
+
+    def materialize_aigc_model_output(
+        self,
+        pipeline_id: str,
+        *,
+        source_node_id: str,
+        run_id: str,
+        result: AigcTaskResult,
+    ) -> ModelOutputMaterialization:
+        with self._lock:
+            pipeline = self._aigc_pipelines.get(pipeline_id)
+            if (
+                pipeline is None
+                or self._aigc_pipeline_deleted_at.get(pipeline_id) is not None
+            ):
+                raise NotFoundError(f"AIGC pipeline not found: {pipeline_id}")
+            materialization = materialize_model_output_definition(
+                pipeline.definition,
+                source_node_id=source_node_id,
+                run_id=run_id,
+                result=result,
+            )
+            if not materialization.changed:
+                return materialization
+            updated = pipeline.model_copy(
+                update={
+                    "definition": materialization.definition,
+                    "revision": pipeline.revision + 1,
+                    "updated_at": utc_now(),
+                },
+                deep=True,
+            )
+            references = self._aigc_asset_references_for_pipeline(updated)
+            previous_references = {
+                key: value
+                for key, value in self._aigc_pipeline_assets.items()
+                if key[0] == pipeline_id
+            }
+            try:
+                self._aigc_pipelines[pipeline_id] = updated
+                self._replace_aigc_pipeline_assets(pipeline_id, references)
+            except Exception:
+                self._aigc_pipelines[pipeline_id] = pipeline
+                for key in [
+                    key
+                    for key in self._aigc_pipeline_assets
+                    if key[0] == pipeline_id
+                ]:
+                    del self._aigc_pipeline_assets[key]
+                self._aigc_pipeline_assets.update(previous_references)
+                raise
+            return materialization
 
     def update_aigc_pipeline_thumbnail(
         self,

@@ -20,6 +20,7 @@ import {
 } from "@/lib/aigc/editor-store";
 import { migrateAigcDefinitionV2 } from "@/lib/aigc/definition-migration";
 import { formatAigcLogTime } from "@/lib/aigc/run-log";
+import { getAigcImageDownload } from "@/lib/aigc/download";
 import type {
   AigcEdge,
   AigcNode,
@@ -5324,6 +5325,281 @@ describe("AIGC editor modes", () => {
       screen.getByText("已保留新图层集，可连接后续图层画布继续编辑")
     ).toBeInTheDocument();
 
+  });
+
+  it("shows a generated video tail frame after the main video with in-app preview and downloads", async () => {
+    const currentDefinition: AigcPipelineDefinition = {
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: "video-model",
+          type: "video_generation",
+          custom_name: "秋日新品「鎏金」✨",
+          position: { x: 0, y: 0 },
+          size: { width: 240, height: 180 },
+          config: {
+            model: "doubao-seedance-2-5-260628",
+            generation_mode: "text_to_video",
+            resolution: "1080p",
+            aspect_ratio: "16:9",
+            duration_seconds: 12,
+            generate_audio: true
+          }
+        },
+        {
+          id: "video-output",
+          type: "video_output",
+          position: { x: 320, y: 0 },
+          size: { width: 240, height: 180 },
+          config: { title: "下游成片" }
+        }
+      ],
+      edges: [
+        {
+          id: "video-edge",
+          sourceNodeId: "video-model",
+          sourceHandle: "video",
+          targetNodeId: "video-output",
+          targetHandle: "video"
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    };
+    const snapshotDefinition = structuredClone(currentDefinition);
+    snapshotDefinition.nodes[0].custom_name = "运行时旧名称";
+    const run = runFixture({
+      id: "run-video-tail",
+      definition_snapshot: snapshotDefinition
+    });
+    const videoAsset = {
+      asset_id: "generated-video",
+      ordinal: 0,
+      mime_type: "video/mp4",
+      download_url: "/api/assets/generated-video/content",
+      available: true,
+      metadata: {
+        display_node_id: "video-model",
+        generated_name: "运行时旧名称",
+        name_scheme: "aigc_generated_node_v2"
+      }
+    } satisfies AigcResultAsset;
+    const tailAsset = {
+      asset_id: "generated-video-tail",
+      ordinal: 1,
+      mime_type: "image/png",
+      download_url: "/api/assets/generated-video-tail/content",
+      available: true,
+      metadata: {
+        display_node_id: "video-model",
+        generated_name: "运行时旧名称",
+        name_scheme: "aigc_generated_node_v2",
+        name_variant: "video_last_frame"
+      }
+    } satisfies AigcResultAsset;
+    expect(
+      getAigcImageDownload(
+        tailAsset,
+        "运行时旧名称",
+        migrateAigcDefinitionV2(currentDefinition)
+      )?.filename
+    ).toBe("秋日新品「鎏金」✨视频尾帧.png");
+    apiMocks.listAigcRuns.mockResolvedValue({
+      items: [run],
+      page: 1,
+      page_size: 20,
+      total: 1
+    });
+    apiMocks.getAigcRun.mockResolvedValue({
+      run,
+      nodes: [
+        runNodeFixture("video-model", {
+          result: {
+            kind: "assets",
+            text: null,
+            text_digest: null,
+            assets: [tailAsset, videoAsset]
+          }
+        }),
+        runNodeFixture("video-output", {
+          result: {
+            kind: "assets",
+            text: null,
+            text_digest: null,
+            assets: [videoAsset]
+          }
+        })
+      ]
+    });
+    renderEditor(
+      { ...pipeline, definition: currentDefinition },
+      "pipeline"
+    );
+
+    await waitFor(() => {
+      expect(apiMocks.getAigcRun).toHaveBeenCalledWith(run.id);
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 video-model" })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "结果" }));
+
+    const tailCard = await screen.findByRole("group", { name: "视频尾帧" });
+    const video = document.querySelector("video");
+    if (!video) throw new Error("expected the main video result");
+    expect(
+      video.compareDocumentPosition(tailCard) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(within(tailCard).getByText("视频尾帧")).toBeInTheDocument();
+    const thumbnail = within(tailCard).getByRole("img", {
+      name: "秋日新品「鎏金」✨视频尾帧.png 缩略图"
+    });
+    expect(thumbnail).toHaveClass(
+      "absolute",
+      "inset-0",
+      "h-full",
+      "w-full",
+      "object-contain"
+    );
+    expect(thumbnail.parentElement).toHaveClass("h-44");
+    expect(
+      within(tailCard).queryByText("生成结果 2")
+    ).not.toBeInTheDocument();
+    const cardDownload = within(tailCard).getByRole("link", {
+      name: "下载尾帧"
+    });
+    expect(cardDownload).toHaveAttribute(
+      "download",
+      "秋日新品「鎏金」✨视频尾帧.png"
+    );
+    expect(cardDownload.getAttribute("href")).toContain(
+      "filename=%E7%A7%8B%E6%97%A5%E6%96%B0%E5%93%81%E3%80%8C%E9%8E%8F%E9%87%91%E3%80%8D%E2%9C%A8%E8%A7%86%E9%A2%91%E5%B0%BE%E5%B8%A7.png"
+    );
+
+    fireEvent.click(
+      within(tailCard).getByRole("button", { name: "放大查看" })
+    );
+    let dialog = screen.getByRole("dialog", { name: "视频尾帧" });
+    expect(
+      within(dialog).getByText("秋日新品「鎏金」✨视频尾帧.png")
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("img", {
+        name: "秋日新品「鎏金」✨视频尾帧.png 大图"
+      })
+    ).toHaveClass("h-full", "w-full", "object-contain");
+    expect(
+      within(dialog).getByRole("link", { name: "下载尾帧" })
+    ).toHaveAttribute("download", "秋日新品「鎏金」✨视频尾帧.png");
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "视频尾帧" })).toBeNull();
+    });
+
+    fireEvent.click(
+      within(tailCard).getByRole("button", {
+        name: "放大查看：秋日新品「鎏金」✨视频尾帧.png"
+      })
+    );
+    dialog = screen.getByRole("dialog", { name: "视频尾帧" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "视频尾帧" })).toBeNull();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 video-output" })
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole("group", { name: "视频尾帧" })).toBeNull();
+    });
+    expect(document.querySelector("video")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "下载视频" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "放大查看" })).toBeNull();
+  });
+
+  it("omits unavailable tail frames and preserves historical video-only results", async () => {
+    const entity = videoPipeline();
+    const definitionSnapshot = entity.definition;
+    const currentRun = runFixture({
+      id: "run-video-unavailable-tail",
+      run_number: 2,
+      definition_snapshot: definitionSnapshot
+    });
+    const historicalRun = runFixture({
+      id: "run-video-only",
+      run_number: 1,
+      definition_snapshot: definitionSnapshot
+    });
+    const videoAsset = {
+      asset_id: "video-only",
+      ordinal: 0,
+      mime_type: "video/mp4",
+      download_url: "/api/assets/video-only/content",
+      available: true
+    } satisfies AigcResultAsset;
+    apiMocks.listAigcRuns.mockResolvedValue({
+      items: [currentRun, historicalRun],
+      page: 1,
+      page_size: 20,
+      total: 2
+    });
+    apiMocks.getAigcRun.mockImplementation(async (runId: string) => ({
+      run: runId === historicalRun.id ? historicalRun : currentRun,
+      nodes: [
+        runNodeFixture("video-model", {
+          result: {
+            kind: "assets",
+            text: null,
+            text_digest: null,
+            assets:
+              runId === historicalRun.id
+                ? [videoAsset]
+                : [
+                    videoAsset,
+                    {
+                      asset_id: "unavailable-tail",
+                      ordinal: 1,
+                      mime_type: "image/jpeg",
+                      download_url: null,
+                      available: false,
+                      metadata: { name_variant: "video_last_frame" }
+                    }
+                  ]
+          }
+        })
+      ]
+    }));
+    renderEditor(entity, "pipeline");
+
+    await waitFor(() => {
+      expect(apiMocks.getAigcRun).toHaveBeenCalledWith(currentRun.id);
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "选择节点 video-model" })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "结果" }));
+    await waitFor(() => {
+      expect(document.querySelector("video")).not.toBeNull();
+    });
+    expect(screen.queryByRole("group", { name: "视频尾帧" })).toBeNull();
+    expect(
+      screen.queryByText("结果资产已不可用，资产可能已删除或无权访问")
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "运行" }));
+    fireEvent.change(await screen.findByLabelText("运行历史"), {
+      target: { value: historicalRun.id }
+    });
+    await waitFor(() => {
+      expect(apiMocks.getAigcRun).toHaveBeenCalledWith(historicalRun.id);
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "结果" }));
+    await waitFor(() => {
+      expect(document.querySelector("video")).not.toBeNull();
+    });
+    expect(screen.queryByRole("group", { name: "视频尾帧" })).toBeNull();
+    expect(screen.getByRole("link", { name: "下载视频" })).toBeInTheDocument();
   });
 
   it("projects video results and switches to an unavailable historical run", async () => {

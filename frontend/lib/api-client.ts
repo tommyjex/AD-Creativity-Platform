@@ -61,6 +61,10 @@ import type {
   ToolVideoGenerationRequest,
   ToolVideoPromptOptimizeRequest,
   ToolVideoPromptOptimizeResponse,
+  SubtitleWorkspace,
+  SubtitleWorkspaceCreate,
+  SubtitleWorkspacePatch,
+  SubtitleOperation,
   UserRole
 } from "@/lib/api-types";
 import type {
@@ -892,6 +896,63 @@ export function createApiClient(options: ApiClientOptions = {}) {
       return request<Asset[]>(fetcher, baseUrl, "/api/tools/assets", {
         ...requestOptions,
         headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    listSubtitleWorkspaces(requestOptions?: RequestOptions) {
+      return request<SubtitleWorkspace[]>(fetcher, baseUrl, "/api/tools/subtitle-translation/workspaces", {
+        ...requestOptions, headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    getSubtitleWorkspace(id: string, requestOptions?: RequestOptions) {
+      return request<SubtitleWorkspace>(fetcher, baseUrl, `/api/tools/subtitle-translation/workspaces/${encodeURIComponent(id)}`, {
+        ...requestOptions, headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    createSubtitleWorkspace(payload: SubtitleWorkspaceCreate, requestOptions?: RequestOptions) {
+      return request<SubtitleWorkspace>(fetcher, baseUrl, "/api/tools/subtitle-translation/workspaces", {
+        ...requestOptions, body: payload, method: "POST",
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    patchSubtitleWorkspace(id: string, payload: SubtitleWorkspacePatch, requestOptions?: RequestOptions) {
+      return request<SubtitleWorkspace>(fetcher, baseUrl, `/api/tools/subtitle-translation/workspaces/${encodeURIComponent(id)}`, {
+        ...requestOptions, body: payload, method: "PATCH",
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    previewSubtitleWorkspace(id: string, payload: SubtitleWorkspacePatch, requestOptions?: RequestOptions) {
+      return request<SubtitleWorkspace>(fetcher, baseUrl, `/api/tools/subtitle-translation/workspaces/${encodeURIComponent(id)}/preview`, {
+        ...requestOptions, body: payload, method: "POST",
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    runSubtitleOperation(id: string, operation: SubtitleOperation, payload: { expected_revision: number; segment_ids?: string[] }, requestOptions?: RequestOptions) {
+      return request<ToolTask>(fetcher, baseUrl, `/api/tools/subtitle-translation/workspaces/${encodeURIComponent(id)}/${operation}`, {
+        ...requestOptions, body: payload, method: "POST",
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    importSubtitleVideo(videoUrl: string, role: "reference" | "clean", requestOptions?: RequestOptions) {
+      return request<Asset>(fetcher, baseUrl, "/api/tools/subtitle-translation/import-video", {
+        ...requestOptions, body: { video_url: videoUrl, role }, method: "POST",
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
+    uploadSubtitleVideo(file: Blob, role: "reference" | "clean", options: { filename?: string; mimeType?: string } & RequestOptions = {}) {
+      const searchParams = new URLSearchParams({ role });
+      if (options.filename) searchParams.set("filename", options.filename);
+      if (options.mimeType) searchParams.set("mime_type", options.mimeType);
+      return request<Asset>(fetcher, baseUrl, `/api/tools/subtitle-translation/upload-video?${searchParams}`, {
+        ...options, body: file, json: false, method: "POST",
+        headers: mergeHeaders(defaultHeaders, { "Content-Type": options.mimeType || file.type || "application/octet-stream" }, options.headers)
       });
     },
 
@@ -2179,12 +2240,6 @@ async function request<T>(
 ): Promise<T> {
   const { body, headers, json = true, method = "GET", ...requestOptions } = config;
   assertClientWritePermission(path, method);
-  // #region debug-point A,B,C:auth-request
-  if (typeof window !== "undefined" && ["/api/auth/login", "/api/auth/me"].includes(path)) {
-    const debugRequestUrl = new URL(buildUrl(baseUrl, path), window.location.href);
-    void fetch("http://127.0.0.1:7777/event", { method: "POST", body: JSON.stringify({ sessionId: "production-auth-cookie", runId: "pre-fix", hypothesisId: "A,B,C", location: "frontend/lib/api-client.ts:auth-request", msg: "[DEBUG] Browser auth request", data: { pageOrigin: window.location.origin, pageProtocol: window.location.protocol, requestUrl: debugRequestUrl.href, requestOrigin: debugRequestUrl.origin, crossOrigin: debugRequestUrl.origin !== window.location.origin, credentialMode: requestOptions.credentials ?? "same-origin", cookieEnabled: navigator.cookieEnabled }, ts: Date.now() }) }).catch(() => {});
-  }
-  // #endregion
   const response = await fetcher(buildUrl(baseUrl, path), {
     ...requestOptions,
     body: body === undefined ? undefined : json ? JSON.stringify(body) : body as BodyInit,
@@ -2196,11 +2251,6 @@ async function request<T>(
     method
   });
 
-  // #region debug-point A,B,C:auth-response
-  if (typeof window !== "undefined" && ["/api/auth/login", "/api/auth/me"].includes(path)) {
-    void fetch("http://127.0.0.1:7777/event", { method: "POST", body: JSON.stringify({ sessionId: "production-auth-cookie", runId: "pre-fix", hypothesisId: "A,B,C", location: "frontend/lib/api-client.ts:auth-response", msg: "[DEBUG] Browser auth response", data: { path, status: response.status, ok: response.ok, responseUrl: response.url, responseType: response.type, redirected: response.redirected }, ts: Date.now() }) }).catch(() => {});
-  }
-  // #endregion
   if (!response.ok) {
     dispatchAuthError(response.status);
     throw await parseApiError(response);

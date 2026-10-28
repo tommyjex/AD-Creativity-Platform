@@ -177,6 +177,9 @@ def canonicalize_aigc_definition(
                     "audio",
                 }:
                     config["asset_id"] = None
+                    config.pop("generated_by_model_node_id", None)
+                    config.pop("generated_output_handle", None)
+                    config.pop("generated_from_run_id", None)
                     if node.get("type") == "image":
                         config["bbox"] = None
                         config["bbox_asset_id"] = None

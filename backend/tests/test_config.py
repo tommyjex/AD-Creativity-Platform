@@ -58,6 +58,126 @@ def test_auth_security_defaults() -> None:
     assert settings.auth_login_max_failures == 5
 
 
+def test_video_subtitle_grounding_defaults_are_isolated_and_safe() -> None:
+    settings = Settings()
+
+    assert settings.enable_experimental_video_subtitle_grounding is False
+    assert settings.enable_experimental_video_subtitle_grounding_debug is False
+    assert settings.video_subtitle_grounding_model == "doubao-seed-evolving"
+    assert settings.video_subtitle_grounding_sampling_fps == 2.0
+    assert settings.video_subtitle_grounding_download_max_bytes == 512 * 1024 * 1024
+    assert settings.video_subtitle_grounding_download_connect_timeout_seconds == 10
+    assert settings.video_subtitle_grounding_download_read_timeout_seconds == 60
+    assert settings.video_subtitle_grounding_download_total_timeout_seconds == 600
+    assert settings.video_subtitle_grounding_max_redirects == 3
+    assert settings.video_subtitle_grounding_file_processing_timeout_seconds == 600
+    assert settings.video_subtitle_grounding_model_timeout_seconds == 600
+    assert settings.video_subtitle_grounding_max_output_tokens == 16384
+
+
+def test_video_subtitle_grounding_production_defaults_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.setenv("SITE_ORIGIN", "https://app.example.com")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
+    monkeypatch.delenv(
+        "ENABLE_EXPERIMENTAL_VIDEO_SUBTITLE_GROUNDING",
+        raising=False,
+    )
+
+    settings = Settings.from_env()
+
+    assert settings.enable_experimental_video_subtitle_grounding is False
+
+
+def test_video_subtitle_grounding_explicit_environment_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.setenv("SITE_ORIGIN", "https://app.example.com")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "true")
+    monkeypatch.setenv("ENABLE_EXPERIMENTAL_VIDEO_SUBTITLE_GROUNDING", "true")
+    monkeypatch.setenv(
+        "ENABLE_EXPERIMENTAL_VIDEO_SUBTITLE_GROUNDING_DEBUG",
+        "true",
+    )
+    monkeypatch.setenv("VIDEO_SUBTITLE_GROUNDING_MODEL", "custom-model")
+    monkeypatch.setenv("VIDEO_SUBTITLE_GROUNDING_SAMPLING_FPS", "3.5")
+    monkeypatch.setenv("VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_MAX_BYTES", "1048576")
+    monkeypatch.setenv(
+        "VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_CONNECT_TIMEOUT_SECONDS",
+        "11",
+    )
+    monkeypatch.setenv(
+        "VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_READ_TIMEOUT_SECONDS",
+        "61",
+    )
+    monkeypatch.setenv(
+        "VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_TOTAL_TIMEOUT_SECONDS",
+        "601",
+    )
+    monkeypatch.setenv("VIDEO_SUBTITLE_GROUNDING_MAX_REDIRECTS", "2")
+    monkeypatch.setenv(
+        "VIDEO_SUBTITLE_GROUNDING_FILE_PROCESSING_TIMEOUT_SECONDS",
+        "602",
+    )
+    monkeypatch.setenv(
+        "VIDEO_SUBTITLE_GROUNDING_MODEL_TIMEOUT_SECONDS",
+        "603",
+    )
+    monkeypatch.setenv("VIDEO_SUBTITLE_GROUNDING_MAX_OUTPUT_TOKENS", "2048")
+
+    settings = Settings.from_env()
+
+    assert settings.enable_experimental_video_subtitle_grounding is True
+    assert settings.enable_experimental_video_subtitle_grounding_debug is True
+    assert settings.video_subtitle_grounding_model == "custom-model"
+    assert settings.video_subtitle_grounding_sampling_fps == 3.5
+    assert settings.video_subtitle_grounding_download_max_bytes == 1048576
+    assert settings.video_subtitle_grounding_download_connect_timeout_seconds == 11
+    assert settings.video_subtitle_grounding_download_read_timeout_seconds == 61
+    assert settings.video_subtitle_grounding_download_total_timeout_seconds == 601
+    assert settings.video_subtitle_grounding_max_redirects == 2
+    assert settings.video_subtitle_grounding_file_processing_timeout_seconds == 602
+    assert settings.video_subtitle_grounding_model_timeout_seconds == 603
+    assert settings.video_subtitle_grounding_max_output_tokens == 2048
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("ENABLE_EXPERIMENTAL_VIDEO_SUBTITLE_GROUNDING", "yes"),
+        ("ENABLE_EXPERIMENTAL_VIDEO_SUBTITLE_GROUNDING_DEBUG", "TRUE"),
+        ("VIDEO_SUBTITLE_GROUNDING_SAMPLING_FPS", "0.49"),
+        ("VIDEO_SUBTITLE_GROUNDING_SAMPLING_FPS", "5.01"),
+        ("VIDEO_SUBTITLE_GROUNDING_SAMPLING_FPS", "nan"),
+        ("VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_MAX_BYTES", "0"),
+        ("VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_CONNECT_TIMEOUT_SECONDS", "0"),
+        ("VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_READ_TIMEOUT_SECONDS", "0"),
+        ("VIDEO_SUBTITLE_GROUNDING_DOWNLOAD_TOTAL_TIMEOUT_SECONDS", "0"),
+        ("VIDEO_SUBTITLE_GROUNDING_MAX_REDIRECTS", "-1"),
+        ("VIDEO_SUBTITLE_GROUNDING_FILE_PROCESSING_TIMEOUT_SECONDS", "0"),
+        ("VIDEO_SUBTITLE_GROUNDING_MODEL_TIMEOUT_SECONDS", "0"),
+        ("VIDEO_SUBTITLE_GROUNDING_MAX_OUTPUT_TOKENS", "0"),
+    ],
+)
+def test_invalid_video_subtitle_grounding_environment_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    value: str,
+) -> None:
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        Settings.from_env()
+
+    assert name in str(exc_info.value)
+    assert value not in str(exc_info.value)
+
+
 def test_production_rejects_wildcard_cors_without_explicit_opt_in() -> None:
     with pytest.raises(ValueError, match="ALLOW_INSECURE_CORS"):
         Settings(

@@ -1,0 +1,215 @@
+1
+00:00:00,000 --> 00:00:02,000
+Auspacken und Verwendung
+
+2
+00:00:00,000 --> 00:00:02,000
+FLOOR ONE i7 HotWash
+
+3
+00:00:02,500 --> 00:00:04,500
+Auspacken
+
+4
+00:00:08,000 --> 00:00:10,500
+Bedienungsanleitung
+
+5
+00:00:11,000 --> 00:00:12,500
+Ladestation (für Bodenwäscher)
+
+6
+00:00:13,000 --> 00:00:14,000
+Bürstenwalze ×2
+
+7
+00:00:14,500 --> 00:00:16,500
+Trockenfilter ×2
+
+8
+00:00:17,000 --> 00:00:17,500
+Reinigungswerkzeug
+
+9
+00:00:18,000 --> 00:00:18,500
+Reinigungslösung
+
+10
+00:00:19,000 --> 00:00:20,000
+Bodenwäscher
+
+11
+00:00:20,500 --> 00:00:23,000
+Griff
+
+12
+00:00:23,500 --> 00:00:26,000
+Trockenfilter*2
+
+13
+00:00:23,500 --> 00:00:26,000
+Geruchsneutralisierende
+
+14
+00:00:23,500 --> 00:00:26,000
+& Reinigungslösung
+
+15
+00:00:23,500 --> 00:00:26,000
+Bodenwäscher
+
+16
+00:00:23,500 --> 00:00:26,000
+Griff
+
+17
+00:00:23,500 --> 00:00:26,000
+Bürstenwalze*2
+
+18
+00:00:23,500 --> 00:00:26,000
+Reinigungswerkzeug
+
+19
+00:00:23,500 --> 00:00:26,000
+Ladestation
+
+20
+00:00:23,500 --> 00:00:26,000
+(für Bodenreiniger)
+
+21
+00:00:26,500 --> 00:00:28,000
+Montieren
+
+22
+00:00:28,500 --> 00:00:31,500
+Stecken Sie den Griff in den Bodenreiniger, bis er einrastet.
+
+23
+00:00:38,500 --> 00:00:40,500
+Reinigung starten
+
+24
+00:00:41,000 --> 00:00:43,500
+Entnehmen Sie den Frischwassertank.
+
+25
+00:00:44,000 --> 00:00:45,000
+Öffnen Sie den Tankdeckel.
+
+26
+00:00:45,500 --> 00:00:46,500
+Füllen Sie den Frischwassertank mit sauberem Leitungswasser.
+
+27
+00:00:47,000 --> 00:00:49,500
+Fügen Sie Tineco-Reinigungslösung wie angegeben hinzu.
+
+28
+00:00:54,000 --> 00:01:00,000
+Setzen Sie die Bürstenwalze in die Halterung ein und befestigen Sie sie.
+
+29
+00:01:00,500 --> 00:01:03,000
+Setzen Sie den Frischwassertank wieder ein.
+
+30
+00:01:03,500 --> 00:01:05,500
+Stellen Sie sich auf die Bodendüse und ziehen Sie den Griff nach hinten.
+
+31
+00:01:06,000 --> 00:01:07,500
+Drücken Sie die Einschalttaste, um mit der Reinigung zu beginnen.
+
+32
+00:01:08,000 --> 00:01:12,000
+Beginnen Sie mit der Reinigung alltäglicher nasser und trockener Verschmutzungen.
+
+33
+00:01:12,500 --> 00:01:14,500
+Drücken Sie die Modustaste, um zwischen den Reinigungsmodi zu wechseln.
+
+34
+00:01:22,500 --> 00:01:26,500
+180°-Flachlege-Design
+
+35
+00:01:22,500 --> 00:01:26,500
+Gleitet unter niedrige Möbel, um versteckten Staub zu entfernen.
+
+36
+00:01:27,000 --> 00:01:32,500
+Kantenreinigung
+
+37
+00:01:27,000 --> 00:01:32,500
+Reinigt dicht entlang von Wänden und Fußleisten.
+
+38
+00:01:33,000 --> 00:01:34,000
+Selbstreinigung
+
+39
+00:01:34,500 --> 00:01:36,500
+Stellen Sie das Gerät nach der Verwendung auf die Ladestation.
+
+40
+00:01:37,000 --> 00:01:39,000
+Drücken Sie die Selbstreinigungstaste, um den Reinigungszyklus zu starten.
+
+41
+00:01:39,500 --> 00:01:42,500
+Selbstreinigungssystem
+
+42
+00:01:39,500 --> 00:01:42,500
+Reinigt die Bürstenrolle und den internen Durchgang automatisch.
+
+43
+00:01:43,000 --> 00:01:44,000
+Warten
+
+44
+00:01:44,500 --> 00:01:46,000
+Entfernen Sie den Schmutzwassertank.
+
+45
+00:01:46,500 --> 00:01:48,000
+Entfernen Sie den Trockenfilter.
+
+46
+00:01:48,500 --> 00:01:50,500
+Spülen Sie den Trockenfilter mit sauberem Wasser.
+
+47
+00:01:51,000 --> 00:01:52,000
+Öffnen Sie den Deckel des Schmutzwassertanks.
+
+48
+00:01:52,500 --> 00:01:55,500
+Leeren Sie das Schmutzwasser und entfernen Sie Schmutzablagerungen.
+
+49
+00:01:56,000 --> 00:01:57,500
+Verwenden Sie das Reinigungswerkzeug, um verbleibende Schmutzablagerungen zu entfernen.
+
+50
+00:01:58,000 --> 00:01:59,000
+Spülen Sie den Schmutzwassertank gründlich aus.
+
+51
+00:01:59,500 --> 00:02:02,500
+Lassen Sie alle Teile vor dem Zusammenbau vollständig an der Luft trocknen.
+
+52
+00:02:03,000 --> 00:02:06,500
+Bringen Sie den Tankdeckel und den Trockenfilter wieder an.
+
+53
+00:02:07,000 --> 00:02:09,500
+Bringen Sie den Schmutzwassertank wieder an.
+
+54
+00:02:11,500 --> 00:02:16,500
+FLOOR ONE i7 Hotwash

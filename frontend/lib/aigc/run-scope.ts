@@ -129,6 +129,10 @@ export function selectAigcProjectionRunIds(
   if (selectedRunId !== null) selectedIds.add(selectedRunId);
 
   for (const node of definition.nodes) {
+    const generatedRunId = generatedMediaRunId(node);
+    if (generatedRunId && runs.some((run) => run.id === generatedRunId)) {
+      selectedIds.add(generatedRunId);
+    }
     const latestTerminal = newestFirst.find(
       (run) =>
         !ACTIVE_AIGC_RUN_STATUSES.has(run.status) &&
@@ -189,11 +193,40 @@ export function createAigcRunProjection(
   ): AigcPipelineRunDetail | null {
     if (
       selectedDetail &&
-      getAigcRunProjectionNodeIds(selectedDetail.run).has(nodeId)
+      (getAigcRunProjectionNodeIds(selectedDetail.run).has(nodeId) ||
+        isImmediateGeneratedRun(nodeId, selectedDetail))
     ) {
       return selectedDetail;
     }
     return null;
+  }
+
+  function isImmediateGeneratedRun(
+    nodeId: string,
+    detail: AigcPipelineRunDetail
+  ): boolean {
+    const node = definition.nodes.find(
+      (candidate) => candidate.id === nodeId
+    );
+    const generatedRunId = node ? generatedMediaRunId(node) : null;
+    return (
+      generatedRunId === detail.run.id &&
+      !getAigcRunProjectionNodeIds(detail.run).has(nodeId)
+    );
+  }
+
+  function immediateGeneratedRunForNode(
+    nodeId: string
+  ): AigcPipelineRunDetail | null {
+    const node = definition.nodes.find(
+      (candidate) => candidate.id === nodeId
+    );
+    const generatedRunId = node ? generatedMediaRunId(node) : null;
+    if (!generatedRunId) return null;
+    const detail = details.get(generatedRunId);
+    return detail && isImmediateGeneratedRun(nodeId, detail)
+      ? detail
+      : null;
   }
 
   return {
@@ -212,8 +245,20 @@ export function createAigcRunProjection(
       if (!currentNodeIds.has(nodeId)) return null;
       const selectedRun = selectedRunForNode(nodeId);
       if (selectedRun) return selectedRun;
+      const node = definition.nodes.find(
+        (candidate) => candidate.id === nodeId
+      );
+      if (
+        selectedRunId !== null &&
+        node &&
+        generatedMediaRunId(node) !== null
+      ) {
+        return null;
+      }
       const activeRun = activeRunForNodeId(nodeId);
       if (activeRun) return details.get(activeRun.id) ?? null;
+      const immediateRun = immediateGeneratedRunForNode(nodeId);
+      if (immediateRun) return immediateRun;
       return (
         detailForNode(terminalRuns, nodeId)
       );
@@ -224,6 +269,20 @@ export function createAigcRunProjection(
     },
     hasAnyActiveRun: activeRuns.length > 0
   };
+}
+
+function generatedMediaRunId(
+  node: AigcDefinition["nodes"][number]
+): string | null {
+  if (
+    (node.type !== "image" && node.type !== "video") ||
+    typeof node.config.generated_by_model_node_id !== "string" ||
+    node.config.generated_output_handle !== node.type ||
+    typeof node.config.generated_from_run_id !== "string"
+  ) {
+    return null;
+  }
+  return node.config.generated_from_run_id;
 }
 
 function newestRunsFirst(

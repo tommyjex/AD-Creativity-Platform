@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "defaultActionId": "frontend",
+  "actions": [
+    {
+      "id": "backend",
+      "name": "本地后端",
+      "command": ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --env-file .env",
+      "cwd": ".",
+      "background": true,
+      "source": "agent",
+      "readiness": {
+        "outputPatterns": ["Application startup complete."],
+        "timeoutMs": 120000
+      },
+      "open": {
+        "type": "terminal"
+      }
+    },
+    {
+      "id": "frontend",
+      "name": "本地 HTTPS 前端",
+      "command": "export PATH=\"$(brew --prefix node@22)/bin:$PATH\"\nnpm run dev:https",
+      "cwd": "frontend",
+      "background": true,
+      "source": "agent",
+      "readiness": {
+        "outputPatterns": ["Ready in"],
+        "timeoutMs": 120000
+      },
+      "open": {
+        "type": "preview",
+        "url": "https://localhost:3000/workspace/tools",
+        "urlFromOutput": true
+      }
+    }
+  ]
+}

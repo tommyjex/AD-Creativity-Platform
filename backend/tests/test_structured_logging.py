@@ -70,6 +70,29 @@ def test_log_event_serializes_stable_json_contract_and_context() -> None:
     assert "prompt" not in event
 
 
+def test_log_event_keeps_subtitle_validation_aggregates() -> None:
+    logger, output = _logger_with_output()
+
+    log_event(
+        logger,
+        "experiment.video_subtitle_grounding.completed",
+        outcome="succeeded",
+        invalid_segment_count=2,
+        style_fallback_counts={
+            "font_height_ratio": 3,
+            "visual_role": 1,
+        },
+    )
+
+    event = json.loads(output.getvalue())
+
+    assert event["invalid_segment_count"] == 2
+    assert event["style_fallback_counts"] == {
+        "font_height_ratio": 3,
+        "visual_role": 1,
+    }
+
+
 def test_formatter_redacts_sensitive_values_and_strips_url_queries() -> None:
     assert sanitize_value("authorization", "Bearer top-secret") == "[REDACTED]"
     assert sanitize_value("download_url", "https://example.test/file?signature=secret") == (
@@ -288,13 +311,19 @@ def test_async_contexts_do_not_cross_contaminate() -> None:
 
 def test_business_code_has_no_local_debug_reporting_dependencies() -> None:
     app_root = Path(__file__).parents[1] / "app"
-    source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in app_root.rglob("*.py")
+    markers = (
+        ".dbg/",
+        "DEBUG_SERVER_URL",
+        "127.0.0.1:7777",
+        "127.0.0.1:7779",
+        "127.0.0.1:7780",
     )
-
-    assert ".dbg/" not in source
-    assert "DEBUG_SERVER_URL" not in source
-    assert "127.0.0.1:7777" not in source
-    assert "127.0.0.1:7779" not in source
-    assert "127.0.0.1:7780" not in source
+    violations = []
+    for path in sorted(app_root.rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        violations.extend(
+            f"{path.relative_to(app_root)}:{marker}"
+            for marker in markers
+            if marker in source
+        )
+    assert not violations, f"Local debug dependencies: {violations}"

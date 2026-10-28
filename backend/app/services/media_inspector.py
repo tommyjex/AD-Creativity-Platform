@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import math
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -89,7 +91,7 @@ class MediaInspection:
         kind: ReferenceAssetKind,
         mime_type: str | None,
         metadata: dict[str, object],
-    ) -> "MediaInspection | None":
+    ) -> MediaInspection | None:
         if metadata.get("inspection_version") != MEDIA_INSPECTION_VERSION:
             return None
         container = metadata.get("container")
@@ -106,6 +108,22 @@ class MediaInspection:
             video_codec=_optional_text(metadata.get("video_codec")),
             audio_codec=_optional_text(metadata.get("audio_codec")),
         )
+
+
+@dataclass(frozen=True)
+class VideoDisplayMetadata:
+    encoded_width: int
+    encoded_height: int
+    display_width: int
+    display_height: int
+    duration_seconds: float
+    rotation: Literal[0, 90, 180, 270]
+    container: str
+    codec: str
+
+    @property
+    def duration_ms(self) -> int:
+        return round(self.duration_seconds * 1000)
 
 
 class MediaInspector:
@@ -163,7 +181,9 @@ class MediaInspector:
             "-show_entries",
             (
                 "format=format_name,duration:format_tags=major_brand:"
-                "stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,duration"
+                "stream=codec_type,codec_name,width,height,avg_frame_rate,"
+                "r_frame_rate,duration:stream_tags=rotate:"
+                "stream_side_data=rotation,displaymatrix"
             ),
             "-of",
             "json",
@@ -194,6 +214,67 @@ class MediaInspector:
         if not isinstance(parsed, dict):
             raise MediaInspectionError("media inspection returned invalid metadata")
         return parsed
+
+
+def parse_video_display_metadata(
+    payload: dict[str, object],
+    *,
+    max_duration_seconds: float | None = None,
+) -> VideoDisplayMetadata:
+    streams = _streams(payload)
+    video = next(
+        (stream for stream in streams if stream.get("codec_type") == "video"),
+        None,
+    )
+    if video is None:
+        raise MediaInspectionError("video file has no video stream")
+
+    encoded_width = _positive_int(video.get("width"), "video width")
+    encoded_height = _positive_int(video.get("height"), "video height")
+    duration = _duration(payload, video)
+    if max_duration_seconds is not None and duration > max_duration_seconds:
+        raise MediaInspectionError(
+            f"video duration exceeds {max_duration_seconds:g} seconds"
+        )
+
+    rotation = _video_rotation(video)
+    if rotation in {90, 270}:
+        display_width, display_height = encoded_height, encoded_width
+    else:
+        display_width, display_height = encoded_width, encoded_height
+
+    format_value = payload.get("format")
+    raw_container = (
+        str(format_value.get("format_name") or "").strip().lower()
+        if isinstance(format_value, dict)
+        else ""
+    )
+    format_tags = format_value.get("tags") if isinstance(format_value, dict) else None
+    major_brand = (
+        str(format_tags.get("major_brand") or "").strip().lower()
+        if isinstance(format_tags, dict)
+        else ""
+    )
+    container = _normalized_video_container(
+        raw_container,
+        major_brand=major_brand,
+    )
+    codec = str(video.get("codec_name") or "").strip().lower()
+    if not container:
+        raise MediaInspectionError("video container is unavailable")
+    if not codec:
+        raise MediaInspectionError("video codec is unavailable")
+
+    return VideoDisplayMetadata(
+        encoded_width=encoded_width,
+        encoded_height=encoded_height,
+        display_width=display_width,
+        display_height=display_height,
+        duration_seconds=duration,
+        rotation=rotation,
+        container=container,
+        codec=codec,
+    )
 
 
 def inspect_image(content: bytes) -> MediaInspection:
@@ -450,6 +531,69 @@ def _frame_rate(stream: dict[str, object]) -> float:
         if value > 0:
             return value
     raise MediaInspectionError("video frame rate is unavailable")
+
+
+def _video_rotation(
+    stream: dict[str, object],
+) -> Literal[0, 90, 180, 270]:
+    raw_rotation: object | None = None
+    side_data = stream.get("side_data_list")
+    if isinstance(side_data, list):
+        for entry in side_data:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("rotation") is not None:
+                raw_rotation = entry["rotation"]
+                break
+            display_matrix = entry.get("displaymatrix")
+            if isinstance(display_matrix, str):
+                match = re.search(
+                    r"rotation(?:\s+of)?\s+(-?\d+(?:\.\d+)?)",
+                    display_matrix,
+                    flags=re.IGNORECASE,
+                )
+                if match:
+                    raw_rotation = match.group(1)
+                    break
+
+    if raw_rotation is None:
+        tags = stream.get("tags")
+        if isinstance(tags, dict):
+            raw_rotation = tags.get("rotate")
+    if raw_rotation is None:
+        return 0
+
+    try:
+        numeric = float(raw_rotation)
+    except (TypeError, ValueError) as exc:
+        raise MediaInspectionError("video rotation metadata is invalid") from exc
+    if not math.isfinite(numeric):
+        raise MediaInspectionError("video rotation metadata is invalid")
+    nearest_quarter_turn = round(numeric / 90) * 90
+    if not math.isclose(numeric, nearest_quarter_turn, abs_tol=0.01):
+        raise MediaInspectionError("video rotation must be a quarter turn")
+    return nearest_quarter_turn % 360  # type: ignore[return-value]
+
+
+def _normalized_video_container(
+    raw_container: str,
+    *,
+    major_brand: str,
+) -> str:
+    names = [name.strip() for name in raw_container.split(",") if name.strip()]
+    if "mov" in names and major_brand == "qt":
+        return "mov"
+    if any(name in {"mp4", "mov"} for name in names):
+        return "mp4"
+    if "webm" in names:
+        return "webm"
+    if "matroska" in names:
+        return "matroska"
+    if "mpeg" in names:
+        return "mpeg"
+    if "avi" in names:
+        return "avi"
+    return next(iter(names), "")
 
 
 def _suffix_for_mime(mime_type: str | None) -> str:

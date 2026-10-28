@@ -31,6 +31,19 @@
   - [x] SubTask 5.4: 使用 Playwright 在 `1440x900`、`834x1112`、`390x844` 验证尾帧可见、等比预览、搜索、下载及无重叠或水平溢出。
   - [x] SubTask 5.5: 运行 `git diff --check`，确认未覆盖工作树中既有的无关修改。
 
+- [x] Task 6: 在视频生成节点结果页展示独立尾帧。
+  - [x] SubTask 6.1: 在 `ResultPanel` 中按 MIME 与 `name_variant=video_last_frame` 区分主视频和尾帧，保持视频在前、尾帧在后，不影响其他多图片结果。
+  - [x] SubTask 6.2: 为尾帧结果增加“视频尾帧”标题、稳定缩略图媒体区、“放大查看”和“下载尾帧”操作，复用现有安全内容 URL 与 `getAigcImageDownload` 命名规则。
+  - [x] SubTask 6.3: 使用应用内 Dialog 展示尾帧大图和当前名称，支持关闭、Escape、遮罩返回与 Dialog 内下载；图片必须使用 `object-contain`，不得打开新标签页。
+  - [x] SubTask 6.4: 保持尾帧缺失、不可用、历史单视频 Run 和下游 `video`/`video_output` 节点的既有行为，不新增输出 Handle 或后端接口。
+  - [x] SubTask 6.5: 增加 `aigc-editor` 组件测试，覆盖展示顺序、角色标签、放大 Dialog、两处下载、动态命名、缺失尾帧、不可用尾帧、历史 Run 和下游无重复展示。
+
+- [x] Task 7: 完成结果页尾帧回归与浏览器验收。
+  - [x] SubTask 7.1: 运行相关 Vitest、TypeScript、ESLint 和 production build，确认普通图片、视频、字幕及多产物结果无回归。
+  - [x] SubTask 7.2: 使用现有 Mock 双资产 fixture，不调用真实视频生成、命名或 TOS，在 `1440x900`、`834x1112`、`390x844` 验证结果页尾帧可见、等比缩略图、应用内放大、关闭返回和两处下载。
+  - [x] SubTask 7.3: 验证结果页和 Dialog 无重叠、无水平溢出，长 Unicode 名称不撑破容器，下载文件名与后端 `Content-Disposition` 一致。
+  - [x] SubTask 7.4: 运行 `git diff --check`，确认未覆盖工作树中的既有无关修改，并更新实施与验收记录。
+
 # Task Dependencies
 
 实施与验证证据见 [validation.md](validation.md)。
@@ -40,3 +53,5 @@
 - Task 4 depends on Tasks 2 and 3.
 - Task 5 depends on Tasks 1–4.
 - Task 2 的网关测试与 Task 3 的命名 helper 测试可在契约明确后并行准备。
+- Task 6 depends on the completed Tasks 2–4.
+- Task 7 depends on Task 6.

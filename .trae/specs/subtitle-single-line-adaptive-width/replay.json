@@ -1,0 +1,1198 @@
+{
+  "segments": 54,
+  "expanded": 22,
+  "font_improved": 21,
+  "target_size_preserved": 53,
+  "baseline_below_80_percent": 6,
+  "adaptive_below_80_percent": 1,
+  "new_overlaps": 0,
+  "source_fields_unchanged": true,
+  "paid_calls": 0,
+  "real_render_verified": false,
+  "rows": [
+    {
+      "segment_id": "e641c4e1-9da4-444f-876a-899aeb4f7e75",
+      "baseline_font_size": 80,
+      "target_font_size": 80,
+      "adaptive_font_size": 80,
+      "original_box": [
+        340,
+        297,
+        1578,
+        396
+      ],
+      "adaptive_box": [
+        340,
+        297,
+        1578,
+        396
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "274ef6e1-229b-4b5c-a196-c3d52b2b1545",
+      "baseline_font_size": 72,
+      "target_font_size": 72,
+      "adaptive_font_size": 72,
+      "original_box": [
+        384,
+        495,
+        1532,
+        585
+      ],
+      "adaptive_box": [
+        384,
+        495,
+        1532,
+        585
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "9e60a37f-db4f-4e6a-a2dd-b453abec2320",
+      "baseline_font_size": 69,
+      "target_font_size": 69,
+      "adaptive_font_size": 69,
+      "original_box": [
+        775,
+        495,
+        1142,
+        581
+      ],
+      "adaptive_box": [
+        775,
+        495,
+        1142,
+        581
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "28e0990d-3a23-4339-b3e2-8409855f8004",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        1365,
+        935,
+        1737,
+        973
+      ],
+      "adaptive_box": [
+        1365,
+        935,
+        1737,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "210505c5-39bc-4fcd-811f-54bc459728df",
+      "baseline_font_size": 27,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        1067,
+        935,
+        1726,
+        973
+      ],
+      "adaptive_box": [
+        1067,
+        935,
+        1790,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "d6907421-f49f-4204-9be9-e904c1f33a13",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        1447,
+        935,
+        1726,
+        973
+      ],
+      "adaptive_box": [
+        1447,
+        935,
+        1726,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "c61f4867-6a24-4839-b096-dffd8ad03816",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        1499,
+        935,
+        1726,
+        973
+      ],
+      "adaptive_box": [
+        1499,
+        935,
+        1726,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "9384088e-edd4-4ce9-9879-a84c44cb2527",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        1457,
+        935,
+        1737,
+        973
+      ],
+      "adaptive_box": [
+        1457,
+        935,
+        1737,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "ef950586-09d0-4f9b-88c6-abfb4aea6cab",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        1378,
+        935,
+        1737,
+        973
+      ],
+      "adaptive_box": [
+        1378,
+        935,
+        1737,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "dc5646be-6aea-4447-a314-6b89ac96ec8f",
+      "baseline_font_size": 23,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        1466,
+        935,
+        1737,
+        973
+      ],
+      "adaptive_box": [
+        1466,
+        935,
+        1810,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "3b7786ec-90dd-494a-8a44-757917e1f908",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        1586,
+        935,
+        1737,
+        973
+      ],
+      "adaptive_box": [
+        1586,
+        935,
+        1737,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "1ef9bcbb-791c-42fa-8c9d-4ed51f9460f6",
+      "baseline_font_size": 18,
+      "target_font_size": 18,
+      "adaptive_font_size": 18,
+      "original_box": [
+        607,
+        150,
+        736,
+        174
+      ],
+      "adaptive_box": [
+        607,
+        150,
+        736,
+        174
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "original_bbox_overlap"
+      ]
+    },
+    {
+      "segment_id": "e7c84845-470a-4e81-98b9-489e96cb2be2",
+      "baseline_font_size": 14,
+      "target_font_size": 18,
+      "adaptive_font_size": 14,
+      "original_box": [
+        598,
+        173,
+        746,
+        197
+      ],
+      "adaptive_box": [
+        598,
+        173,
+        746,
+        197
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "original_bbox_overlap",
+        "bbox_expansion_limited",
+        "font_size_reduced"
+      ]
+    },
+    {
+      "segment_id": "23b91c10-43e8-492e-a549-940b703f9b12",
+      "baseline_font_size": 18,
+      "target_font_size": 18,
+      "adaptive_font_size": 18,
+      "original_box": [
+        350,
+        284,
+        475,
+        308
+      ],
+      "adaptive_box": [
+        350,
+        284,
+        475,
+        308
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "e5f722fc-798c-443f-8b21-f99fbc896c94",
+      "baseline_font_size": 18,
+      "target_font_size": 18,
+      "adaptive_font_size": 18,
+      "original_box": [
+        334,
+        642,
+        417,
+        666
+      ],
+      "adaptive_box": [
+        334,
+        642,
+        417,
+        666
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "8eac05c5-6a91-4b11-82c9-a06bc2e3f906",
+      "baseline_font_size": 14,
+      "target_font_size": 18,
+      "adaptive_font_size": 18,
+      "original_box": [
+        698,
+        611,
+        838,
+        635
+      ],
+      "adaptive_box": [
+        681,
+        611,
+        855,
+        635
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "399565d3-1129-487c-bbbf-21ac017fa962",
+      "baseline_font_size": 17,
+      "target_font_size": 18,
+      "adaptive_font_size": 18,
+      "original_box": [
+        1176,
+        218,
+        1313,
+        242
+      ],
+      "adaptive_box": [
+        1172,
+        218,
+        1317,
+        242
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "7757c936-9333-42e5-ace8-60c1db572e43",
+      "baseline_font_size": 14,
+      "target_font_size": 18,
+      "adaptive_font_size": 18,
+      "original_box": [
+        996,
+        578,
+        1132,
+        602
+      ],
+      "adaptive_box": [
+        981,
+        578,
+        1147,
+        602
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "7af55973-8e43-4e80-9170-8093cfb58c2f",
+      "baseline_font_size": 18,
+      "target_font_size": 18,
+      "adaptive_font_size": 18,
+      "original_box": [
+        1243,
+        562,
+        1401,
+        586
+      ],
+      "adaptive_box": [
+        1243,
+        562,
+        1401,
+        586
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "original_bbox_overlap"
+      ]
+    },
+    {
+      "segment_id": "c52fb6fe-884d-436d-9723-4de3d57e2c63",
+      "baseline_font_size": 18,
+      "target_font_size": 18,
+      "adaptive_font_size": 18,
+      "original_box": [
+        1240,
+        585,
+        1441,
+        609
+      ],
+      "adaptive_box": [
+        1240,
+        585,
+        1441,
+        609
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "original_bbox_overlap"
+      ]
+    },
+    {
+      "segment_id": "7f8131bf-d071-48d2-a8ee-45af11b88ea6",
+      "baseline_font_size": 65,
+      "target_font_size": 69,
+      "adaptive_font_size": 69,
+      "original_box": [
+        838,
+        495,
+        1080,
+        581
+      ],
+      "adaptive_box": [
+        829,
+        495,
+        1089,
+        581
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "ac2c6172-c401-45bb-add6-8403481da188",
+      "baseline_font_size": 31,
+      "target_font_size": 31,
+      "adaptive_font_size": 31,
+      "original_box": [
+        357,
+        931,
+        1561,
+        970
+      ],
+      "adaptive_box": [
+        357,
+        931,
+        1561,
+        970
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "44ef1d2c-0ccd-4948-80b8-c92d277cd3aa",
+      "baseline_font_size": 42,
+      "target_font_size": 65,
+      "adaptive_font_size": 65,
+      "original_box": [
+        690,
+        503,
+        1230,
+        584
+      ],
+      "adaptive_box": [
+        549,
+        503,
+        1371,
+        584
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "e7b2f08d-bd62-4599-ba9e-781db2d91cce",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        661,
+        935,
+        1259,
+        973
+      ],
+      "adaptive_box": [
+        661,
+        935,
+        1259,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "6cb36dc6-68e6-45fa-bd23-5a96ceeed565",
+      "baseline_font_size": 25,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        759,
+        935,
+        1159,
+        973
+      ],
+      "adaptive_box": [
+        726,
+        935,
+        1192,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "bc9eecd7-70c2-422e-ae30-16e467c5bfa0",
+      "baseline_font_size": 26,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        513,
+        935,
+        1405,
+        973
+      ],
+      "adaptive_box": [
+        454,
+        935,
+        1464,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "8dc2f88f-6125-4925-aa2a-180d076d9ce6",
+      "baseline_font_size": 24,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        550,
+        935,
+        1368,
+        973
+      ],
+      "adaptive_box": [
+        458,
+        935,
+        1460,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "feeaa2b5-79b9-425b-af67-a997936a16da",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        375,
+        935,
+        1543,
+        973
+      ],
+      "adaptive_box": [
+        375,
+        935,
+        1543,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "d78b7f3c-af12-45e9-a620-7238d10dc3a4",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        661,
+        935,
+        1259,
+        973
+      ],
+      "adaptive_box": [
+        661,
+        935,
+        1259,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "fe79efb1-19be-4fbb-9b77-f551d269f9a1",
+      "baseline_font_size": 27,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        440,
+        935,
+        1478,
+        973
+      ],
+      "adaptive_box": [
+        386,
+        935,
+        1532,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "1b7d727e-0fde-40c6-a9b2-807896ea5a36",
+      "baseline_font_size": 23,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        571,
+        935,
+        1347,
+        973
+      ],
+      "adaptive_box": [
+        453,
+        935,
+        1465,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "b88ed9c5-6f49-40fe-8634-11d60ae6f088",
+      "baseline_font_size": 26,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        530,
+        935,
+        1388,
+        973
+      ],
+      "adaptive_box": [
+        466,
+        935,
+        1452,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "70229047-52ca-4b95-9e3d-de07fb513809",
+      "baseline_font_size": 26,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        496,
+        935,
+        1422,
+        973
+      ],
+      "adaptive_box": [
+        441,
+        935,
+        1477,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "0f1e8c9e-aa8c-45d6-80cf-8ed94510e0ed",
+      "baseline_font_size": 38,
+      "target_font_size": 38,
+      "adaptive_font_size": 38,
+      "original_box": [
+        186,
+        871,
+        669,
+        919
+      ],
+      "adaptive_box": [
+        186,
+        871,
+        670,
+        919
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "bd255164-ef7d-444a-afd5-6a0251c9e436",
+      "baseline_font_size": 28,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        186,
+        935,
+        1097,
+        973
+      ],
+      "adaptive_box": [
+        186,
+        935,
+        1144,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "ccffe345-0379-4799-8ce1-9c38caf1d419",
+      "baseline_font_size": 35,
+      "target_font_size": 38,
+      "adaptive_font_size": 38,
+      "original_box": [
+        186,
+        871,
+        548,
+        919
+      ],
+      "adaptive_box": [
+        186,
+        871,
+        575,
+        919
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "e6c1e41c-223e-41de-896e-bde95a525d1b",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        186,
+        935,
+        1013,
+        973
+      ],
+      "adaptive_box": [
+        186,
+        935,
+        1013,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "5032f5c5-095f-419c-8758-0871cf85f69b",
+      "baseline_font_size": 64,
+      "target_font_size": 65,
+      "adaptive_font_size": 65,
+      "original_box": [
+        711,
+        503,
+        1209,
+        584
+      ],
+      "adaptive_box": [
+        708,
+        503,
+        1212,
+        584
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "a7b9b92e-007f-4be0-a386-8198060f3b96",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        440,
+        935,
+        1478,
+        973
+      ],
+      "adaptive_box": [
+        440,
+        935,
+        1478,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "a2b95109-f599-412b-9f59-45dbdc3ccee8",
+      "baseline_font_size": 29,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        413,
+        935,
+        1505,
+        973
+      ],
+      "adaptive_box": [
+        403,
+        935,
+        1515,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "f14450df-4663-4976-a300-24bdd3969ace",
+      "baseline_font_size": 38,
+      "target_font_size": 38,
+      "adaptive_font_size": 38,
+      "original_box": [
+        186,
+        871,
+        698,
+        919
+      ],
+      "adaptive_box": [
+        186,
+        871,
+        698,
+        919
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "a75d1721-c176-4b60-b791-9eb3c6f32086",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        186,
+        935,
+        1361,
+        973
+      ],
+      "adaptive_box": [
+        186,
+        935,
+        1361,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "76e27eff-0876-41c2-9c63-d8215391c06a",
+      "baseline_font_size": 65,
+      "target_font_size": 65,
+      "adaptive_font_size": 65,
+      "original_box": [
+        784,
+        503,
+        1134,
+        584
+      ],
+      "adaptive_box": [
+        784,
+        503,
+        1134,
+        584
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "3150f9ac-c983-4ce5-b807-9dba9e5f8a34",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        669,
+        935,
+        1249,
+        973
+      ],
+      "adaptive_box": [
+        669,
+        935,
+        1249,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "e70ecf7b-3788-40a6-a3ca-1386a07f99e8",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        734,
+        935,
+        1184,
+        973
+      ],
+      "adaptive_box": [
+        734,
+        935,
+        1184,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "a218de65-d5dc-4aa5-8726-84d90a39943e",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        598,
+        935,
+        1320,
+        973
+      ],
+      "adaptive_box": [
+        598,
+        935,
+        1320,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "5d53a560-db3f-4aa8-bb6d-322fa6885329",
+      "baseline_font_size": 27,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        661,
+        935,
+        1259,
+        973
+      ],
+      "adaptive_box": [
+        638,
+        935,
+        1282,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "4d257b7e-1d12-4e85-aded-88da30bda8b0",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        571,
+        935,
+        1347,
+        973
+      ],
+      "adaptive_box": [
+        571,
+        935,
+        1347,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "f1e1e322-0895-449d-9bdd-0b9cf69a82fc",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        488,
+        935,
+        1430,
+        973
+      ],
+      "adaptive_box": [
+        488,
+        935,
+        1430,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "16e1cdd1-781d-4c0d-a18a-26388db8a11a",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        588,
+        935,
+        1330,
+        973
+      ],
+      "adaptive_box": [
+        588,
+        935,
+        1330,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "88065a5b-e6e4-4196-8a6a-2adfbd3b746e",
+      "baseline_font_size": 29,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        432,
+        935,
+        1486,
+        973
+      ],
+      "adaptive_box": [
+        420,
+        935,
+        1498,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "a6502956-cf2f-43fa-8227-228a12a9234c",
+      "baseline_font_size": 27,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        627,
+        935,
+        1292,
+        973
+      ],
+      "adaptive_box": [
+        594,
+        935,
+        1325,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ]
+    },
+    {
+      "segment_id": "dba79293-21a0-41f4-8351-c73b4076b7a9",
+      "baseline_font_size": 30,
+      "target_font_size": 30,
+      "adaptive_font_size": 30,
+      "original_box": [
+        669,
+        935,
+        1249,
+        973
+      ],
+      "adaptive_box": [
+        669,
+        935,
+        1249,
+        973
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    },
+    {
+      "segment_id": "83e10e9f-99f7-47f6-8efc-b5bb41ab4c9b",
+      "baseline_font_size": 74,
+      "target_font_size": 74,
+      "adaptive_font_size": 74,
+      "original_box": [
+        409,
+        503,
+        1509,
+        595
+      ],
+      "adaptive_box": [
+        409,
+        503,
+        1509,
+        595
+      ],
+      "warnings": [
+        "font_url_version_unverified"
+      ]
+    }
+  ]
+}

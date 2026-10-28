@@ -7,7 +7,7 @@ import { AigcVideoEnhancementAcceptance } from "@/components/workspace/aigc/aigc
 import { AigcVideoPlayer } from "@/components/workspace/aigc/aigc-video-player";
 import { getUserFacingErrorMessage } from "@/lib/api-client";
 import { getAigcVideoDownload } from "@/lib/aigc/download";
-import type { AigcResultAsset } from "@/lib/aigc/types";
+import type { AigcPipeline, AigcResultAsset } from "@/lib/aigc/types";
 import { getSafeAssetContentUrl } from "@/lib/asset-display";
 import { createServerApiClient } from "@/lib/auth/server-api-client";
 
@@ -19,6 +19,258 @@ const MOCK_VIDEO_ASSET: AigcResultAsset = {
   available: true
 };
 const MOCK_VIDEO_TITLE = "验收 Mock 成片";
+const VIDEO_LAST_FRAME_PIPELINE: AigcPipeline = {
+  id: "acceptance-video-last-frame",
+  name: "视频尾帧结果页验收",
+  description: "仅使用本地确定性 Run 和媒体响应。",
+  definition: {
+    schemaVersion: 1,
+    nodes: [
+      {
+        id: "video-model",
+        type: "video_generation",
+        custom_name: "秋日新品「鎏金」✨超长名称用于验证不会溢出容器",
+        position: { x: 80, y: 100 },
+        size: { width: 260, height: 190 },
+        config: {
+          model: "doubao-seedance-2-5-260628",
+          generation_mode: "text_to_video",
+          resolution: "1080p",
+          aspect_ratio: "16:9",
+          duration_seconds: 12,
+          generate_audio: true
+        }
+      },
+      {
+        id: "video-output",
+        type: "video_output",
+        position: { x: 440, y: 100 },
+        size: { width: 260, height: 190 },
+        config: { title: "下游成片" }
+      }
+    ],
+    edges: [
+      {
+        id: "video-edge",
+        sourceNodeId: "video-model",
+        sourceHandle: "video",
+        targetNodeId: "video-output",
+        targetHandle: "video"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  },
+  source_template_id: null,
+  source_template_revision: null,
+  revision: 1,
+  latest_run_status: "succeeded",
+  thumbnail_asset_id: null,
+  thumbnail: null,
+  created_at: "2026-10-22T00:00:00Z",
+  updated_at: "2026-10-22T00:00:00Z"
+};
+const MATERIALIZED_OUTPUT_PIPELINE: AigcPipeline = {
+  id: "acceptance-materialized-output",
+  name: "Mock 自动物化验收",
+  description: "浏览器路由提供确定性 Run 与媒体，不调用 Provider 或 TOS。",
+  definition: {
+    schemaVersion: 2,
+    nodes: [
+      {
+        id: "shared-prompt",
+        type: "text",
+        custom_name: "Mock 提示词",
+        position: { x: -280, y: 340 },
+        size: { width: 240, height: 180 },
+        config: {
+          text: "deterministic mock materialization",
+          bbox_references: [],
+          title: null
+        }
+      },
+      {
+        id: "image-model",
+        type: "text_to_image",
+        custom_name: "终端图片模型",
+        position: { x: 40, y: 40 },
+        size: { width: 240, height: 180 },
+        config: {
+          model: "doubao-seedream-5-0-pro-260628",
+          aspect_ratio: "1:1",
+          size: "2K",
+          format: "png"
+        }
+      },
+      {
+        id: "auto-image",
+        type: "image",
+        custom_name: "自动图片",
+        position: { x: 360, y: 40 },
+        size: { width: 260, height: 220 },
+        config: {
+          asset_id: "acceptance-materialized-image",
+          bbox: null,
+          bbox_asset_id: null,
+          title: null,
+          generated_by_model_node_id: "image-model",
+          generated_output_handle: "image",
+          generated_from_run_id: "acceptance-materialized-run"
+        }
+      },
+      {
+        id: "video-model",
+        type: "video_generation",
+        custom_name: "终端视频模型",
+        position: { x: 40, y: 340 },
+        size: { width: 240, height: 180 },
+        config: {
+          model: "doubao-seedance-2-5-260628",
+          generation_mode: "text_to_video",
+          resolution: "1080p",
+          aspect_ratio: "16:9",
+          duration_seconds: 5,
+          generate_audio: true
+        }
+      },
+      {
+        id: "auto-video",
+        type: "video",
+        custom_name: "自动视频",
+        position: { x: 360, y: 340 },
+        size: { width: 260, height: 220 },
+        config: {
+          asset_id: "acceptance-materialized-video",
+          title: null,
+          generated_by_model_node_id: "video-model",
+          generated_output_handle: "video",
+          generated_from_run_id: "acceptance-materialized-run"
+        }
+      },
+      {
+        id: "connected-model",
+        type: "text_to_image",
+        custom_name: "已有下游模型",
+        position: { x: 40, y: 640 },
+        size: { width: 240, height: 180 },
+        config: {
+          model: "doubao-seedream-5-0-pro-260628",
+          aspect_ratio: "1:1",
+          size: "2K",
+          format: "png"
+        }
+      },
+      {
+        id: "manual-output",
+        type: "image",
+        custom_name: "手工下游",
+        position: { x: 360, y: 640 },
+        size: { width: 260, height: 220 },
+        config: {
+          asset_id: "acceptance-manual-image",
+          bbox: null,
+          bbox_asset_id: null,
+          title: null
+        }
+      },
+      {
+        id: "reused-model",
+        type: "text_to_image",
+        custom_name: "缓存复用模型",
+        position: { x: 40, y: 940 },
+        size: { width: 240, height: 180 },
+        config: {
+          model: "doubao-seedream-5-0-pro-260628",
+          aspect_ratio: "1:1",
+          size: "2K",
+          format: "png"
+        }
+      },
+      {
+        id: "auto-reused-image",
+        type: "image",
+        custom_name: "复用自动图片",
+        position: { x: 360, y: 940 },
+        size: { width: 260, height: 220 },
+        config: {
+          asset_id: "acceptance-reused-image",
+          bbox: null,
+          bbox_asset_id: null,
+          title: null,
+          generated_by_model_node_id: "reused-model",
+          generated_output_handle: "image",
+          generated_from_run_id: "acceptance-materialized-run"
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "prompt-image-edge",
+        sourceNodeId: "shared-prompt",
+        sourceHandle: "text",
+        targetNodeId: "image-model",
+        targetHandle: "prompt"
+      },
+      {
+        id: "prompt-video-edge",
+        sourceNodeId: "shared-prompt",
+        sourceHandle: "text",
+        targetNodeId: "video-model",
+        targetHandle: "prompt"
+      },
+      {
+        id: "prompt-connected-edge",
+        sourceNodeId: "shared-prompt",
+        sourceHandle: "text",
+        targetNodeId: "connected-model",
+        targetHandle: "prompt"
+      },
+      {
+        id: "prompt-reused-edge",
+        sourceNodeId: "shared-prompt",
+        sourceHandle: "text",
+        targetNodeId: "reused-model",
+        targetHandle: "prompt"
+      },
+      {
+        id: "auto-image-edge",
+        sourceNodeId: "image-model",
+        sourceHandle: "image",
+        targetNodeId: "auto-image",
+        targetHandle: "image"
+      },
+      {
+        id: "auto-video-edge",
+        sourceNodeId: "video-model",
+        sourceHandle: "video",
+        targetNodeId: "auto-video",
+        targetHandle: "video"
+      },
+      {
+        id: "manual-edge",
+        sourceNodeId: "connected-model",
+        sourceHandle: "image",
+        targetNodeId: "manual-output",
+        targetHandle: "image"
+      },
+      {
+        id: "auto-reused-edge",
+        sourceNodeId: "reused-model",
+        sourceHandle: "image",
+        targetNodeId: "auto-reused-image",
+        targetHandle: "image"
+      }
+    ],
+    viewport: { x: 80, y: 30, zoom: 0.72 }
+  },
+  source_template_id: null,
+  source_template_revision: null,
+  revision: 4,
+  latest_run_status: "succeeded",
+  thumbnail_asset_id: "acceptance-materialized-image",
+  thumbnail: null,
+  created_at: "2026-10-23T00:00:00Z",
+  updated_at: "2026-10-23T00:00:04Z"
+};
 
 export default async function AigcAcceptancePage({
   searchParams
@@ -33,6 +285,24 @@ export default async function AigcAcceptancePage({
   const { pipelineId, scenario } = await searchParams;
   if (scenario === "mock-results") {
     return <MockMediaResults />;
+  }
+  if (scenario === "video-last-frame-result") {
+    return (
+      <AigcEditor
+        allowExecution={false}
+        entity={VIDEO_LAST_FRAME_PIPELINE}
+        mode="pipeline"
+      />
+    );
+  }
+  if (scenario === "materialized-output") {
+    return (
+      <AigcEditor
+        allowExecution={false}
+        entity={MATERIALIZED_OUTPUT_PIPELINE}
+        mode="pipeline"
+      />
+    );
   }
   if (scenario === "video-fullscreen") {
     return <AigcVideoFullscreenAcceptance />;

@@ -12,6 +12,7 @@
     "acceptance:aigc-flow-isolation:fixture": "node scripts/create-aigc-acceptance-fixture.mjs --flow-isolation",
     "acceptance:aigc-flow-isolation": "node scripts/verify-aigc-flow-run-isolation.mjs",
     "acceptance:aigc-generated-media-naming": "../.venv/bin/python scripts/verify-aigc-generated-media-naming.py",
+    "acceptance:aigc-model-output-materialization": "node scripts/verify-aigc-model-output-materialization.mjs",
     "acceptance:aigc-node-context-actions": "node scripts/verify-aigc-node-context-actions.mjs",
     "acceptance:aigc-prompt-optimization": "node scripts/verify-aigc-prompt-optimization.mjs",
     "acceptance:aigc-upstream-precise-edit": "node scripts/verify-aigc-upstream-precise-edit.mjs",

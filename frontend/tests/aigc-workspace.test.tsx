@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { parseAigcView } from "@/app/workspace/aigc/page";
 import { AigcWorkspace } from "@/components/workspace/aigc/aigc-workspace";
 import { AigcQueryProvider } from "@/components/workspace/aigc/providers/aigc-query-provider";
 import type {
@@ -9,6 +8,7 @@ import type {
   AigcPipelineDefinition,
   AigcPipelineTemplate
 } from "@/lib/aigc/types";
+import { parseAigcView } from "@/lib/aigc/workspace-view";
 
 const apiMocks = vi.hoisted(() => ({
   createAigcPipeline: vi.fn(),
