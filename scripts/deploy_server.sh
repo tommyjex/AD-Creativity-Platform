@@ -309,9 +309,12 @@ acquire_deployment_lock() {
 
 install_and_build() {
   log "Installing backend dependencies."
-  "$APP_ROOT/.venv/bin/python" \
-    -m pip install \
-    -r "$APP_ROOT/requirements.txt"
+  (
+    cd "$APP_ROOT"
+    "$APP_ROOT/.venv/bin/python" \
+      -m pip install \
+      -r "$APP_ROOT/requirements.txt"
+  )
 
   log "Compiling backend Python sources."
   "$APP_ROOT/.venv/bin/python" -m compileall -q "$APP_ROOT/backend"

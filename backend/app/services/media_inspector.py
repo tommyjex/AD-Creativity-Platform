@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Literal
 
 from PIL import Image, ImageOps, UnidentifiedImageError
+from video_subtitle_grounding.metadata import MediaInspectionError
 
 from backend.app.core.config import ConfigurationError, Settings, get_settings
 from backend.app.schemas import ReferenceAssetKind
@@ -50,10 +51,6 @@ MAX_VIDEO_PIXELS = 8_295_044
 MIN_VIDEO_FPS = 23.976
 MAX_VIDEO_FPS = 60.0
 MEDIA_INSPECTION_VERSION = 1
-
-
-class MediaInspectionError(ValueError):
-    pass
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,6 @@
 import asyncio
+from contextlib import asynccontextmanager
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -8,6 +10,7 @@ from backend.app.schemas import Status
 from backend.app.schemas.subtitle_translation import (
     SubtitleStageRequest,
     SubtitleWorkspaceUpdate,
+    SubtitleWorkspaceCreate,
 )
 from backend.tests.test_subtitle_translation_workspace import (
     extracted,
@@ -252,3 +255,198 @@ def test_layout_error_remains_actionable_without_provider_request(subtitle_servi
         "not a provider capacity guarantee" in failed.input_snapshot["failure_reason"]
     )
     assert client.submit.await_count == 0
+
+
+def tracked_extraction(service, tmp_path, *, response_failure=None):
+    """Use the real service/provider boundary with offline Files/Responses."""
+    from backend.app.services.video_subtitle_grounding import (
+        VideoSubtitleGroundingService,
+    )
+    from backend.app.services.video_subtitle_grounding_media import PreparedRemoteVideo
+    from backend.tests.test_video_subtitle_grounding_service import _metadata
+    from backend.tests.test_modelark_video_subtitle_grounding import (
+        FakeFilesClient, FakeRawResponse, _adapter, _payload,
+    )
+
+    workspace = service.create(
+        SubtitleWorkspaceCreate(reference_video_asset_id="reference")
+    )
+    task = service.submit(
+        workspace.id, "extract", SubtitleStageRequest(expected_revision=1)
+    )
+    path = tmp_path / "input.mp4"
+    path.write_bytes(b"video")
+    files = FakeFilesClient(
+        create_result=SimpleNamespace(id="file-original", status="processing"),
+        retrieve_results=[SimpleNamespace(id="file-original", status="active")],
+    )
+    adapter, responses = _adapter(
+        files=files,
+        response=response_failure
+        if response_failure is not None
+        else FakeRawResponse(_payload()),
+    )
+
+    retrieve = files.retrieve
+
+    def assert_saved_before_processing(file_id, **kwargs):
+        current_id = service.repository.get_subtitle_workspace(workspace.id).active_task_id
+        saved = service.repository.get_tool_task(current_id)
+        assert saved.input_snapshot["provider_file_id"] == file_id
+        assert datetime.fromisoformat(
+            saved.input_snapshot["provider_file_uploaded_at"]
+        ).tzinfo is not None
+        assert saved.status == Status.RUNNING
+        return retrieve(file_id, **kwargs)
+
+    files.retrieve = assert_saved_before_processing
+    service.grounding = VideoSubtitleGroundingService(
+        settings=adapter.settings, provider=adapter
+    )
+
+    @asynccontextmanager
+    async def open_asset(*args, **kwargs):
+        yield PreparedRemoteVideo(
+            path=path, mime_type="video/mp4", size_bytes=5, metadata=_metadata()
+        )
+
+    service.media = SimpleNamespace(open_asset=open_asset)
+    return workspace, task, files, responses
+
+
+@pytest.mark.parametrize("failure", ["none", "responses", "cancel"])
+def test_extraction_upload_association_survives_completion(
+    subtitle_service, tmp_path, failure, caplog,
+):
+    error = (
+        asyncio.CancelledError() if failure == "cancel"
+        else RuntimeError("private provider payload") if failure == "responses"
+        else None
+    )
+    service = subtitle_service
+    workspace, task, files, _ = tracked_extraction(
+        service, tmp_path, response_failure=error
+    )
+    caplog.set_level("INFO")
+    if failure == "cancel":
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(service.run(task.id))
+    else:
+        asyncio.run(service.run(task.id))
+    saved = service.repository.get_tool_task(task.id)
+    assert saved.input_snapshot["provider_file_id"] == "file-original"
+    assert saved.status == (Status.SUCCEEDED if failure == "none" else Status.FAILED)
+    assert files.delete_calls[0][0] == "file-original"
+    events = [
+        r.structured_context for r in caplog.records
+        if getattr(r, "structured_event", None) == "subtitle_translation.file_uploaded"
+    ]
+    assert events == [{
+        "workspace_id": workspace.id, "task_id": task.id,
+        "operation": "extract", "provider_file_id": "file-original",
+    }]
+    assert "private provider payload" not in caplog.text
+
+
+def test_extraction_retry_tracks_new_file_without_overwriting_original(
+    subtitle_service, tmp_path,
+):
+    service = subtitle_service
+    _, task, files, responses = tracked_extraction(
+        service, tmp_path, response_failure=RuntimeError("model failed")
+    )
+    asyncio.run(service.run(task.id))
+    retry = service.retry(task.id)
+    assert "provider_file_id" not in retry.input_snapshot
+    from backend.tests.test_modelark_video_subtitle_grounding import FakeRawResponse, _payload
+    responses.result = FakeRawResponse(_payload())
+    files.create_result = SimpleNamespace(id="file-retry", status="processing")
+    files.retrieve_results = [SimpleNamespace(id="file-retry", status="active")]
+    asyncio.run(service.run(retry.id))
+    assert service.repository.get_tool_task(task.id).input_snapshot["provider_file_id"] == "file-original"
+    assert service.repository.get_tool_task(retry.id).input_snapshot["provider_file_id"] == "file-retry"
+    assert service.repository.get_tool_task(retry.id).status == Status.SUCCEEDED
+
+
+def test_upload_tracking_preserves_inflight_draft_revision_and_latest_snapshot(
+    subtitle_service, tmp_path, monkeypatch,
+):
+    service = subtitle_service
+    workspace, task, _, _ = tracked_extraction(service, tmp_path)
+    record = service._record_uploaded_file
+    revised = []
+
+    def edit_then_record(task_id, file_id):
+        revised.append(service.patch(
+            workspace.id,
+            SubtitleWorkspaceUpdate(expected_revision=1, clean_video_asset_id="clean"),
+        ))
+        record(task_id, file_id)
+        saved = service.repository.get_subtitle_workspace(workspace.id)
+        assert saved.revision == revised[0].revision
+        assert saved.clean_video_asset_id == "clean"
+        assert saved.active_task_id == task.id
+
+    monkeypatch.setattr(service, "_record_uploaded_file", edit_then_record)
+    asyncio.run(service.run(task.id))
+    saved = service.repository.get_tool_task(task.id)
+    assert saved.input_snapshot["writeback_revision"] == revised[0].revision
+    assert saved.input_snapshot["provider_file_id"] == "file-original"
+    assert saved.status == Status.SUCCEEDED
+
+
+def test_upload_persistence_failure_prevents_inference_and_cleans_file(
+    subtitle_service, tmp_path, monkeypatch,
+):
+    service = subtitle_service
+    _, task, files, responses = tracked_extraction(service, tmp_path)
+    mutate = service.repository.mutate_subtitle_workspace
+
+    def fail_upload_save(workspace_id, callback):
+        def fail_if_upload(workspace, tasks):
+            result = callback(workspace, tasks)
+            changed = result[1]
+            if changed and "provider_file_id" in changed.input_snapshot:
+                raise RuntimeError("database unavailable")
+            return result
+        return mutate(workspace_id, fail_if_upload)
+
+    monkeypatch.setattr(service.repository, "mutate_subtitle_workspace", fail_upload_save)
+    asyncio.run(service.run(task.id))
+    saved = service.repository.get_tool_task(task.id)
+    assert saved.status == Status.FAILED
+    assert "provider_file_id" not in saved.input_snapshot
+    assert files.retrieve_calls == responses.calls == []
+    assert files.delete_calls[0][0] == "file-original"
+
+
+def test_restart_retains_uploaded_file_for_interrupted_task(subtitle_service, tmp_path):
+    service = subtitle_service
+    workspace, task, _, _ = tracked_extraction(service, tmp_path)
+    service.repository.update_tool_task(task.id, status=Status.RUNNING)
+    service._record_uploaded_file(task.id, "file-before-restart")
+    assert service.repository.get_subtitle_workspace(workspace.id).revision == 1
+    service.recover()
+    saved = service.repository.get_tool_task(task.id)
+    assert saved.status == Status.FAILED
+    assert saved.input_snapshot["provider_file_id"] == "file-before-restart"
+
+
+def test_late_upload_record_updates_history_without_reviving_stale_task(
+    subtitle_service, tmp_path,
+):
+    service = subtitle_service
+    workspace, task, _, _ = tracked_extraction(service, tmp_path)
+    revised = service.patch(
+        workspace.id,
+        SubtitleWorkspaceUpdate(
+            expected_revision=1, reference_video_asset_id="reference2"
+        ),
+    )
+    service._complete(task.id, error="stale extraction")
+    service._record_uploaded_file(task.id, "file-late-upload")
+    saved = service.repository.get_tool_task(task.id)
+    assert saved.status == Status.FAILED
+    assert saved.error.message == "stale extraction"
+    assert saved.input_snapshot["provider_file_id"] == "file-late-upload"
+    assert service.repository.get_subtitle_workspace(workspace.id) == revised

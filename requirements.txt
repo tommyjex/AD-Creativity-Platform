@@ -11,3 +11,4 @@ Pillow>=11.0.0,<13.0.0
 pillow-heif>=0.18.0,<2.0.0
 jsonpath-ng>=1.7.0,<2.0.0
 argon2-cffi>=23.1.0,<26.0.0
+./vendor/video_subtitle_grounding-0.2.1-py3-none-any.whl

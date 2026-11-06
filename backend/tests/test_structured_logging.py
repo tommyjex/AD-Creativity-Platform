@@ -93,6 +93,25 @@ def test_log_event_keeps_subtitle_validation_aggregates() -> None:
     }
 
 
+def test_upload_association_reaches_json_and_tls_without_payloads() -> None:
+    logger, output = _logger_with_output()
+    sink = _CapturingSink()
+    logger.addHandler(TlsLogHandler(
+        sink,
+        JsonStdoutFormatter(service="test", environment="test"),
+    ))
+    log_event(
+        logger, "subtitle_translation.file_uploaded", outcome="succeeded",
+        task_id="task-safe", provider_file_id="file-safe",
+        raw_output="private response", signed_url="https://example.test/?token=secret",
+    )
+    for event in (json.loads(output.getvalue()), sink.events[0]):
+        assert event["task_id"] == "task-safe"
+        assert event["provider_file_id"] == "file-safe"
+        assert "raw_output" not in event
+        assert "signed_url" not in event
+
+
 def test_formatter_redacts_sensitive_values_and_strips_url_queries() -> None:
     assert sanitize_value("authorization", "Bearer top-secret") == "[REDACTED]"
     assert sanitize_value("download_url", "https://example.test/file?signature=secret") == (

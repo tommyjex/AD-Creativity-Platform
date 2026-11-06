@@ -78,6 +78,7 @@ create_fixture() {
   write_executable "$APP_ROOT/.venv/bin/python" \
     '#!/usr/bin/env bash' \
     'if [[ "${1:-}" == "-" ]]; then exec "$REAL_PYTHON" "$@"; fi' \
+    'if [[ "$*" == "-m pip install"* ]]; then printf "pip_cwd=%s\n" "$PWD" >>"$COMMAND_LOG"; fi' \
     'printf "python %s\n" "$*" >>"$COMMAND_LOG"'
 
   write_executable "$FAKE_BIN/node" \
@@ -137,6 +138,8 @@ test_successful_deploy() {
 
   assert_contains "$COMMAND_LOG" "python -m pip install -r $APP_ROOT/requirements.txt" \
     "backend dependencies should be installed"
+  assert_contains "$COMMAND_LOG" "pip_cwd=$APP_ROOT" \
+    "relative wheel dependencies should resolve from the application root"
   assert_contains "$COMMAND_LOG" "python -m compileall -q $APP_ROOT/backend" \
     "backend should be compiled"
   assert_contains "$COMMAND_LOG" "npm ci next_public=http://wrong.example.test:8000" \

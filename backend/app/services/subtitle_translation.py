@@ -668,6 +668,33 @@ class SubtitleTranslationService:
             finished,
         )
 
+    def _record_uploaded_file(self, task_id, file_id):
+        """Save upload metadata independently of result/draft writeback."""
+        task = self.repository.get_tool_task(task_id)
+        log_event(
+            logger,
+            "subtitle_translation.file_uploaded",
+            outcome="succeeded",
+            workspace_id=task.input_snapshot["workspace_id"],
+            task_id=task_id,
+            operation=task.input_snapshot["operation"],
+            provider_file_id=file_id,
+        )
+
+        def mutate(workspace, tasks):
+            latest = next(t for t in tasks if t.id == task_id)
+            latest.input_snapshot = {
+                **latest.input_snapshot,
+                "provider_file_id": file_id,
+                "provider_file_uploaded_at": utc_now().isoformat(),
+            }
+            latest.updated_at = utc_now()
+            return workspace, latest
+
+        self.repository.mutate_subtitle_workspace(
+            task.input_snapshot["workspace_id"], mutate
+        )
+
     async def run(self, task_id):
         running = asyncio.current_task()
         self._running.add(running)
@@ -722,10 +749,18 @@ class SubtitleTranslationService:
                 media = self.media or SubtitleTranslationMediaService(
                     self.repository, self.asset_storage
                 )
+
+                async def on_file_uploaded(file_id):
+                    self._record_uploaded_file(task.id, file_id)
+
                 async with media.open_asset(
                     snapshot["reference_video_asset_id"], role="reference"
                 ) as prepared:
-                    response = await grounding.extract(prepared, sampling_fps=2.0)
+                    response = await grounding.extract(
+                        prepared,
+                        sampling_fps=2.0,
+                        on_file_uploaded=on_file_uploaded,
+                    )
                 result = {
                     "segments": [
                         SubtitleTranslationSegment(**s.model_dump()).model_dump(

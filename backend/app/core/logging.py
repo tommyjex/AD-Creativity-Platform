@@ -55,6 +55,7 @@ _SAFE_CONTEXT_FIELDS = frozenset(
         "provider",
         "provider_request_id",
         "provider_task_id",
+        "provider_file_id",
         "provider_code",
         "model",
         "phase",

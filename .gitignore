@@ -26,3 +26,6 @@ test-results/
 # Local TLS certificates and private keys
 frontend/.certificates/
 *.key
+
+# Independent extraction repository; platform consumes its versioned wheel.
+/standalone/
