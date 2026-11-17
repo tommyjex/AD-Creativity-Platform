@@ -1,0 +1,6398 @@
+{
+  "fonts": {
+    "AvenirLTStdBlack": {
+      "url": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+      "sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+      "bytes": 28688,
+      "font_name": [
+        "Avenir LT Std",
+        "95 Black"
+      ]
+    },
+    "AvenirLTStdLight": {
+      "url": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+      "sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+      "bytes": 28084,
+      "font_name": [
+        "Avenir LT Std",
+        "35 Light"
+      ]
+    },
+    "CenturyGothicBold": {
+      "url": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "bytes": 129676,
+      "font_name": [
+        "Century Gothic",
+        "Bold"
+      ]
+    },
+    "SY_Black": {
+      "url": "https://raw.githubusercontent.com/adobe-fonts/source-han-sans/a4f7cf94edfb9d7ffbdfc4841de276358bd7e0f2/SubsetOTF/CN/SourceHanSansCN-Regular.otf",
+      "sha256": "e2bc8a2e7f37474b774fff8db758681ece40bb6947a90d571bce9dd60671a8e4",
+      "bytes": 8429224,
+      "font_name": [
+        "Source Han Sans CN",
+        "Regular"
+      ]
+    }
+  },
+  "catalog_examples": 72,
+  "extra_examples": 4,
+  "shared_baseline": true,
+  "transparent_rgba": true,
+  "glyph_edges_not_clipped": true,
+  "real_model_called": false,
+  "real_mediakit_called": false,
+  "examples": [
+    {
+      "text": "iFLOOR 3",
+      "png_sha256": "8dbd8e4cf68a7ae41a45d9623969d6349cf017505239f4563efb0de9d26944b5",
+      "alpha_bounds": [
+        364,
+        5,
+        658,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-0",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 303,
+        "measured_text_width_px": 302.359375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 8,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "iFLOOR 3",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 361.8203125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 298.359375
+          }
+        ],
+        "render_layer_asset_id": "f8e80f88f3b1a2387755cfa8bc7fcc80079f4d9d8d1c8baa567fc98c2c4f0564",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 8,
+            "model": "iFLOOR 3",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "iFLOOR 3 Breeze Complete",
+      "png_sha256": "49e93d053b70be199b8ff4ccadd8897ee6b5feac4d00e3708e677b4ee7a5bdd9",
+      "alpha_bounds": [
+        104,
+        3,
+        917,
+        67
+      ],
+      "layout": {
+        "segment_id": "sample-1",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 823,
+        "measured_text_width_px": 822.6875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 8,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "iFLOOR 3",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 101.65625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 298.359375
+          },
+          {
+            "start": 8,
+            "end": 24,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Breeze Complete",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 400.015625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 520.328125
+          }
+        ],
+        "render_layer_asset_id": "122e43314cc641beefb196faa217152d6d78f562676c9b7f8fad6a1430cd96e2",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 24,
+            "model": "iFLOOR 3",
+            "spec": "Breeze Complete",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "iFLOOR Y2",
+      "png_sha256": "31bb21f90a8dca1989ec067bcf04f8d41a752532193241a8b39f54675bb4eda4",
+      "alpha_bounds": [
+        343,
+        5,
+        679,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-2",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 345,
+        "measured_text_width_px": 344.484375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 9,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "iFLOOR Y2",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 340.7578125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 340.484375
+          }
+        ],
+        "render_layer_asset_id": "c85d1fa78322c26de65107887609f709371c4792df78d61deeec2dde0d4c7b2c",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 9,
+            "model": "iFLOOR Y2",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "iFLOOR Y5",
+      "png_sha256": "37dbada93676f20bce949f1f5b0d9757ed8dae7cb66bea51d347cb06a2feba56",
+      "alpha_bounds": [
+        343,
+        5,
+        679,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-3",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 345,
+        "measured_text_width_px": 344.484375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 9,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "iFLOOR Y5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 340.7578125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 340.484375
+          }
+        ],
+        "render_layer_asset_id": "c144a65ea7e890122b5adfb21768b79976a0dbd3d72b800f278321aec7070bf6",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 9,
+            "model": "iFLOOR Y5",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "iFLOOR 5 Breeze",
+      "png_sha256": "973f303d0e6a22229c66c9557af9bf46a2c2455ffe25d5f1cf11a6ed045347dd",
+      "alpha_bounds": [
+        257,
+        5,
+        764,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-4",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 517,
+        "measured_text_width_px": 516.796875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 8,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "iFLOOR 5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 254.6015625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 298.359375
+          },
+          {
+            "start": 8,
+            "end": 15,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Breeze",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 552.9609375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 214.4375
+          }
+        ],
+        "render_layer_asset_id": "f50d15f004eec89227194883fd227057dc1bf91929ac7680e93d8d88e7efa9d8",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 15,
+            "model": "iFLOOR 5",
+            "spec": "Breeze",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "iFLOOR 5 Steam",
+      "png_sha256": "475dfc488a250217c0ebb9e70f4f67ea5cbf33c203ff780fbf98298be12d16a1",
+      "alpha_bounds": [
+        264,
+        5,
+        756,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-5",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 503,
+        "measured_text_width_px": 502.359375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 8,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "iFLOOR 5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 261.8203125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 298.359375
+          },
+          {
+            "start": 8,
+            "end": 14,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Steam",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 560.1796875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 199.9375
+          }
+        ],
+        "render_layer_asset_id": "2e7dc88cacac332812696bff839570b1dacf4d017001312ee9662e50e5477a14",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 14,
+            "model": "iFLOOR 5",
+            "spec": "Steam",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE i5 Stretch",
+      "png_sha256": "59cb37ead064300587d063a640fa797324bff5cae4e8c1ae0b1305e6eb92f9d1",
+      "alpha_bounds": [
+        173,
+        3,
+        849,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-6",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 690,
+        "measured_text_width_px": 689.9375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE i5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 168.03125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 465.59375
+          },
+          {
+            "start": 12,
+            "end": 20,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 633.625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 220.34375
+          }
+        ],
+        "render_layer_asset_id": "c9f6139c0108ce3b63f2d54c676c789594cad4ace5f08d66aa623c523469af87",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 20,
+            "model": "FLOOR ONE i5",
+            "spec": "Stretch",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE i5 Max",
+      "png_sha256": "c6467cb6f3a9a432a5a4634f5e8f514750143c23498674564e63cda3c8f2ccd9",
+      "alpha_bounds": [
+        213,
+        5,
+        813,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-7",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 610,
+        "measured_text_width_px": 609.59375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE i5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 208.203125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 465.59375
+          },
+          {
+            "start": 12,
+            "end": 16,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Max",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 673.796875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 139.6875
+          }
+        ],
+        "render_layer_asset_id": "2eaa8e260b3de0fa624a38499a8b4b6a73b54b59120819d3ce1cc064952b1d00",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 16,
+            "model": "FLOOR ONE i5",
+            "spec": "Max",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE i6 Stretch",
+      "png_sha256": "eaceb218c5d75a8ab226f6084952ede13642d2467a6e6f380deafb7e108dcd15",
+      "alpha_bounds": [
+        173,
+        3,
+        849,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-8",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 690,
+        "measured_text_width_px": 689.9375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE i6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 168.03125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 465.59375
+          },
+          {
+            "start": 12,
+            "end": 20,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 633.625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 220.34375
+          }
+        ],
+        "render_layer_asset_id": "d3974d09cfcd50feeda573377fda17f5e81b9fd77087126ee97629dbddb3bd2c",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 20,
+            "model": "FLOOR ONE i6",
+            "spec": "Stretch",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE SWITCH i5 Stretch Breeze",
+      "png_sha256": "ea957a1f558fed5b4b8b8650a071241fa420955aa5eabbb8428bd88834077992",
+      "alpha_bounds": [
+        7,
+        5,
+        1047,
+        50
+      ],
+      "layout": {
+        "segment_id": "sample-9",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          64,
+          80,
+          1116,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 58,
+        "desired_text_width_px": 1177,
+        "measured_text_width_px": 1050.125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 19,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE SWITCH i5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 2.9375,
+            "baseline_px": 49.5,
+            "font_size_px": 58,
+            "advance_px": 658.125
+          },
+          {
+            "start": 19,
+            "end": 34,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch Breeze",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 661.0625,
+            "baseline_px": 49.5,
+            "font_size_px": 58,
+            "advance_px": 387.953125
+          }
+        ],
+        "render_layer_asset_id": "cd3a4d4abe2bc257e02777dcdae0da8c70db4c3a4fafec90c56f5356c5411b60",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 34,
+            "model": "FLOOR ONE SWITCH i5",
+            "spec": "Stretch Breeze",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 44,
+        "descent_px": 15,
+        "warnings": [
+          "background_unknown",
+          "bbox_expanded",
+          "bbox_expansion_limited",
+          "contrast_unverified",
+          "expanded_background_unverified",
+          "font_size_reduced"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE SWITCH i5 Power Kit",
+      "png_sha256": "0e0310c23575ed7ac4f9696b5592e01af96d96821941d72868cae34731247668",
+      "alpha_bounds": [
+        7,
+        5,
+        1029,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-10",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          74,
+          80,
+          1106,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 1032,
+        "measured_text_width_px": 1031.78125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 19,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE SWITCH i5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 2.109375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 737.546875
+          },
+          {
+            "start": 19,
+            "end": 29,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Power Kit",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 739.65625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 290.234375
+          }
+        ],
+        "render_layer_asset_id": "1bc4936256bb37cd803eaec9ff8e0ad6a9619b0c285ca040d0ead6b2fda743c4",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 29,
+            "model": "FLOOR ONE SWITCH i5",
+            "spec": "Power Kit",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "bbox_expanded",
+          "contrast_unverified",
+          "expanded_background_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE SWITCH i5 Stretch",
+      "png_sha256": "6d83857f9b4cc05d3b5e8940f8ac09f2987a044e4aeca88f58f8135e44fb78e9",
+      "alpha_bounds": [
+        37,
+        3,
+        985,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-11",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 962,
+        "measured_text_width_px": 961.890625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 19,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE SWITCH i5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 32.0546875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 737.546875
+          },
+          {
+            "start": 19,
+            "end": 27,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 769.6015625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 220.34375
+          }
+        ],
+        "render_layer_asset_id": "27d700f8c67ed818c4fbb5f9fe1c06aa0f3d39b614fc069734c196ce9e327145",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 27,
+            "model": "FLOOR ONE SWITCH i5",
+            "spec": "Stretch",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE SWITCH i6 Stretch",
+      "png_sha256": "85edd8f4952d950563f60728fb0c9405046bca4dec7e80435e9146c446bf785b",
+      "alpha_bounds": [
+        37,
+        3,
+        985,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-12",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 962,
+        "measured_text_width_px": 961.890625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 19,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE SWITCH i6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 32.0546875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 737.546875
+          },
+          {
+            "start": 19,
+            "end": 27,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 769.6015625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 220.34375
+          }
+        ],
+        "render_layer_asset_id": "ab3f7bf33f0ca1cb82de6cee499528427248272d2d37f1f2845b3b5004c5996c",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 27,
+            "model": "FLOOR ONE SWITCH i6",
+            "spec": "Stretch",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE SWITCH S6 Stretch Breeze",
+      "png_sha256": "07b2ed23f69ba2c2a5d0663d722dbb7abf1a3f74579d2568d5ead9a7c4747e66",
+      "alpha_bounds": [
+        7,
+        7,
+        1046,
+        51
+      ],
+      "layout": {
+        "segment_id": "sample-13",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          64,
+          80,
+          1116,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 57,
+        "desired_text_width_px": 1197,
+        "measured_text_width_px": 1049.921875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 19,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE SWITCH S6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 3.0390625,
+            "baseline_px": 50.0,
+            "font_size_px": 57,
+            "advance_px": 664.6875
+          },
+          {
+            "start": 19,
+            "end": 34,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch Breeze",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 667.7265625,
+            "baseline_px": 50.0,
+            "font_size_px": 57,
+            "advance_px": 381.234375
+          }
+        ],
+        "render_layer_asset_id": "625b532e64e2f8dc644f4367e225cc6d5d0af1d0606f7a46d177dc9b54fbdd89",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 34,
+            "model": "FLOOR ONE SWITCH S6",
+            "spec": "Stretch Breeze",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 44,
+        "descent_px": 14,
+        "warnings": [
+          "background_unknown",
+          "bbox_expanded",
+          "bbox_expansion_limited",
+          "contrast_unverified",
+          "expanded_background_unverified",
+          "font_size_reduced"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE SWITCH S6 Power Kit",
+      "png_sha256": "a16916c0faa821bc68d0dfd72da2dd4555a92185b2cf65d92df49924fea317b9",
+      "alpha_bounds": [
+        14,
+        5,
+        1041,
+        52
+      ],
+      "layout": {
+        "segment_id": "sample-14",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          64,
+          80,
+          1116,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 64,
+        "desired_text_width_px": 1053,
+        "measured_text_width_px": 1036.28125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 19,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE SWITCH S6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 9.859375,
+            "baseline_px": 51.5,
+            "font_size_px": 64,
+            "advance_px": 746.28125
+          },
+          {
+            "start": 19,
+            "end": 29,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Power Kit",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 756.140625,
+            "baseline_px": 51.5,
+            "font_size_px": 64,
+            "advance_px": 285.765625
+          }
+        ],
+        "render_layer_asset_id": "6c29c4799a2c2f763ce4e775cf3494920fb74911bca7f4efdaa9ecb468084add",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 29,
+            "model": "FLOOR ONE SWITCH S6",
+            "spec": "Power Kit",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 49,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "bbox_expanded",
+          "bbox_expansion_limited",
+          "contrast_unverified",
+          "expanded_background_unverified",
+          "font_size_reduced"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S5 Pro",
+      "png_sha256": "757c60897b07429fdb3ba57a5836d2e6fa3332e38dff55f23efe3d68e1062aad",
+      "alpha_bounds": [
+        216,
+        5,
+        808,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-15",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 604,
+        "measured_text_width_px": 603.296875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 211.3515625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 16,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 697.3515625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 113.296875
+          }
+        ],
+        "render_layer_asset_id": "bdfca6cda3bfccc0f00a974ff68fec4a35d75d3eccd048e4db8b10ce11041560",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 16,
+            "model": "FLOOR ONE S5",
+            "spec": "Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S5 Pro 2",
+      "png_sha256": "ba632ee8d8f9fe5c5eebc70de28c44b13e53b6c603edc78d2e2c3e33cbe692ba",
+      "alpha_bounds": [
+        191,
+        5,
+        834,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-16",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 654,
+        "measured_text_width_px": 654.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 186.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 18,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pro 2",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 672.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 164.0
+          }
+        ],
+        "render_layer_asset_id": "ff799bdf090928ec9925f99bb7e0b01170d16c7984428d01b08430e3052af8ef",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 18,
+            "model": "FLOOR ONE S5",
+            "spec": "Pro 2",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S5 Steam",
+      "png_sha256": "756f2063fb85c0ba0bdbc6852704418e3a9f3bc0b1aa9efed41e24dd72b6317c",
+      "alpha_bounds": [
+        173,
+        5,
+        850,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-17",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 690,
+        "measured_text_width_px": 690.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 168.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 18,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Steam",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 654.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 199.9375
+          }
+        ],
+        "render_layer_asset_id": "7675f13ee9392482ef89ac27bf315ea8fc5386690ae6fed46a9f7194d24ec515",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 18,
+            "model": "FLOOR ONE S5",
+            "spec": "Steam",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S5 Max",
+      "png_sha256": "911b84fbd2c201e4c9ffee79bb6125c8acad763ddb8007bd61dfdcc91e9273ee",
+      "alpha_bounds": [
+        203,
+        5,
+        823,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-18",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 630,
+        "measured_text_width_px": 630.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 198.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 16,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Max",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 684.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 139.6875
+          }
+        ],
+        "render_layer_asset_id": "6bef51cb76d089491ff80ab0f5f415a7dcb0eaf4c265238bf259945191eff8de",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 16,
+            "model": "FLOOR ONE S5",
+            "spec": "Max",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S5 Combo Power Kit",
+      "png_sha256": "68d04cf848fa39403f29dcf88ac1511958e6653e88fe63a3603b155a73c8768a",
+      "alpha_bounds": [
+        10,
+        3,
+        1016,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-19",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 1016,
+        "measured_text_width_px": 1015.21875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 5.390625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 28,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Combo Power Kit",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 491.390625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 525.21875
+          }
+        ],
+        "render_layer_asset_id": "43a7446bb23627de5231ee8185e5cccde44903b839560ef401f881c4c0d61bd8",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 28,
+            "model": "FLOOR ONE S5",
+            "spec": "Combo Power Kit",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S5 Stretch",
+      "png_sha256": "4967ffbbc22f2137c59a1cf8e9fc8c8a29ec36f92b59787055e1b05f51d8f377",
+      "alpha_bounds": [
+        163,
+        3,
+        859,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-20",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 711,
+        "measured_text_width_px": 710.34375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 157.828125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 20,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 643.828125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 220.34375
+          }
+        ],
+        "render_layer_asset_id": "f35e481b4d849b573b4e8bc7e56cd64a9b6a291bb1ee9cf51e5387aef9978715",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 20,
+            "model": "FLOOR ONE S5",
+            "spec": "Stretch",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S6",
+      "png_sha256": "eb78681f68f15684003ad8af2a14fd5b9e21f5f91cf7de3d62c5fa432036ef56",
+      "alpha_bounds": [
+        273,
+        5,
+        753,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-21",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 490,
+        "measured_text_width_px": 490.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 268.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          }
+        ],
+        "render_layer_asset_id": "bd77b55e1d412827e96e3065ccdfcaa5724a1b1a39e9fc8e6967dbc348f73df7",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 12,
+            "model": "FLOOR ONE S6",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S6 Stretch Lite",
+      "png_sha256": "20d5bc2c52db50968cf8b9af51b7d0c9a952e2f7c721116941260d6c24e9cd62",
+      "alpha_bounds": [
+        101,
+        3,
+        922,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-22",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 834,
+        "measured_text_width_px": 833.125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 96.4375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 25,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch Lite",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 582.4375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 343.125
+          }
+        ],
+        "render_layer_asset_id": "2f15385772eac9ab8088b3483673c65e58b9dd11b42f5db443003f84a06d7528",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 25,
+            "model": "FLOOR ONE S6",
+            "spec": "Stretch Lite",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S6 Stretch Pro",
+      "png_sha256": "d7856035addbd324004e867a6be95546e5c227ab8cc5c3b874471142848c369b",
+      "alpha_bounds": [
+        106,
+        3,
+        918,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-23",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 824,
+        "measured_text_width_px": 824.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 101.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 24,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 587.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 333.640625
+          }
+        ],
+        "render_layer_asset_id": "4040ba6640e5ee7c5399f3ba8d94d817801bd20f843b2d9afdc3f02f3453ef4b",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 24,
+            "model": "FLOOR ONE S6",
+            "spec": "Stretch Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S6 Stretch Ultra",
+      "png_sha256": "441d492990a574e2f32bf619f1ae00841134b58643be9e0be341d07a4fad1722",
+      "alpha_bounds": [
+        86,
+        3,
+        937,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-24",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 865,
+        "measured_text_width_px": 864.3125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 80.84375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 26,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch Ultra",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 566.84375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 374.3125
+          }
+        ],
+        "render_layer_asset_id": "3750105ac44262a071b723facd42014c63a3502553349d4a913e4759be1b141c",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 26,
+            "model": "FLOOR ONE S6",
+            "spec": "Stretch Ultra",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE STRETCH S6",
+      "png_sha256": "7785db20a14908a0aaa6a43dfad53e632068ed4ca0368de3c142104d9689b9dd",
+      "alpha_bounds": [
+        119,
+        5,
+        907,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-25",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 799,
+        "measured_text_width_px": 798.109375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 20,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE STRETCH S6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 113.9453125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 794.109375
+          }
+        ],
+        "render_layer_asset_id": "7cc289a0a7b945c1fa5d4b127105fb1433e5a60ffcf5c79029ff43e11410f7fa",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 20,
+            "model": "FLOOR ONE STRETCH S6",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE SWITCH S6 Stretch",
+      "png_sha256": "85818056a3bc394c55a54d74bb1aab59f638f3f6a1046e95ce0004f7871f29de",
+      "alpha_bounds": [
+        27,
+        3,
+        995,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-26",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 983,
+        "measured_text_width_px": 982.296875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 19,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE SWITCH S6",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 21.8515625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 757.953125
+          },
+          {
+            "start": 19,
+            "end": 27,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 779.8046875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 220.34375
+          }
+        ],
+        "render_layer_asset_id": "8395f9f0c36037430beb91ba67734003fcf14979f4123d3b51de2a2a2d5167fe",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 27,
+            "model": "FLOOR ONE SWITCH S6",
+            "spec": "Stretch",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S7 Pro",
+      "png_sha256": "9bf149dc1d34ad3475a85256eee9874a9a4018d6bcd43d38b4116d1c988c00be",
+      "alpha_bounds": [
+        216,
+        5,
+        808,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-27",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 604,
+        "measured_text_width_px": 603.296875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 211.3515625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 16,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 697.3515625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 113.296875
+          }
+        ],
+        "render_layer_asset_id": "a8a9dd8325e4381f08b353bfae3f64feffb79d7f90c26c7115042279c1da8fab",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 16,
+            "model": "FLOOR ONE S7",
+            "spec": "Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S7 FlashDry",
+      "png_sha256": "318cda1e1587ab356ead56b447644b233625b90789c8bc660f25563b8c3edb29",
+      "alpha_bounds": [
+        140,
+        3,
+        887,
+        68
+      ],
+      "layout": {
+        "segment_id": "sample-28",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 757,
+        "measured_text_width_px": 756.109375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 134.9453125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 21,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " FlashDry",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 620.9453125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 266.109375
+          }
+        ],
+        "render_layer_asset_id": "62231987390efc281c0d5615fe989b6d62b9c1abc844dc2ae38c557d0816f838",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 21,
+            "model": "FLOOR ONE S7",
+            "spec": "FlashDry",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S7 Steam",
+      "png_sha256": "456851bdac77cc3951a3ec88e1007d925d2ee2b6d4a55892a1edda3236d11267",
+      "alpha_bounds": [
+        173,
+        5,
+        850,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-29",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 690,
+        "measured_text_width_px": 690.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 168.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 18,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Steam",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 654.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 199.9375
+          }
+        ],
+        "render_layer_asset_id": "8dfb8743b1538a81d67fc5cbd1788860af10052b71c313fbf3ffb56db9b94a1d",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 18,
+            "model": "FLOOR ONE S7",
+            "spec": "Steam",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S7 Max Pro",
+      "png_sha256": "6df30d20f119d4557e32bd26a3a8160cf30da0f39ed3814ee2bf437450aa159f",
+      "alpha_bounds": [
+        147,
+        5,
+        878,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-30",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 743,
+        "measured_text_width_px": 743.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 141.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 20,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Max Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 627.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 252.984375
+          }
+        ],
+        "render_layer_asset_id": "676d708061484a7a0d9640cc13b0d03f8232e70d619c2b664e94965f307da431",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 20,
+            "model": "FLOOR ONE S7",
+            "spec": "Max Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S7 Stretch",
+      "png_sha256": "9443f367ee32c1dbf330b3268f6283e32fd7d37ac11896d5801cca4b8d5a00ed",
+      "alpha_bounds": [
+        163,
+        3,
+        859,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-31",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 711,
+        "measured_text_width_px": 710.34375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 157.828125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 20,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 643.828125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 220.34375
+          }
+        ],
+        "render_layer_asset_id": "687bf8e9779e5bce9042a8d9bad2d055ccb9b8c4a2059ff5f01d29212a0f517c",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 20,
+            "model": "FLOOR ONE S7",
+            "spec": "Stretch",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S7 Stretch Ultra",
+      "png_sha256": "15b67593204be84d35f1d037ec69e09c8ed219fb827210dbf10eb683ad558249",
+      "alpha_bounds": [
+        86,
+        3,
+        937,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-32",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 865,
+        "measured_text_width_px": 864.3125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 80.84375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 26,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch Ultra",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 566.84375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 374.3125
+          }
+        ],
+        "render_layer_asset_id": "2bddb4f7063d64822b9715d52f45246d16787174585ae01f5d4d421e16f5106b",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 26,
+            "model": "FLOOR ONE S7",
+            "spec": "Stretch Ultra",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S7 Stretch Steam",
+      "png_sha256": "9fc398e636ebc8b9138e52765b8e33626ca3fe78bec5cb14ebc31e560306de60",
+      "alpha_bounds": [
+        63,
+        3,
+        960,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-33",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 911,
+        "measured_text_width_px": 910.28125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 57.859375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 26,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch Steam",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 543.859375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 420.28125
+          }
+        ],
+        "render_layer_asset_id": "8cdad2f7bb21152266ab65d7f01e5423a096cd24ba79c892a5f439a271ff3d6c",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 26,
+            "model": "FLOOR ONE S7",
+            "spec": "Stretch Steam",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S7 Stretch Steam Plus",
+      "png_sha256": "c7e004e3ccb38d4c5c608b92cb7858bdf553040edf3927a0cc2676c2e12781c4",
+      "alpha_bounds": [
+        7,
+        3,
+        1039,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-34",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          68,
+          80,
+          1112,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 1044,
+        "measured_text_width_px": 1044.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 2.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 31,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch Steam Plus",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 488.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 553.921875
+          }
+        ],
+        "render_layer_asset_id": "bdf4e2d4745e83febaa70f9148d9366074cfd1dd8d7d88d443d5601c8f3e8780",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 31,
+            "model": "FLOOR ONE S7",
+            "spec": "Stretch Steam Plus",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "bbox_expanded",
+          "contrast_unverified",
+          "expanded_background_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE SWITCH S7",
+      "png_sha256": "28bd62974eb1f6e71deaa8c20b5b9f7112b170924ad05606038f05631fc44ab6",
+      "alpha_bounds": [
+        137,
+        5,
+        888,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-35",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 762,
+        "measured_text_width_px": 762.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 19,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE SWITCH S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 132.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 757.953125
+          }
+        ],
+        "render_layer_asset_id": "c5519a718d2371f54d7b89195403ed17e2b84c148ed4e1bc1a03f458afd1229b",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 19,
+            "model": "FLOOR ONE SWITCH S7",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE SWITCH S7 Stretch",
+      "png_sha256": "6bf0536b5325b1ac84d8f45ac026ad2915ff46a9eed6c200edc2775a467cc218",
+      "alpha_bounds": [
+        27,
+        3,
+        995,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-36",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 983,
+        "measured_text_width_px": 982.296875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 19,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE SWITCH S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 21.8515625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 757.953125
+          },
+          {
+            "start": 19,
+            "end": 27,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 779.8046875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 220.34375
+          }
+        ],
+        "render_layer_asset_id": "78023fcdf8b598802d68e40527c25d281ad5852d3055eb5e469fecf20270f90a",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 27,
+            "model": "FLOOR ONE SWITCH S7",
+            "spec": "Stretch",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S7 Artist",
+      "png_sha256": "bc1e65b0daa75379a2908ec0181ecc5a4eac4024de11956ff554e122cd416af9",
+      "alpha_bounds": [
+        188,
+        5,
+        838,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-37",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 660,
+        "measured_text_width_px": 660.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S7",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 183.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 19,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Artist",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 669.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 169.640625
+          }
+        ],
+        "render_layer_asset_id": "3394e36ddc0f5d5f9bc02b19352673235edd3122e6ec4ac36a7ea6e186244415",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 19,
+            "model": "FLOOR ONE S7",
+            "spec": "Artist",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S9 Artist",
+      "png_sha256": "e9d9efc738bd494aa52e428fbd99e755d1747138122a7d32c6676b3c2be0ce7a",
+      "alpha_bounds": [
+        188,
+        5,
+        838,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-38",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 660,
+        "measured_text_width_px": 660.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S9",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 183.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 19,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Artist",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 669.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 169.640625
+          }
+        ],
+        "render_layer_asset_id": "bc224349b964aad13724c2cebf079c53f66161c5c1064128fe48b55beae8e5d6",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 19,
+            "model": "FLOOR ONE S9",
+            "spec": "Artist",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S9 Artist Premium",
+      "png_sha256": "91c4e778881c0589659f994e502cbe9de7bd4fc28bcd608ca72688b32bc48413",
+      "alpha_bounds": [
+        52,
+        5,
+        971,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-39",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 933,
+        "measured_text_width_px": 933.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S9",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 46.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 27,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Artist Premium",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 532.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 442.953125
+          }
+        ],
+        "render_layer_asset_id": "cb7ba65d477c58518fa472e8abc004e69e16d7099ac19d460361ed19e4961184",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 27,
+            "model": "FLOOR ONE S9",
+            "spec": "Artist Premium",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S9 Artist Pro",
+      "png_sha256": "047f611f2efdbb35a9848fac3e97f95ecacf3f7c62e68d8ae34ea4cd3a14102f",
+      "alpha_bounds": [
+        132,
+        5,
+        893,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-40",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 773,
+        "measured_text_width_px": 773.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S9",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 126.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 23,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Artist Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 612.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 282.9375
+          }
+        ],
+        "render_layer_asset_id": "e9065fa5200652750c3add6751e4756ea7743d35b51fa2b1d4905c10235a17ac",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 23,
+            "model": "FLOOR ONE S9",
+            "spec": "Artist Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S9 Artist Steam",
+      "png_sha256": "844cbf0c52157227ae4e0dac1158f33c152fd821713de9f4fa82d7dd954ee08a",
+      "alpha_bounds": [
+        88,
+        5,
+        934,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-41",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 860,
+        "measured_text_width_px": 860.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S9",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 83.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 486.0
+          },
+          {
+            "start": 12,
+            "end": 25,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Artist Steam",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 569.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 369.578125
+          }
+        ],
+        "render_layer_asset_id": "f0290fca1a8de57d1daec1dc60a0a9f4656021ba9911f1e47cf1a3129c7196c0",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 25,
+            "model": "FLOOR ONE S9",
+            "spec": "Artist Steam",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE STATION S9 Artist",
+      "png_sha256": "c11ae541771ad9b053932f9e72cb9997b1a5853acb139b7d98a7708c30a5ee5e",
+      "alpha_bounds": [
+        41,
+        5,
+        985,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-42",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 954,
+        "measured_text_width_px": 953.65625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 20,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE STATION S9",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 36.171875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 779.65625
+          },
+          {
+            "start": 20,
+            "end": 27,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Artist",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 815.828125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 169.640625
+          }
+        ],
+        "render_layer_asset_id": "f8d348d1739e0b57f14e076ae7b90018004f5d8ff209528822836473080c6c60",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 27,
+            "model": "FLOOR ONE STATION S9",
+            "spec": "Artist",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE AIR",
+      "png_sha256": "5c61a9bb8d3ebf1022195215180fd8d20792138fd2c8a9f6f06c14cb2e28f2eb",
+      "alpha_bounds": [
+        281,
+        5,
+        745,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-43",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 473,
+        "measured_text_width_px": 472.203125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE AIR",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 276.8984375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 468.203125
+          }
+        ],
+        "render_layer_asset_id": "7dc8418c7437ab2ddd1f8782200ac5a8f97fa8237583c1a6211dbad7eb091d94",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 12,
+            "model": "PURE ONE AIR",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE AIR Pet",
+      "png_sha256": "694328f6012a986e5f850d3fcf7f948bfb43fad4cb1f13fa85c65e085a556f88",
+      "alpha_bounds": [
+        225,
+        5,
+        800,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-44",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 585,
+        "measured_text_width_px": 584.203125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE AIR",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 220.8984375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 468.203125
+          },
+          {
+            "start": 12,
+            "end": 16,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pet",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 689.1015625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 112.0
+          }
+        ],
+        "render_layer_asset_id": "0df1dbc5417862045e620eb6196c263d61588765f10d4a6c05f31f1209760d21",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 16,
+            "model": "PURE ONE AIR",
+            "spec": "Pet",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE X Essentials",
+      "png_sha256": "48e9e8ee4c64c4522dc7a5f14f179dfb94d9d98282382641490d8570674a21f2",
+      "alpha_bounds": [
+        164,
+        3,
+        860,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-45",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 707,
+        "measured_text_width_px": 706.96875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 10,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE X",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 159.515625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 405.609375
+          },
+          {
+            "start": 10,
+            "end": 21,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Essentials",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 565.125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 297.359375
+          }
+        ],
+        "render_layer_asset_id": "d7a813fc50a33732e87806e43cd8cbf787cd8f271ac24ae8ca9b3871ad39a844",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 21,
+            "model": "PURE ONE X",
+            "spec": "Essentials",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "A11 Hero",
+      "png_sha256": "ac581163a49ac9994edc1b62c530ae5a6db1aae644eabda67e077f9994a030e3",
+      "alpha_bounds": [
+        368,
+        6,
+        651,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-46",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 290,
+        "measured_text_width_px": 289.203125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 3,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "A11",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 369.3984375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 125.140625
+          },
+          {
+            "start": 3,
+            "end": 8,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Hero",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 494.5390625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 159.0625
+          }
+        ],
+        "render_layer_asset_id": "b7ca6d8b615edcb5989e6658e228fb374fc23ef03a1a2cf60455830cd5af3e4d",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 8,
+            "model": "A11",
+            "spec": "Hero",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "A11 Hero Ex",
+      "png_sha256": "7542df8047f322381a725980a6d70660a8ef3cda0a00a8779160a3a6c5bd7215",
+      "alpha_bounds": [
+        325,
+        6,
+        697,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-47",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 377,
+        "measured_text_width_px": 376.140625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 3,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "A11",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 325.9296875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 125.140625
+          },
+          {
+            "start": 3,
+            "end": 11,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Hero Ex",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 451.0703125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 245.78125
+          }
+        ],
+        "render_layer_asset_id": "ef61c06c15b41b713b80fbb0b3efbe8db777a55ded1c52006755007c32f26891",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 11,
+            "model": "A11",
+            "spec": "Hero Ex",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "A20",
+      "png_sha256": "7ca94a2cbe52acad5828c2b3e997a8612c4191e64a87bce5784bf66984cd7b55",
+      "alpha_bounds": [
+        448,
+        5,
+        573,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-48",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 131,
+        "measured_text_width_px": 130.140625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 3,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "A20",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 448.9296875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 125.140625
+          }
+        ],
+        "render_layer_asset_id": "fe4e83e9a9a0c464637f860a01503841b5df764a46f534c7720926cf00117dea",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 3,
+            "model": "A20",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "A30S",
+      "png_sha256": "96f296572fbb40d455c79433a56fa572c7845f9ab175287ff4e365641e3b87b6",
+      "alpha_bounds": [
+        429,
+        5,
+        590,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-49",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 168,
+        "measured_text_width_px": 167.453125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 4,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "A30S",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 430.2734375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 162.453125
+          }
+        ],
+        "render_layer_asset_id": "6a34f7159c2ebbbc3a86bdc9b5ecff01331d7f6bd989b4a8ac46409a80fc6e4a",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 4,
+            "model": "A30S",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE A50S",
+      "png_sha256": "2cbe0b204edb5e146f91379881f42dc1ad2a63c3214f81f2595e79675174fced",
+      "alpha_bounds": [
+        254,
+        5,
+        769,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-50",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 526,
+        "measured_text_width_px": 525.125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 13,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE A50S",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 250.4375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 521.125
+          }
+        ],
+        "render_layer_asset_id": "0cfc377218b95f7e43e42b436f95bbf43cd722f4fe91b93417ec40448d3667f4",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 13,
+            "model": "PURE ONE A50S",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE A90S",
+      "png_sha256": "d363b43023462cce26e85e47bd70f55ec7a47f51cb77fa68fc1a1515510e8506",
+      "alpha_bounds": [
+        254,
+        5,
+        769,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-51",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 526,
+        "measured_text_width_px": 525.125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 13,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE A90S",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 250.4375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 521.125
+          }
+        ],
+        "render_layer_asset_id": "fd758457347a15f5e9645cd10c897a36e223f95c7cd75c784e587270efe5aa66",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 13,
+            "model": "PURE ONE A90S",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE S11",
+      "png_sha256": "ccaf68ca5248e11d36040237bb2975e47cb4db6232837f35e4dc69a3dec2a4c2",
+      "alpha_bounds": [
+        279,
+        5,
+        738,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-52",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 477,
+        "measured_text_width_px": 477.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE S11",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 274.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 472.953125
+          }
+        ],
+        "render_layer_asset_id": "bcaea6e2436d5efca036ee7313ee3e91ef1941b2f296f3e5bc4c9bb41b778df4",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 12,
+            "model": "PURE ONE S11",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE S15 Pro",
+      "png_sha256": "a125e2b60dcb311e436edb52fb094d8f3f6682cfce0c18ad9c3ace2752dba6bc",
+      "alpha_bounds": [
+        222,
+        5,
+        802,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-53",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 591,
+        "measured_text_width_px": 590.25,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE S15",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 217.875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 472.953125
+          },
+          {
+            "start": 12,
+            "end": 16,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 690.828125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 113.296875
+          }
+        ],
+        "render_layer_asset_id": "f71531d5dd88784b209d75e60da19193307e75560302b80dd1fa6f8e6aedb476",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 16,
+            "model": "PURE ONE S15",
+            "spec": "Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE S12 Pro Ex",
+      "png_sha256": "efe784ba565282c4e9342938f24875e779af0e1abf6f733ee07f39b56e76acd8",
+      "alpha_bounds": [
+        179,
+        5,
+        847,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-54",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 677,
+        "measured_text_width_px": 676.96875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE S12",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 174.515625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 472.953125
+          },
+          {
+            "start": 12,
+            "end": 19,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pro Ex",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 647.46875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 200.015625
+          }
+        ],
+        "render_layer_asset_id": "323a017b6993b1db06e7b466962ebeeab1aae4d21296be2d02bc8989a6d2b767",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 19,
+            "model": "PURE ONE S12",
+            "spec": "Pro Ex",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE S30",
+      "png_sha256": "ea7c5498338dcc3c6a0142bcbe5ed5c906f85b47935c979e2cf75736287d9324",
+      "alpha_bounds": [
+        279,
+        5,
+        746,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-55",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 477,
+        "measured_text_width_px": 477.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE S30",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 274.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 472.953125
+          }
+        ],
+        "render_layer_asset_id": "de594f333162342469e59df4f81857c9ba366d40fbf813a2111c6d9b6d43a883",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 12,
+            "model": "PURE ONE S30",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE S30 Pro",
+      "png_sha256": "f82962dcbfbde2055d589ac46d79a12ccd467ae5ba71a032b1765374aeca3de1",
+      "alpha_bounds": [
+        222,
+        5,
+        802,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-56",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 591,
+        "measured_text_width_px": 590.25,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE S30",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 217.875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 472.953125
+          },
+          {
+            "start": 12,
+            "end": 16,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 690.828125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 113.296875
+          }
+        ],
+        "render_layer_asset_id": "a253f27483ca4284069e8918c92a9dc04679e217d8b48b7c7cef6d7d77789e43",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 16,
+            "model": "PURE ONE S30",
+            "spec": "Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE S50",
+      "png_sha256": "2dca6c2f2f609edaaca4479507f82bd0ea489ca6032195b37c09e23800e776cf",
+      "alpha_bounds": [
+        279,
+        5,
+        746,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-57",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 477,
+        "measured_text_width_px": 477.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE S50",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 274.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 472.953125
+          }
+        ],
+        "render_layer_asset_id": "ab5201eb5b89b929bc86a54ea89e75573fd2d51bf4cebd538619c5e0fc849fcc",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 12,
+            "model": "PURE ONE S50",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE S50 Pro",
+      "png_sha256": "e36c7ba44c62a550ac0172c88e5ecb245d90b00698862b09c9e41661f27c38f1",
+      "alpha_bounds": [
+        222,
+        5,
+        802,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-58",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 591,
+        "measured_text_width_px": 590.25,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE S50",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 217.875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 472.953125
+          },
+          {
+            "start": 12,
+            "end": 16,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 690.828125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 113.296875
+          }
+        ],
+        "render_layer_asset_id": "30127b0771b43aa83fb3d94e0ae3f45ace76bc00e09aeddf6f8a77d5c70126ed",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 16,
+            "model": "PURE ONE S50",
+            "spec": "Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE S70",
+      "png_sha256": "fda7c6ab01d0f40d052255b0e2bdc4cf22d2e193c024c9a38ea5cbb47c0e3a1d",
+      "alpha_bounds": [
+        279,
+        5,
+        746,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-59",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 477,
+        "measured_text_width_px": 477.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE S70",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 274.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 472.953125
+          }
+        ],
+        "render_layer_asset_id": "13f2dacf084745a951f75daf437b13fd559a8fcdd59f5e854c6516fd37c00bab",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 12,
+            "model": "PURE ONE S70",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE STATION FurFree",
+      "png_sha256": "32bce77743e46cdc488ee618c84b1ab79cdeaae4e8f87fa8ff9097a4ab7c89f5",
+      "alpha_bounds": [
+        78,
+        5,
+        944,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-60",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 878,
+        "measured_text_width_px": 877.09375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 16,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE STATION",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 74.453125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 633.09375
+          },
+          {
+            "start": 16,
+            "end": 24,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " FurFree",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 707.546875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 239.71875
+          }
+        ],
+        "render_layer_asset_id": "c5e39b7749f9a585d912289db4e8d16436fa80ad1fc6356fdd9bcca9099a045a",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 24,
+            "model": "PURE ONE STATION",
+            "spec": "FurFree",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE STATION 5",
+      "png_sha256": "0b0b36c703cd1c40c4da5be34078525ce780422a4472855571e5b5b02ffef55c",
+      "alpha_bounds": [
+        170,
+        5,
+        854,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-61",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 695,
+        "measured_text_width_px": 695.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 18,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE STATION 5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 165.5,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 690.8125
+          }
+        ],
+        "render_layer_asset_id": "3e1e325d1cf6277524b796fbf5039856935fc8e6383632983433f80689c34b59",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 18,
+            "model": "PURE ONE STATION 5",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "PURE ONE STATION 5 Pro",
+      "png_sha256": "4d766e1e5269b7b1c0d5ff4489c72e22490923fb606f01f7fca6fb4528175b5d",
+      "alpha_bounds": [
+        113,
+        5,
+        910,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-62",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 809,
+        "measured_text_width_px": 808.109375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 18,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "PURE ONE STATION 5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 108.9453125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 690.8125
+          },
+          {
+            "start": 18,
+            "end": 22,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 799.7578125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 113.296875
+          }
+        ],
+        "render_layer_asset_id": "e2cf73b9a781e0211272d852102a07f5bccc6a08e32d1f9a7220f5ee531594ad",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 22,
+            "model": "PURE ONE STATION 5",
+            "spec": "Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "TINECO iCARPET",
+      "png_sha256": "baecb3c7a037d21815d85583ccbfb44bc88f2a88501e12c26ea950f7fb79e3d2",
+      "alpha_bounds": [
+        241,
+        5,
+        780,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-63",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 544,
+        "measured_text_width_px": 543.265625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 14,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "TINECO iCARPET",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 241.3671875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 539.265625
+          }
+        ],
+        "render_layer_asset_id": "948b91e56c42fcd532545ee4c67643c2db4846a35e60fc0b32fbbb6d0957ade6",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 14,
+            "model": "TINECO iCARPET",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "TINECO CARPET ONE",
+      "png_sha256": "23023f938fd98c39098828a10e591c9bcf921bb779b9578c4a453520c0644e65",
+      "alpha_bounds": [
+        166,
+        5,
+        853,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-64",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 694,
+        "measured_text_width_px": 694.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 17,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "TINECO CARPET ONE",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 166.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 689.59375
+          }
+        ],
+        "render_layer_asset_id": "b5ad400f537eebe3fb5265a5ada63d5130b5312b583721125c668eee8853c34a",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 17,
+            "model": "TINECO CARPET ONE",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "TINECO CARPET ONE Pro",
+      "png_sha256": "c67bc6d7dcce4c109edc3cd9af3750a0451945caf471b5fdf1ba63df02650034",
+      "alpha_bounds": [
+        110,
+        5,
+        910,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-65",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 807,
+        "measured_text_width_px": 806.890625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 17,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "TINECO CARPET ONE",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 109.5546875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 689.59375
+          },
+          {
+            "start": 17,
+            "end": 21,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Pro",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 799.1484375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 113.296875
+          }
+        ],
+        "render_layer_asset_id": "ddacb5456b41a8bd06d51a6423e6a08adff824a82de4461f065d1a5a3dca8fc9",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 21,
+            "model": "TINECO CARPET ONE",
+            "spec": "Pro",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "CARPET ONE Cruiser",
+      "png_sha256": "1bf2d525692463c0edd12e14d0c27460da2c8a8fa90fa974e5936877127769b4",
+      "alpha_bounds": [
+        191,
+        5,
+        832,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-66",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 648,
+        "measured_text_width_px": 647.28125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 10,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "CARPET ONE",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 189.359375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 421.28125
+          },
+          {
+            "start": 10,
+            "end": 18,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Cruiser",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 610.640625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 221.515625
+          }
+        ],
+        "render_layer_asset_id": "3ac8244276b45c33dede23d0a187058e81719e27f516495d0a197a7364ff001e",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 18,
+            "model": "CARPET ONE",
+            "spec": "Cruiser",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "CARPET ONE Spot",
+      "png_sha256": "e2e171dabd1150dcd36343ff4eb982c052b6fe2d9322ca3f7988d0818a593ac7",
+      "alpha_bounds": [
+        226,
+        5,
+        798,
+        67
+      ],
+      "layout": {
+        "segment_id": "sample-67",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 579,
+        "measured_text_width_px": 578.296875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 10,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "CARPET ONE",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 223.8515625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 421.28125
+          },
+          {
+            "start": 10,
+            "end": 15,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Spot",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 645.1328125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 153.015625
+          }
+        ],
+        "render_layer_asset_id": "a1828dfe245ba2b1c47a52bcff64f93e25be6e180b2ba01c521d56f49d4558e5",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 15,
+            "model": "CARPET ONE",
+            "spec": "Spot",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "CARPET ONE Spot Essentials",
+      "png_sha256": "a6386e72271d132693962fc1e7f9561bd245f125155236fe9a95bee57009846f",
+      "alpha_bounds": [
+        77,
+        3,
+        944,
+        67
+      ],
+      "layout": {
+        "segment_id": "sample-68",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 876,
+        "measured_text_width_px": 875.65625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 10,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "CARPET ONE",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 75.171875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 421.28125
+          },
+          {
+            "start": 10,
+            "end": 26,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Spot Essentials",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 496.453125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 450.375
+          }
+        ],
+        "render_layer_asset_id": "af977c8556e39cf9093e293cdb757bd622d3275ced4a57c923f069c5837df071",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 26,
+            "model": "CARPET ONE",
+            "spec": "Spot Essentials",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "MODA ONE",
+      "png_sha256": "b25d7deb4310520a81c3c0e16abe8d554b32bc606fe8a6dc7ac3abb80ba3bd12",
+      "alpha_bounds": [
+        325,
+        5,
+        698,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-69",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 385,
+        "measured_text_width_px": 384.171875,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 8,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "MODA ONE",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 320.9140625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 380.171875
+          }
+        ],
+        "render_layer_asset_id": "3a600e90a880dedb3f2e09b24f5188771a2adb13ef50ebaac426fce13fda94bc",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 8,
+            "model": "MODA ONE",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "ZIVA ONE",
+      "png_sha256": "557287eb5d12ad6c7fd016c39787adef7e6e0198b2fb32172d4bf520a3de3803",
+      "alpha_bounds": [
+        354,
+        5,
+        667,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-70",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 322,
+        "measured_text_width_px": 321.328125,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 8,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "ZIVA ONE",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 352.3359375,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 317.328125
+          }
+        ],
+        "render_layer_asset_id": "b23868bb5a8583e54d16f610795a6a17403fbcb501ede6baf38c9bd7a00434e2",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 8,
+            "model": "ZIVA ONE",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "TOASTY ONE",
+      "png_sha256": "aae57d41c1e74806ce224494a412cfd7ed8c759d50e96e8b2c2eae54fdfbe6cd",
+      "alpha_bounds": [
+        299,
+        5,
+        720,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-71",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 428,
+        "measured_text_width_px": 428.0,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 10,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "TOASTY ONE",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 299.0,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 423.546875
+          }
+        ],
+        "render_layer_asset_id": "b3c74b794019bc82c44cf0bdc06897914170715572e373c52c7f11d457e6f0db",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 10,
+            "model": "TOASTY ONE",
+            "spec": "",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE i5 Lite",
+      "png_sha256": "52ffe1ef00aaad4bf557ab454b1bbd4989b15de9408b0be4c867091f4c65015b",
+      "alpha_bounds": [
+        222,
+        5,
+        802,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-72",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 593,
+        "measured_text_width_px": 592.59375,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 12,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE i5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 216.703125,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 465.59375
+          },
+          {
+            "start": 12,
+            "end": 17,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Lite",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 682.296875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 122.78125
+          }
+        ],
+        "render_layer_asset_id": "2b581f1719f76e4304c8aba3af9f4334df67bb994d12c3a22909ccbf709c1718",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 17,
+            "model": "FLOOR ONE i5",
+            "spec": "Lite",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "FLOOR ONE S10 Stretch Steam",
+      "png_sha256": "45891ac276e1d9e0b71b78f020c237d4bca5b24f6746003ac289d38b426de57f",
+      "alpha_bounds": [
+        44,
+        3,
+        979,
+        53
+      ],
+      "layout": {
+        "segment_id": "sample-73",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 65,
+        "target_font_size_px": 65,
+        "effective_font_size_px": 65,
+        "desired_text_width_px": 949,
+        "measured_text_width_px": 948.765625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 13,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE S10",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 38.6171875,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 524.484375
+          },
+          {
+            "start": 13,
+            "end": 27,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Stretch Steam",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 563.1015625,
+            "baseline_px": 52.0,
+            "font_size_px": 65,
+            "advance_px": 420.28125
+          }
+        ],
+        "render_layer_asset_id": "0a91f7c982fc962bf5501af5f939116892fedaade8ca7ba413608973e2800946",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 0,
+            "end": 27,
+            "model": "FLOOR ONE S10",
+            "spec": "Stretch Steam",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 50,
+        "descent_px": 16,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "Try FLOOR ONE i5 Lite today",
+      "png_sha256": "65b69d767833907d290a3747fcceefe91b4ccb013d3bc61a938e6cfa69986b31",
+      "alpha_bounds": [
+        153,
+        17,
+        869,
+        65
+      ],
+      "layout": {
+        "segment_id": "sample-74",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 52,
+        "target_font_size_px": 52,
+        "effective_font_size_px": 52,
+        "desired_text_width_px": 721,
+        "measured_text_width_px": 720.140625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 4,
+            "kind": "ordinary",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+            "text": "Try ",
+            "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+            "x_px": 152.9296875,
+            "baseline_px": 55.0,
+            "font_size_px": 52,
+            "advance_px": 83.1875
+          },
+          {
+            "start": 4,
+            "end": 16,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE i5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 236.1171875,
+            "baseline_px": 55.0,
+            "font_size_px": 52,
+            "advance_px": 372.484375
+          },
+          {
+            "start": 16,
+            "end": 21,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Lite",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 608.6015625,
+            "baseline_px": 55.0,
+            "font_size_px": 52,
+            "advance_px": 98.21875
+          },
+          {
+            "start": 21,
+            "end": 27,
+            "kind": "ordinary",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+            "text": " today",
+            "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+            "x_px": 706.8203125,
+            "baseline_px": 55.0,
+            "font_size_px": 52,
+            "advance_px": 162.25
+          }
+        ],
+        "render_layer_asset_id": "66b521a11ef41c22f59af3a0c70bd47b907f35716249f92606379547cf9dccc2",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 4,
+            "end": 21,
+            "model": "FLOOR ONE i5",
+            "spec": "Lite",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 53,
+        "descent_px": 13,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    },
+    {
+      "text": "新品 FLOOR ONE i5 Lite",
+      "png_sha256": "dab501fd6023355511237bf93e05bf11e224bab5e330c247c09119033c808fac",
+      "alpha_bounds": [
+        257,
+        16,
+        764,
+        59
+      ],
+      "layout": {
+        "segment_id": "sample-75",
+        "original_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "render_bbox_pixels": [
+          79,
+          80,
+          1101,
+          150
+        ],
+        "estimated_font_size_px": 45,
+        "target_font_size_px": 45,
+        "effective_font_size_px": 45,
+        "desired_text_width_px": 514,
+        "measured_text_width_px": 513.90625,
+        "recommended_text_color": "#FFFFFF",
+        "text_color": "#FFFFFFFF",
+        "background_color": "#00000000",
+        "alignment": "center",
+        "font_type": null,
+        "font_sha256": null,
+        "text_runs": [
+          {
+            "start": 0,
+            "end": 2,
+            "kind": "ordinary",
+            "font_type": "https://raw.githubusercontent.com/adobe-fonts/source-han-sans/a4f7cf94edfb9d7ffbdfc4841de276358bd7e0f2/SubsetOTF/CN/SourceHanSansCN-Regular.otf",
+            "text": "新品",
+            "font_sha256": "e2bc8a2e7f37474b774fff8db758681ece40bb6947a90d571bce9dd60671a8e4",
+            "x_px": 256.046875,
+            "baseline_px": 55.0,
+            "font_size_px": 45,
+            "advance_px": 90.0
+          },
+          {
+            "start": 2,
+            "end": 3,
+            "kind": "ordinary",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+            "text": " ",
+            "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+            "x_px": 346.046875,
+            "baseline_px": 55.0,
+            "font_size_px": 45,
+            "advance_px": 12.59375
+          },
+          {
+            "start": 3,
+            "end": 15,
+            "kind": "product_model",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+            "text": "FLOOR ONE i5",
+            "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+            "x_px": 358.640625,
+            "baseline_px": 55.0,
+            "font_size_px": 45,
+            "advance_px": 322.3125
+          },
+          {
+            "start": 15,
+            "end": 20,
+            "kind": "product_spec",
+            "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+            "text": " Lite",
+            "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+            "x_px": 680.953125,
+            "baseline_px": 55.0,
+            "font_size_px": 45,
+            "advance_px": 85.0
+          }
+        ],
+        "render_layer_asset_id": "43723e88450e5f13372566a429f18f6c8429fcbb336a19737bafbe3f3b836bc5",
+        "render_layer_url": null,
+        "product_mentions": [
+          {
+            "start": 3,
+            "end": 20,
+            "model": "FLOOR ONE i5",
+            "spec": "Lite",
+            "catalog_id": null,
+            "origin": "manual",
+            "status": "confirmed"
+          }
+        ],
+        "ascent_px": 53,
+        "descent_px": 13,
+        "warnings": [
+          "background_unknown",
+          "contrast_unverified",
+          "product_glyph_font_fallback"
+        ],
+        "target_time": [
+          1000,
+          3000
+        ],
+        "track_index": 1
+      }
+    }
+  ]
+}

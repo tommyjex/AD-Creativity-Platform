@@ -1,12 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import type { SubtitleSegment } from "@/lib/api-types";
 import { containedVideoRect, subtitleColors, subtitlePreviewBox, subtitlePreviewFont, SUBTITLE_FONTS } from "@/lib/subtitle-translation";
 
 const fontCss = SUBTITLE_FONTS.map((font) =>
-  `@font-face{font-family:subtitle-${font.id};src:url("${font.url}");font-display:swap;}`
+  `@font-face{font-family:subtitle-${font.id};src:url("${font.url}");font-weight:400;font-style:normal;font-display:swap;}`
 ).join("\n");
+
+function SubtitleLayer({ segment, panel }: { segment: SubtitleSegment; panel: string }) {
+  const [failed, setFailed] = useState(false);
+  const source = segment.render_layer_url;
+  // Only accept our authenticated content route, never a model-supplied external URL.
+  const safe = source?.startsWith("/api/tools/subtitle-translation/workspaces/") &&
+    /\/layers\/[a-f0-9]{64}\.png$/.test(source);
+  if (safe && !failed) return <Image data-subtitle-layer={segment.segment_id} src={source!} alt="" fill unoptimized className="object-contain" onError={() => setFailed(true)} />;
+  return <span data-subtitle-panel={segment.segment_id} className="shrink-0" style={{ backgroundColor: panel, lineHeight: "normal" }}>{segment.translated_text}{failed ? <span className="sr-only">产品图层加载失败</span> : null}</span>;
+}
 
 export function SubtitleVideoPreview({
   url, segments = [], selectedId, seekMs = 0, seekRequest = 0, label, enlarged = false, layoutSize
@@ -85,10 +96,12 @@ export function SubtitleVideoPreview({
                     justifyContent: ({ left: "flex-start", center: "center", right: "flex-end" } as const)[segment.style.alignment ?? segment.alignment ?? "center"],
                     color: colors.text,
                     fontFamily: `subtitle-${subtitlePreviewFont(segment).id}, sans-serif`,
+                    fontWeight: 400,
+                    fontSynthesis: "none",
                     fontSize: Math.max(1, (segment.effective_font_size_px ?? segment.style.font_size_px ?? segment.estimated_font_size_px ?? 16) * rect.width / outputSize.width)
                   }}
                 >
-                  <span data-subtitle-panel={segment.segment_id} className="shrink-0" style={{ backgroundColor: colors.panel, lineHeight: "normal" }}>{segment.translated_text}</span>
+                  <SubtitleLayer key={segment.render_layer_asset_id ?? "text"} segment={segment} panel={colors.panel} />
                 </div>
               );
             })}

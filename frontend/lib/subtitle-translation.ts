@@ -7,18 +7,28 @@ export const SUBTITLE_LANGUAGES = [
 
 // Keep resource versions aligned with subtitle_translation_layout.FONT_RESOURCES.
 const SOURCE_HAN_ROOT = "https://raw.githubusercontent.com/adobe-fonts/source-han-sans/a4f7cf94edfb9d7ffbdfc4841de276358bd7e0f2/SubsetOTF";
-export const DEFAULT_SUBTITLE_FONT_ID = "CenturyGothicBold";
+export const DEFAULT_SUBTITLE_FONT_ID = "CenturyGothic";
 export const SUBTITLE_FONTS = [
   { id: "SY_Black", label: "思源黑体 · 简体中文", url: `${SOURCE_HAN_ROOT}/CN/SourceHanSansCN-Regular.otf` },
   { id: "SY_Black_JP", label: "思源黑体 · 日文", url: `${SOURCE_HAN_ROOT}/JP/SourceHanSansJP-Regular.otf` },
   { id: "CenturyGothic", label: "世纪哥特体", url: "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf" },
-  { id: "CenturyGothicBold", label: "世纪哥特体 · 粗体（默认）", url: "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf" }
+  { id: "CenturyGothicBold", label: "世纪哥特体 · 粗体", url: "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf" },
+  { id: "AvenirLTStdBlack", label: "Avenir · 型号 Black", url: "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf" },
+  { id: "AvenirLTStdLight", label: "Avenir · 规格 Light", url: "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf" }
 ] as const;
 
 export const SUBTITLE_CAPACITY_NOTICE =
   "Tool limit: 500 subtitles, 4000 characters per subtitle. MediaKit publishes no text/track capacity limit; these tool limits are not a provider capacity guarantee.";
 
 const WARNING_MESSAGES: Record<string, string> = {
+  product_recognition_unavailable: "产品名称自动识别暂不可用，已保留普通字幕。",
+  product_recognition_invalid_split: "无效的产品拆分已自动忽略，保留普通字幕。",
+  product_layout_unavailable: "产品混合字体暂不可用，已自动保留普通字幕排版。",
+  product_layer_storage_unavailable: "产品图层存储暂不可用，已自动显示普通文字预览。",
+  product_layer_materialization_unavailable: "产品图层暂不可用，已自动回退普通字幕压制。",
+  product_name_marker_invalid: "产品名称保护异常已由系统处理，保留可用字幕。",
+  product_name_missing_after_translation: "产品名称暂未恢复，已保留可用字幕。",
+  product_glyph_font_fallback: "部分字符已自动使用覆盖完整的备用字体。",
   font_size_reduced: "已优先自动扩宽；受可用宽度或框高度限制，输出字号已缩小以保持单行。",
   bbox_expanded: "译文框已自动横向扩宽，原始坐标和对齐锚点保持不变。",
   bbox_expansion_limited: "自动扩宽已达到安全边距或相邻字幕限制，请核对输出字号。",
@@ -79,9 +89,17 @@ export function subtitleWarningMessage(warning: string) {
 }
 
 export function subtitlePreviewFont(segment: SubtitleSegment) {
-  return SUBTITLE_FONTS.find((font) => font.url === segment.font_type) ??
-    SUBTITLE_FONTS.find((font) => font.id === segment.style.font || font.url === segment.style.font) ??
-    SUBTITLE_FONTS.find((font) => font.id === DEFAULT_SUBTITLE_FONT_ID)!;
+  if (segment.style.font) {
+    const manual = SUBTITLE_FONTS.find((font) =>
+      font.id === segment.style.font || font.url === segment.style.font
+    );
+    if (manual) return manual;
+    const fallback = SUBTITLE_FONTS.find((font) => font.url === segment.font_type);
+    if (fallback) return fallback;
+  }
+  // Derived summaries may predate the role rule; they are not manual overrides.
+  const automaticId = segment.visual_role === "headline" ? "CenturyGothicBold" : DEFAULT_SUBTITLE_FONT_ID;
+  return SUBTITLE_FONTS.find((font) => font.id === automaticId)!;
 }
 
 export const DEFAULT_SUBTITLE_PANEL_COLOR = "#33333359"; // 35% opacity.
@@ -125,8 +143,13 @@ export function subtitleDraftSignature(segments: SubtitleSegment[]) {
     translated_text: segment.translated_text,
     start_ms: segment.start_ms, end_ms: segment.end_ms,
     bbox_normalized: segment.bbox_normalized,
-    excluded: segment.excluded, style: segment.style
+    excluded: segment.excluded, style: segment.style,
+    product_names_enabled: segment.product_names_enabled ?? true
   })));
+}
+
+export function subtitleProductText(segment: SubtitleSegment, start: number, end: number) {
+  return Array.from(segment.translated_text ?? "").slice(start, end).join("");
 }
 
 export function containedVideoRect(

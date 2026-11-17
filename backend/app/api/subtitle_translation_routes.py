@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from backend.app.api.dependencies import (
     get_subtitle_translation_service,
@@ -122,6 +122,7 @@ async def update_workspace(
                 "workspace revision changed; reload before saving"
             )
         await _prepare_inputs(service, payload)
+        payload = await service.prepare_product_update(workspace_id, payload)
         return await service.preview(service.patch(workspace_id, payload))
     except (ValueError, NotFoundError, RevisionConflictError) as exc:
         raise _error(exc) from exc
@@ -134,8 +135,29 @@ async def preview_workspace(
     try:
         workspace = service.repository.get_subtitle_workspace(workspace_id)
         await _prepare_inputs(service, payload)
+        payload = await service.prepare_product_update(workspace_id, payload)
         return await service.preview(workspace, payload)
     except (ValueError, NotFoundError, RevisionConflictError) as exc:
+        raise _error(exc) from exc
+
+
+@router.post("/workspaces/{workspace_id}/recognize-products", response_model=SubtitleWorkspace)
+async def recognize_products(
+    workspace_id: str, payload: SubtitleWorkspaceUpdate, service: Service
+):
+    try:
+        return await service.recognize_products(workspace_id, payload)
+    except (ValueError, NotFoundError, RevisionConflictError) as exc:
+        raise _error(exc) from exc
+
+
+@router.get("/workspaces/{workspace_id}/layers/{layer_id}.png")
+async def subtitle_layer(workspace_id: str, layer_id: str, service: Service):
+    try:
+        content = await service.layers.read(workspace_id, layer_id)
+        return Response(content, media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=31536000, immutable"})
+    except NotFoundError as exc:
         raise _error(exc) from exc
 
 

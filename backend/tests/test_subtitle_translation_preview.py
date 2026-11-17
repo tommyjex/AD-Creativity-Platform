@@ -5,6 +5,7 @@ import pytest
 
 from backend.app.api.dependencies import get_subtitle_translation_service
 from backend.app.schemas.subtitle_translation import SubtitleWorkspaceUpdate
+from backend.app.schemas.video_subtitle_grounding import VideoSubtitleVisualRole
 from backend.app.services import subtitle_translation_layout as layout
 from backend.tests.test_subtitle_translation_layout import font_http
 from backend.tests.test_subtitle_translation_workspace import (
@@ -16,11 +17,36 @@ from backend.tests.test_subtitle_translation_workspace import (
 __all__ = ["font_http", "subtitle_repo", "subtitle_service"]
 
 
+@pytest.mark.parametrize(
+    "role,font,expected_font",
+    [
+        pytest.param(None, None, layout.CENTURY_GOTHIC_URL, id="auto-no-role"),
+        pytest.param("body", None, layout.CENTURY_GOTHIC_URL, id="auto-body"),
+        pytest.param("footnote", None, layout.CENTURY_GOTHIC_URL, id="auto-footnote"),
+        pytest.param("headline", None, layout.CENTURY_GOTHIC_BOLD_URL, id="auto-headline"),
+        pytest.param(
+            "body",
+            "CenturyGothicBold",
+            layout.CENTURY_GOTHIC_BOLD_URL,
+            id="manual-body-bold",
+        ),
+        pytest.param(
+            "headline",
+            "CenturyGothic",
+            layout.CENTURY_GOTHIC_URL,
+            id="manual-headline-regular",
+        ),
+    ],
+)
 def test_actual_font_preview_is_worker_thread_and_never_changes_history(
-    subtitle_service,
+    subtitle_service, role, font, expected_font
 ):
     service = subtitle_service
     workspace, _ = extracted(service)
+    workspace.segments[0].visual_role = (
+        VideoSubtitleVisualRole(role) if role is not None else None
+    )
+    workspace.segments[0].style.font = font
     before = service.repository.list_subtitle_workspace_history(workspace.id)
     caller = threading.get_ident()
     workers = []
@@ -37,7 +63,7 @@ def test_actual_font_preview_is_worker_thread_and_never_changes_history(
     assert 0 < item.effective_font_size_px <= item.estimated_font_size_px
     assert item.render_bbox_pixels is not None
     assert item.recommended_text_color in {"#000000", "#FFFFFF"}
-    assert item.font_type == layout.CENTURY_GOTHIC_BOLD_URL
+    assert item.font_type == expected_font
     assert len(item.font_sha256) == 64
     assert workers and caller not in workers
     assert service.repository.list_subtitle_workspace_history(workspace.id) == before

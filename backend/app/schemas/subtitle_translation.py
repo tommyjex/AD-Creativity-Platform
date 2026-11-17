@@ -53,6 +53,17 @@ class SubtitleStyleOverride(SchemaModel):
         return value
 
 
+class SubtitleProductMention(SchemaModel):
+    start: StrictInt = Field(ge=0, le=4000)
+    end: StrictInt = Field(gt=0, le=4000)
+    model: str = Field(max_length=500)
+    spec: str = Field(max_length=500)
+    catalog_id: str | None = Field(default=None, max_length=128)
+    origin: Literal["catalog", "model_pattern", "manual"]
+    status: Literal["confirmed"] = "confirmed"
+    context_model: str | None = Field(default=None, max_length=500)
+
+
 class SubtitleTranslationSegment(VideoSubtitleGroundingSubtitle):
     segment_id: str = Field(
         default_factory=lambda: str(uuid4()), min_length=1, max_length=64
@@ -69,6 +80,21 @@ class SubtitleTranslationSegment(VideoSubtitleGroundingSubtitle):
     font_type: str | None = None
     font_sha256: str | None = None
     warnings: list[str] = Field(default_factory=list)
+    product_names_enabled: bool = True
+    product_mentions: list[dict] = Field(default_factory=list, max_length=100)
+    product_text_sha256: str | None = Field(default=None, max_length=64)
+    product_recognition_sha256: str | None = Field(default=None, max_length=64)
+    text_runs: list[dict] | None = None
+    render_layer_asset_id: str | None = Field(default=None, max_length=64)
+    render_layer_url: str | None = None
+
+    @field_validator("product_mentions", mode="before")
+    @classmethod
+    def product_records(cls, value):
+        if not isinstance(value, list):
+            raise ValueError("product mentions must be an array")  # noqa: TRY004 - Pydantic validation
+        return [SubtitleProductMention.model_validate(item).model_dump(exclude_none=True)
+                for item in value]
 
     @field_validator("translated_text")
     @classmethod

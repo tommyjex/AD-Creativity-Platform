@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import type { SubtitleSegment, SubtitleStyle } from "@/lib/api-types";
-import { DEFAULT_SUBTITLE_PANEL_COLOR, segmentIssue, subtitleColorParts, subtitleColors, subtitleFieldClass, subtitlePanelColor, SUBTITLE_FONTS } from "@/lib/subtitle-translation";
+import { DEFAULT_SUBTITLE_PANEL_COLOR, segmentIssue, subtitleColorParts, subtitleColors, subtitleFieldClass, subtitlePanelColor, subtitleProductText, SUBTITLE_FONTS } from "@/lib/subtitle-translation";
 import { Button } from "@/components/ui/button";
 
 export const SubtitleSegmentEditor = memo(function SubtitleSegmentEditor({
@@ -32,6 +32,15 @@ export const SubtitleSegmentEditor = memo(function SubtitleSegmentEditor({
           <input type="checkbox" checked={segment.excluded} disabled={readOnly} onChange={(event) => onChange(segment.segment_id, { excluded: event.target.checked })} />
           排除此条
         </label>
+      </div>
+      <div className="my-3 min-w-0 space-y-2 text-xs text-muted-foreground">
+        <p>产品型号与规格自动判定 · 型号 Black / 规格 Light</p>
+        {(segment.product_mentions ?? []).map((mention) => (
+          <p key={`${mention.start}-${mention.end}`} data-product-name={segment.segment_id} className="break-words rounded-lg bg-secondary p-3">
+            {mention.model ? <span>型号：{mention.model}</span> : null}
+            {mention.spec ? <span className="ml-3">规格：{mention.spec}</span> : null}
+          </p>
+        ))}
       </div>
       <div className="grid min-w-0 gap-4 md:grid-cols-2">
         <div>
@@ -63,7 +72,7 @@ export const SubtitleSegmentEditor = memo(function SubtitleSegmentEditor({
         </label>
         <label className="text-xs text-muted-foreground">字体
           <select aria-label={`${title}字体`} className={subtitleFieldClass} value={segment.style.font ?? ""} onChange={(event) => changeStyle({ font: event.target.value || null })}>
-            <option value="">默认 · Century Gothic Bold</option>
+            <option value="">自动 · 标题粗体，正文/脚注常规体</option>
             {SUBTITLE_FONTS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
             {segment.style.font && !SUBTITLE_FONTS.some(({ id }) => id === segment.style.font) ? <option value={segment.style.font}>{segment.style.font}</option> : null}
           </select>
@@ -111,6 +120,7 @@ export const SubtitleSegmentEditor = memo(function SubtitleSegmentEditor({
         <p>字体：{SUBTITLE_FONTS.find((font) => font.url === segment.font_type)?.label ?? "待计算"}</p>
         <p>字体 URL：{segment.font_type ?? "待计算"}</p>
         <p>SHA-256：{segment.font_sha256 ?? "待计算"}</p>
+        {segment.text_runs?.map((run) => <p key={run.start}>{subtitleProductText(segment, run.start, run.end)} · {SUBTITLE_FONTS.find((font) => font.url === run.font_type)?.label ?? run.font_type} · {run.font_sha256}</p>)}
       </details>
       {issue ? <p className="mt-2 text-sm text-amber-600">{issue}</p> : null}
     </article>

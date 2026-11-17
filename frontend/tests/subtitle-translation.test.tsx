@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubtitleTranslationPanel } from "@/components/workspace/subtitle-translation/panel";
 import { SubtitleReviewDialog } from "@/components/workspace/subtitle-translation/review-dialog";
 import { SubtitleVideoPreview } from "@/components/workspace/subtitle-translation/video-preview";
-import { containedVideoRect, segmentDraftIssue, segmentIssue, subtitleColors, subtitlePreviewBox, SUBTITLE_CAPACITY_NOTICE, SUBTITLE_FONTS, subtitleWarningMessage } from "@/lib/subtitle-translation";
+import { containedVideoRect, segmentDraftIssue, segmentIssue, subtitleColors, subtitlePreviewBox, subtitlePreviewFont, SUBTITLE_CAPACITY_NOTICE, SUBTITLE_FONTS, subtitleWarningMessage } from "@/lib/subtitle-translation";
 import { ApiError } from "@/lib/api-client";
 import { subtitleAsset, subtitleSegment, subtitleTask, subtitleWorkspace } from "./subtitle-translation-fixtures";
 
@@ -45,6 +45,42 @@ function review(overrides: Partial<React.ComponentProps<typeof SubtitleReviewDia
 }
 
 describe("subtitle review", () => {
+  it.each(["headline", "body", "footnote"])("saves manual font selection and restores automatic %s on clear", async (visual_role) => {
+    const automatic = visual_role === "headline" ? "CenturyGothicBold" : "CenturyGothic";
+    const manual = visual_role === "headline" ? "CenturyGothic" : "CenturyGothicBold";
+    const original = {
+      ...subtitleSegment, visual_role, font_type: SUBTITLE_FONTS[3].url,
+      font_sha256: "a".repeat(64), style: { text_color: "#FF0000" }
+    };
+    const onSave = vi.fn<React.ComponentProps<typeof SubtitleReviewDialog>["onSave"]>().mockResolvedValue(true);
+    const props = review({ workspace: { ...subtitleWorkspace, segments: [original] }, onSave });
+    const select = screen.getByLabelText("字幕 1字体");
+    expect(select).toHaveValue("");
+    expect(screen.getByRole("option", { name: "自动 · 标题粗体，正文/脚注常规体" })).toHaveValue("");
+    expect(screen.getByRole("option", { name: "世纪哥特体 · 粗体" })).toHaveValue("CenturyGothicBold");
+    fireEvent.change(select, { target: { value: manual } });
+    fireEvent.click(screen.getByRole("button", { name: "保存校对" }));
+    await waitFor(() => expect(props.onSave).toHaveBeenCalledTimes(1));
+    const selected = onSave.mock.calls[0][0][0];
+    expect(selected).toMatchObject({
+      segment_id: original.segment_id, visual_role, text: original.text,
+      translated_text: original.translated_text, start_ms: original.start_ms, end_ms: original.end_ms,
+      bbox_normalized: original.bbox_normalized, block_id: original.block_id, line_index: original.line_index,
+      style: { font: manual, text_color: "#FF0000" },
+      font_type: null, font_sha256: null, effective_font_size_px: null, render_bbox_pixels: null
+    });
+    expect(subtitlePreviewFont(selected).id).toBe(manual);
+    fireEvent.change(select, { target: { value: "" } });
+    expect(select).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "保存校对" }));
+    await waitFor(() => expect(props.onSave).toHaveBeenCalledTimes(2));
+    const cleared = onSave.mock.calls[1][0][0];
+    expect(cleared.style).toEqual({ font: null, text_color: "#FF0000" });
+    expect(subtitlePreviewFont(cleared).id).toBe(automatic);
+    expect(original.font_type).toBe(SUBTITLE_FONTS[3].url);
+    expect(props.onRender).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["#FFFFFF", "#000000", "#00000000"],
     ["#F5F5F5", "#000000", "#00000000"],
@@ -409,12 +445,52 @@ describe("video projection", () => {
     expect(text.parentElement).toHaveStyle({ left: "5%", width: "85%", top: "20%", height: "10%" });
     expect(text.parentElement).toHaveClass("whitespace-nowrap");
     expect(text.parentElement).toHaveStyle({
-      fontFamily: "subtitle-SY_Black_JP, sans-serif", fontSize: `${32 * 400 / 1920}px`
+      fontFamily: "subtitle-CenturyGothic, sans-serif", fontSize: `${32 * 400 / 1920}px`,
+      fontWeight: "400", fontSynthesis: "none"
     });
     expect(text.style.backgroundColor).toBe("rgba(51, 51, 51, 0.35)");
     video.currentTime = 4;
     rerender(<SubtitleVideoPreview url="/video.mp4" segments={[subtitleSegment]} selectedId="line-a" seekMs={1000} seekRequest={1} label="Preview" />);
     expect(video.currentTime).toBe(1);
     vi.stubGlobal("ResizeObserver", OriginalObserver);
+  });
+
+  it("renders same-block roles with real font files despite stale Bold summaries and restores auto after manual overrides", () => {
+    class Observer {
+      constructor(private callback: (entries: unknown[]) => void) {}
+      observe() { this.callback([{ contentRect: { width: 400, height: 400 } }]); }
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", Observer);
+    const segments = ["headline", "body", "footnote", null, undefined, "legacy"].map((role, index) => ({
+      ...subtitleSegment, segment_id: `role-${index}`, visual_role: role as string,
+      translated_text: `Role ${index}`, line_index: index, font_type: SUBTITLE_FONTS[3].url
+    }));
+    const props = { url: "/video.mp4", seekMs: 1000, label: "Role preview" };
+    const { container, rerender } = render(<SubtitleVideoPreview {...props} segments={segments} />);
+    const video = screen.getByLabelText("Role preview");
+    Object.defineProperties(video, { videoWidth: { value: 1920 }, videoHeight: { value: 1080 }, readyState: { value: 1 } });
+    fireEvent.loadedMetadata(video);
+    const expectFonts = (ids: string[]) => ids.forEach((id, index) => {
+      expect(container.querySelector(`[data-subtitle-box="role-${index}"]`)).toHaveStyle({
+        fontFamily: `subtitle-${id}, sans-serif`, fontWeight: "400", fontSynthesis: "none"
+      });
+    });
+    const automatic = ["CenturyGothicBold", ...Array<string>(5).fill("CenturyGothic")];
+    expectFonts(automatic);
+    for (const font of SUBTITLE_FONTS) {
+      expect(container.querySelector("style")?.textContent).toContain(
+        `font-family:subtitle-${font.id};src:url("${font.url}");font-weight:400;font-style:normal;`
+      );
+    }
+    rerender(<SubtitleVideoPreview {...props} segments={segments.map((segment, index) => ({
+      ...segment, style: { font: index === 0 ? "CenturyGothic" : "CenturyGothicBold" }
+    }))} />);
+    expectFonts(["CenturyGothic", ...Array<string>(5).fill("CenturyGothicBold")]);
+    rerender(<SubtitleVideoPreview {...props} segments={segments.map((segment) => ({
+      ...segment, style: { font: null }
+    }))} />);
+    expectFonts(automatic);
+    expect(segments.every((segment) => segment.block_id === "title" && segment.font_type === SUBTITLE_FONTS[3].url)).toBe(true);
   });
 });

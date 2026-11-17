@@ -932,6 +932,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
       });
     },
 
+    recognizeSubtitleProducts(id: string, payload: SubtitleWorkspacePatch, requestOptions?: RequestOptions) {
+      return request<SubtitleWorkspace>(fetcher, baseUrl, `/api/tools/subtitle-translation/workspaces/${encodeURIComponent(id)}/recognize-products`, {
+        ...requestOptions, body: payload, method: "POST",
+        headers: mergeHeaders(defaultHeaders, requestOptions?.headers)
+      });
+    },
+
     runSubtitleOperation(id: string, operation: SubtitleOperation, payload: { expected_revision: number; segment_ids?: string[] }, requestOptions?: RequestOptions) {
       return request<ToolTask>(fetcher, baseUrl, `/api/tools/subtitle-translation/workspaces/${encodeURIComponent(id)}/${operation}`, {
         ...requestOptions, body: payload, method: "POST",

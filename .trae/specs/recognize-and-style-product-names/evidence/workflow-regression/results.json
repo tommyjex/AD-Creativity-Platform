@@ -1,0 +1,62 @@
+[
+  {
+    "viewport": "1440x900",
+    "role": "creator",
+    "result": "passed",
+    "api_requests": 64,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 4,
+    "font_files": {},
+    "font_checks": []
+  },
+  {
+    "viewport": "1440x900",
+    "role": "viewer",
+    "result": "passed",
+    "api_requests": 7,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 1,
+    "font_files": {},
+    "font_checks": []
+  },
+  {
+    "viewport": "834x1112",
+    "role": "creator",
+    "result": "passed",
+    "api_requests": 65,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 4,
+    "font_files": {},
+    "font_checks": []
+  },
+  {
+    "viewport": "834x1112",
+    "role": "viewer",
+    "result": "passed",
+    "api_requests": 7,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 1,
+    "font_files": {},
+    "font_checks": []
+  },
+  {
+    "viewport": "390x844",
+    "role": "creator",
+    "result": "passed",
+    "api_requests": 65,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 4,
+    "font_files": {},
+    "font_checks": []
+  },
+  {
+    "viewport": "390x844",
+    "role": "viewer",
+    "result": "passed",
+    "api_requests": 7,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 1,
+    "font_files": {},
+    "font_checks": []
+  }
+]

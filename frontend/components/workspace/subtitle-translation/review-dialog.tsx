@@ -45,6 +45,10 @@ export function SubtitleReviewDialog({
       ...segment, ...(segment.segment_id === id ? change : {}),
       estimated_font_size_px: null, effective_font_size_px: null, render_bbox_pixels: null,
       recommended_text_color: null, font_type: null, font_sha256: null,
+      render_layer_asset_id: null, render_layer_url: null, text_runs: null,
+      ...(segment.segment_id === id && "translated_text" in change ? {
+        product_mentions: [], product_text_sha256: null, product_recognition_sha256: null
+      } : {}),
       warnings: segment.warnings.filter((warning) => ![
         "bbox_expanded", "bbox_expansion_limited", "original_bbox_overlap",
         "expanded_background_unverified", "font_size_reduced", "font_size_small"

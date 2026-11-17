@@ -99,7 +99,8 @@ export function useSubtitleWorkspace(initial: SubtitleWorkspace, onUpdate: (work
 
   function run(operation: SubtitleOperation, segments?: SubtitleSegment[], ids?: string[]) {
     return transaction(async () => {
-      if (segments && !await patch({ segments })) return false;
+      const draft = segments ?? (operation === "render" ? current.current.segments : undefined);
+      if (draft && !await patch({ segments: draft })) return false;
       if (!alive.current) return false;
       const base = current.current;
       const nextTask = await apiClient.runSubtitleOperation(base.id, operation, {
@@ -153,5 +154,17 @@ export function useSubtitleWorkspace(initial: SubtitleWorkspace, onUpdate: (work
     });
     return alive.current ? result : null;
   }
-  return { workspace, busy, error, conflict, task, update, save, run, retry, reload, preview };
+  async function recognizeProducts(segments: SubtitleSegment[]) {
+    let result: SubtitleWorkspace | null = null;
+    await transaction(async () => {
+      result = await apiClient.recognizeSubtitleProducts(current.current.id, {
+        expected_revision: current.current.revision, segments
+      }, { cache: "no-store" });
+      accept(result);
+      setConflict(false);
+      return true;
+    });
+    return alive.current ? result : null;
+  }
+  return { workspace, busy, error, conflict, task, update, save, run, retry, reload, preview, recognizeProducts };
 }

@@ -1,6 +1,11 @@
+import asyncio
 import hashlib
 import json
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from backend.app.repositories import RevisionConflictError
@@ -43,7 +48,19 @@ def subtitle_service(subtitle_repo, test_asset_storage):
                 },
             )
         )
-    return SubtitleTranslationService(subtitle_repo, test_asset_storage)
+    async def recognize(records, *, segment_ids):
+        from video_subtitle_grounding.product_names import effective_mentions, text_fingerprint
+
+        return {
+            "product_mentions": {r["segment_id"]: effective_mentions(r) for r in records
+                                 if r["segment_id"] in segment_ids},
+            "product_text_sha256": {r["segment_id"]: text_fingerprint(r["text"]) for r in records},
+            "warnings": {},
+        }
+
+    return SubtitleTranslationService(
+        subtitle_repo, test_asset_storage,
+        translator=SimpleNamespace(recognize_products=AsyncMock(side_effect=recognize)))
 
 
 def segment(segment_id="s1"):
@@ -150,17 +167,211 @@ def test_render_layout_version_changes_identity_without_changing_draft(
     from backend.app.services import subtitle_translation_layout as layout
 
     service = subtitle_service
-    workspace, _ = extracted(service)
+    workspace, extraction = extracted(service)
+    current_version = layout.LAYOUT_VERSION
+    assert current_version == "single-line-adaptive-panel35-product-font-v3"
+    monkeypatch.setattr(layout, "LAYOUT_VERSION", "single-line-adaptive-panel35-v1")
     request = SubtitleStageRequest(expected_revision=workspace.revision)
     first = service.submit(workspace.id, "render", request)
+    old_asset = service.repository.create_subtitle_output_asset(
+        AssetCreate(
+            id="old-output",
+            type=AssetType.STORYBOARD_VIDEO,
+            tool_asset_role=ToolAssetRole.OUTPUT,
+            tool_task_id=first.id,
+            status=Status.SUCCEEDED,
+            mime_type="video/mp4",
+            object_key="old-output.mp4",
+            size_bytes=12,
+        )
+    )
     service._complete(first.id, result={"output_asset_id": "old-output"})
-    monkeypatch.setattr(layout, "LAYOUT_VERSION", "next-layout-version")
+    old_task = service.repository.get_tool_task(first.id).model_dump(mode="json")
+    history = service.repository.list_subtitle_workspace_history(workspace.id)
+    monkeypatch.setattr(layout, "LAYOUT_VERSION", current_version)
     fresh = service.submit(workspace.id, "render", request)
     assert fresh.id != first.id
+    assert (
+        fresh.input_snapshot["idempotency_key"]
+        != first.input_snapshot["idempotency_key"]
+    )
     assert fresh.input_snapshot["revision"] == first.input_snapshot["revision"]
     assert fresh.input_snapshot["segments"] == first.input_snapshot["segments"]
-    assert fresh.input_snapshot["render_layout_version"] == "next-layout-version"
+    assert fresh.input_snapshot["render_layout_version"] == current_version
     assert service.submit(workspace.id, "render", request).id == fresh.id
+    current = service.repository.get_subtitle_workspace(workspace.id)
+    assert current.revision == workspace.revision
+    assert current.segments == workspace.segments
+    assert current.output_asset_id is None
+    assert current.stage_task_ids["extract"] == extraction.id
+    assert service.repository.get_tool_task(first.id).model_dump(mode="json") == old_task
+    assert service.repository.get_asset(old_asset.id) == old_asset
+    retained_history = service.repository.list_subtitle_workspace_history(workspace.id)
+    assert retained_history[:len(history)] == history
+    assert history[-1]["output_asset_id"] == old_asset.id
+    service._complete(fresh.id, result={"output_asset_id": "new-output"})
+    assert service.submit(workspace.id, "render", request).id == fresh.id
+    current = service.repository.get_subtitle_workspace(workspace.id)
+    assert current.output_asset_id == "new-output"
+    assert current.revision == workspace.revision
+    assert current.segments == workspace.segments
+    assert service.repository.get_tool_task(first.id).model_dump(mode="json") == old_task
+    assert service.repository.get_asset(old_asset.id) == old_asset
+    tasks = service.repository.list_tool_tasks()
+    assert len(tasks) == 3
+    assert sorted(t.input_snapshot["operation"] for t in tasks) == [
+        "extract",
+        "render",
+        "render",
+    ]
+
+
+def test_role_font_render_payload_and_measured_writeback(subtitle_service, monkeypatch):
+    from backend.app.services import subtitle_translation_layout as layout
+    from backend.app.services.mediakit_multitrack import MediaKitMultiTrackClient
+
+    service = subtitle_service
+    workspace, extraction = extracted(service)
+    roles = ["headline", "body", "footnote"]
+    items = []
+    for index, role in enumerate(roles):
+        item = SubtitleTranslationSegment.model_validate(
+            {
+                **segment(f"s{index}").model_dump(mode="json"),
+                "visual_role": role,
+                "line_index": index,
+                "bbox_normalized": (100, 100 + index * 150, 300, 180 + index * 150),
+                "background_color": "#FFFFFF",
+                "translated_text": None,
+                "translation_status": "pending",
+                "font_type": layout.CENTURY_GOTHIC_BOLD_URL,
+                "effective_font_size_px": 999,
+            }
+        )
+        items.append(item)
+
+    def seed(current, tasks):
+        current.segments = items
+        return current, None
+
+    service.repository.mutate_subtitle_workspace(workspace.id, seed)
+    translation = service.submit(
+        workspace.id,
+        "translate",
+        SubtitleStageRequest(expected_revision=workspace.revision),
+    )
+    service._complete(
+        translation.id,
+        result={
+            "translations": {
+                item.segment_id: "Long translated subtitle" for item in items
+            },
+            "failed_ids": [],
+        },
+    )
+    draft = service.repository.get_subtitle_workspace(workspace.id)
+    task = service.submit(
+        workspace.id, "render", SubtitleStageRequest(expected_revision=draft.revision)
+    )
+    font_path = Path(__file__).parent / "fixtures/subtitle_fonts/ABeeZee-Regular.ttf"
+    content = font_path.read_bytes()
+    font_requests = []
+    original_client = httpx.Client
+    loader = layout._load_font_resource
+    loader.cache_clear()
+
+    def respond(request):
+        font_requests.append(str(request.url))
+        return httpx.Response(200, content=content)
+
+    monkeypatch.setattr(
+        layout.httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            **kwargs, transport=httpx.MockTransport(respond)
+        ),
+    )
+    client = SimpleNamespace(
+        submit=AsyncMock(return_value=SimpleNamespace(task_id="role-provider")),
+        poll=AsyncMock(
+            return_value=SimpleNamespace(
+                output_video_url="https://output.example/roles.mp4"
+            )
+        ),
+    )
+    service.mediakit_factory = lambda: client
+    service.media = SimpleNamespace(
+        store_output=AsyncMock(return_value=SimpleNamespace(id="role-output"))
+    )
+    extract = AsyncMock(side_effect=AssertionError("render must not rerun extraction"))
+    translate = AsyncMock(side_effect=AssertionError("render must not rerun translation"))
+    service.grounding = SimpleNamespace(extract=extract)
+    service.translator = SimpleNamespace(translate=translate)
+    try:
+        asyncio.run(service.run(task.id))
+        asyncio.run(service.run(task.id))
+    finally:
+        loader.cache_clear()
+
+    saved = service.repository.get_subtitle_workspace(workspace.id)
+    finished = service.repository.get_tool_task(task.id)
+    assert finished.status == Status.SUCCEEDED
+    assert saved.output_asset_id == "role-output"
+    assert saved.revision == draft.revision
+    assert saved.stage_task_ids == {
+        "extract": extraction.id,
+        "translate": translation.id,
+        "render": task.id,
+    }
+    assert client.submit.await_count == client.poll.await_count == 1
+    assert service.media.store_output.await_count == 1
+    extract.assert_not_awaited()
+    translate.assert_not_awaited()
+    assert set(font_requests) == {
+        layout.CENTURY_GOTHIC_BOLD_URL,
+        layout.CENTURY_GOTHIC_URL,
+    }
+    submitted = client.submit.call_args.kwargs
+    payload = MediaKitMultiTrackClient._normalize_submit_payload(**submitted)
+    # Simultaneous lines share timing, so use the persisted track index per segment.
+    for before, after in zip(draft.segments, saved.segments):
+        summary = finished.input_snapshot["layouts"][after.segment_id]
+        element = payload["track"][summary["track_index"]][0]
+        expected_font = (
+            layout.CENTURY_GOTHIC_BOLD_URL
+            if before.visual_role == "headline"
+            else layout.CENTURY_GOTHIC_URL
+        )
+        assert element["font_type"] == after.font_type == expected_font
+        assert element["bold"] is False
+        assert element["text"] == before.translated_text
+        assert element["target_time"] == [before.start_ms, before.end_ms]
+        assert element["font_size"] == after.effective_font_size_px
+        assert after.effective_font_size_px == summary["effective_font_size_px"] != 999
+        assert after.estimated_font_size_px == summary["estimated_font_size_px"]
+        assert 0 < after.effective_font_size_px <= after.estimated_font_size_px
+        assert after.font_sha256 == hashlib.sha256(content).hexdigest()
+        assert after.render_bbox_pixels == tuple(summary["render_bbox_pixels"])
+        assert (
+            summary["measured_text_width_px"]
+            <= after.render_bbox_pixels[2] - after.render_bbox_pixels[0]
+        )
+        assert after.warnings == summary["warnings"]
+        for key in (
+            "text",
+            "translated_text",
+            "start_ms",
+            "end_ms",
+            "bbox_normalized",
+            "bbox_pixels",
+            "visual_role",
+            "block_id",
+            "line_index",
+            "style",
+        ):
+            assert getattr(after, key) == getattr(before, key)
+    assert service.repository.get_tool_task(extraction.id).status == Status.SUCCEEDED
+    assert service.repository.get_tool_task(translation.id).status == Status.SUCCEEDED
 
 
 def test_precision_invalidation_and_stale_result_preserves_history(subtitle_service):

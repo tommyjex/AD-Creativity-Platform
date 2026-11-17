@@ -86,7 +86,7 @@ def test_seed_request_has_context_and_ignores_subtitle_instructions():
             )
         ]
     )
-    adapter = ModelArkSubtitleTranslationAdapter(Settings(), client=client)
+    adapter = ModelArkSubtitleTranslationAdapter(Settings(), client=client, recognize_product_names=False)
     result = asyncio.run(
         adapter.translate(
             segments,
@@ -115,7 +115,7 @@ def test_batches_keep_success_when_later_provider_batch_fails():
         ]
     )
     adapter = ModelArkSubtitleTranslationAdapter(
-        Settings(), client=client, token_budget=400
+        Settings(), client=client, token_budget=400, recognize_product_names=False
     )
     result = asyncio.run(
         adapter.translate(
@@ -135,7 +135,7 @@ def test_over_budget_line_keeps_other_lines_recoverable():
     segments[1]["text"] = "long subtitle " * 500
     client = FakeArk(['{"translations":[{"segment_id":"0","translated_text":"Null"}]}'])
     adapter = ModelArkSubtitleTranslationAdapter(
-        Settings(), client=client, token_budget=400
+        Settings(), client=client, token_budget=400, recognize_product_names=False
     )
     result = asyncio.run(
         adapter.translate(

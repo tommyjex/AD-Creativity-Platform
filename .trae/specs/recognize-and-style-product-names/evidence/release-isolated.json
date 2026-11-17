@@ -1,0 +1,11 @@
+{
+  "mode": "isolated",
+  "imported_from": "/Users/bytedance/AD-Creativity/.venv/subtitle-wheel-verification-0.3.1/video_subtitle_grounding/__init__.py",
+  "version": "0.3.1",
+  "layout_version": "single-line-adaptive-panel35-product-font-v3",
+  "wheel_sha256": "a146a6221ba12adc52c2b1009f49a66f9167f2b4954e0eb999e041614c392ed6",
+  "source_sha256": "c6933c7ecd3dca11711b2d6b2b5decde6965bd4835e45d88d321ef6718bca71b",
+  "wheel_sources_match": true,
+  "catalog_entries": 72,
+  "result": "passed"
+}

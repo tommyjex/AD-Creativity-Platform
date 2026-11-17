@@ -1,0 +1,944 @@
+[
+  {
+    "viewport": "1440x900",
+    "role": "creator",
+    "result": "passed",
+    "api_requests": 27,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 6,
+    "font_files": {
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic_bold.ttf",
+        "bytes": 129676,
+        "sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83"
+      },
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic.ttf",
+        "bytes": 137568,
+        "sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f"
+      }
+    },
+    "font_checks": [
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-3",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-4",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-5",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual",
+        "segment": "line-1",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual",
+        "segment": "line-2",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual-saved-reopened",
+        "segment": "line-1",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual-saved-reopened",
+        "segment": "line-2",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared-saved-reopened",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared-saved-reopened",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "viewport": "1440x900",
+    "role": "viewer",
+    "result": "passed",
+    "api_requests": 7,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 2,
+    "font_files": {
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic_bold.ttf",
+        "bytes": 129676,
+        "sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83"
+      },
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic.ttf",
+        "bytes": 137568,
+        "sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f"
+      }
+    },
+    "font_checks": [
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-3",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-4",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-5",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "viewport": "834x1112",
+    "role": "creator",
+    "result": "passed",
+    "api_requests": 27,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 6,
+    "font_files": {
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic_bold.ttf",
+        "bytes": 129676,
+        "sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83"
+      },
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic.ttf",
+        "bytes": 137568,
+        "sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f"
+      }
+    },
+    "font_checks": [
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-3",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-4",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-5",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual",
+        "segment": "line-1",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual",
+        "segment": "line-2",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual-saved-reopened",
+        "segment": "line-1",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual-saved-reopened",
+        "segment": "line-2",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared-saved-reopened",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared-saved-reopened",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "viewport": "834x1112",
+    "role": "viewer",
+    "result": "passed",
+    "api_requests": 8,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 2,
+    "font_files": {
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic_bold.ttf",
+        "bytes": 129676,
+        "sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83"
+      },
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic.ttf",
+        "bytes": 137568,
+        "sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f"
+      }
+    },
+    "font_checks": [
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-3",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-4",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-5",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "viewport": "390x844",
+    "role": "creator",
+    "result": "passed",
+    "api_requests": 26,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 6,
+    "font_files": {
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic_bold.ttf",
+        "bytes": 129676,
+        "sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83"
+      },
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic.ttf",
+        "bytes": 137568,
+        "sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f"
+      }
+    },
+    "font_checks": [
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-3",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-4",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-5",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual",
+        "segment": "line-1",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual",
+        "segment": "line-2",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual-saved-reopened",
+        "segment": "line-1",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "manual-saved-reopened",
+        "segment": "line-2",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared-saved-reopened",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "cleared-saved-reopened",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "viewport": "390x844",
+    "role": "viewer",
+    "result": "passed",
+    "api_requests": 8,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 2,
+    "font_files": {
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic_bold.ttf",
+        "bytes": 129676,
+        "sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83"
+      },
+      "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf": {
+        "path": "/tmp/subtitle-role-real-fonts/centurygothic.ttf",
+        "bytes": 137568,
+        "sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f"
+      }
+    },
+    "font_checks": [
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-1",
+        "font_id": "CenturyGothicBold",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic-Bold",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-2",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-3",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-4",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      },
+      {
+        "phase": "automatic-legacy-summary",
+        "segment": "line-5",
+        "font_id": "CenturyGothic",
+        "font_weight": "400",
+        "font_synthesis": "none",
+        "rendered_fonts": [
+          {
+            "familyName": "Century Gothic",
+            "postScriptName": "CenturyGothic",
+            "isCustomFont": true,
+            "glyphCount": 22
+          }
+        ]
+      }
+    ]
+  }
+]

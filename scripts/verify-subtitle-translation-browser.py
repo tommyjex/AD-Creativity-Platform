@@ -3,10 +3,14 @@
 Start --serve-fixture on 8058 before Next with BACKEND_INTERNAL_BASE_URL set
 to that address. Run this script against Next at --base-url (default 3058).
 No model, MediaKit, object-store or production backend is contacted.
+
+--role-font-checks --font-dir additionally requires fontTools to compare the
+downloaded fonts' PostScript names against Chromium's actual rendered fonts.
 """
 
 import argparse
 from copy import deepcopy
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
@@ -24,11 +28,18 @@ FONT_URLS = {
     f"{FONT_ROOT}/JP/SourceHanSansJP-Regular.otf",
     "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
     "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+    "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+    "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+}
+ROLE_FONT_URLS = {
+    "CenturyGothic": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+    "CenturyGothicBold": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
 }
 OUT = ROOT / ".trae/specs/add-video-subtitle-translation/browser-acceptance"
 NOW = "2026-10-26T00:00:00Z"
 META = dict(width=1280, height=720, duration_ms=4500, rotation=0, fps=30, has_audio=True)
 PREFIX = "/api/tools/subtitle-translation/workspaces"
+PRODUCT_EVIDENCE = ROOT / ".trae/specs/recognize-and-style-product-names/evidence"
 
 
 def asset(identifier):
@@ -91,7 +102,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
 
 
 class MockAPI:
-    def __init__(self, role="creator"):
+    def __init__(self, role="creator", font_dir=None):
         self.role = role
         self.workspaces = {"workspace-a": workspace()}
         self.assets = [asset("reference-a"), asset("clean-a")]
@@ -100,9 +111,35 @@ class MockAPI:
         self.unexpected = []
         self.blocked_debug = 0
         self.mocked_fonts = 0
+        self.font_dir = font_dir
+        self.font_files = {}
+        self.font_checks = []
         self.conflict_next = False
         self.partial_once = True
         self.render_fail_once = True
+        self.product_checks = False
+        self.product_examples = {}
+        self.product_layers = {}
+        self.fail_layers = False
+
+    def product_measure(self, current, recognize=False):
+        for item in current["segments"]:
+            example = self.product_examples.get(item.get("translated_text"))
+            if not example or item.get("product_names_enabled") is False:
+                item.update(render_layer_url=None, render_layer_asset_id=None, text_runs=None)
+                continue
+            summary = example["layout"]
+            if recognize or not item.get("product_mentions"):
+                item["product_mentions"] = deepcopy(summary["product_mentions"])
+                for mention in item["product_mentions"]:
+                    mention["origin"] = "catalog" if example["text"] == "FLOOR ONE S7 Stretch Steam" else "model_pattern"
+            item["product_text_sha256"] = hashlib.sha256(item["translated_text"].encode()).hexdigest()
+            for key in ("render_bbox_pixels", "effective_font_size_px", "text_runs", "render_layer_asset_id"):
+                item[key] = deepcopy(summary[key])
+            box = item["render_bbox_pixels"]
+            top = round(item["bbox_normalized"][1] / 999 * META["height"])
+            item["render_bbox_pixels"] = [box[0], top, box[2], top + box[3] - box[1]]
+            item["render_layer_url"] = f'{PREFIX}/{current["id"]}/layers/{summary["render_layer_asset_id"]}.png'
 
     def route(self, route):
         request = route.request
@@ -110,6 +147,15 @@ class MockAPI:
         path, method = parsed.path, request.method
         if request.url in FONT_URLS:
             self.mocked_fonts += 1
+            if self.font_dir and request.url in ROLE_FONT_URLS.values():
+                font = self.font_dir / Path(parsed.path).name
+                content = font.read_bytes()
+                self.font_files[request.url] = {
+                    "path": str(font), "bytes": len(content),
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                }
+                return route.fulfill(body=content, content_type="font/ttf",
+                                     headers={"Access-Control-Allow-Origin": "*"})
             return route.fulfill(path=str(FONT_FIXTURE), content_type="font/ttf")
         if parsed.hostname == "127.0.0.1" and parsed.port == 7777:
             self.blocked_debug += 1
@@ -164,7 +210,13 @@ class MockAPI:
             created.update(payload)
             self.workspaces = {created["id"]: created, **self.workspaces}
             return reply(created, 201)
-        match = re.fullmatch(PREFIX + r"/([^/]+)(?:/(extract|translate|render|preview))?", path)
+        if "/layers/" in path and self.product_checks:
+            if self.fail_layers:
+                return reply({"detail": "Layer unavailable"}, 503)
+            layer = self.product_layers.get(Path(path).stem)
+            if layer:
+                return route.fulfill(path=str(layer), content_type="image/png")
+        match = re.fullmatch(PREFIX + r"/([^/]+)(?:/(extract|translate|render|preview|recognize-products))?", path)
         if match:
             identifier, operation = match.groups()
             current = self.workspaces[identifier]
@@ -181,7 +233,15 @@ class MockAPI:
                 measured["warnings"] = ["provider_text_capacity_unverified",
                                         "provider_vertical_anchor_unverified",
                                         "provider_literal_escaping_unverified"]
+                if self.product_checks:
+                    self.product_measure(measured)
                 return reply(measured)
+            if operation == "recognize-products":
+                assert payload["expected_revision"] == current["revision"]
+                current["segments"] = deepcopy(payload["segments"])
+                current["revision"] += 1
+                self.product_measure(current, recognize=True)
+                return reply(current)
             if operation:
                 if payload["expected_revision"] != current["revision"]:
                     return reply({"detail": {"code": "revision_conflict", "message": "Revision changed"}}, 409)
@@ -212,6 +272,8 @@ class MockAPI:
             if changed_language:
                 for s in current["segments"]:
                     s.update(translated_text=None, translation_status="pending")
+            if self.product_checks:
+                self.product_measure(current, recognize=True)
             current["revision"] += 1
             current["output_asset_id"] = None
             current["active_task_id"] = None
@@ -421,35 +483,256 @@ def run_viewer(page, api, base):
     assert all(method == "GET" for method, _ in api.calls), "Viewer emitted mutation"
 
 
+def run_role_fonts(page, api, base):
+    current = api.workspaces["workspace-a"]
+    records = [segment(index) for index in range(1, 6)]
+    for item, role in zip(records, ("headline", "body", "footnote", None, None)):
+        item.update(visual_role=role, translated_text=f"Font acceptance line {item['line_index']}",
+                    translation_status="succeeded", end_ms=3000,
+                    font_type=ROLE_FONT_URLS["CenturyGothicBold"],
+                    effective_font_size_px=32)
+    records[3]["style"]["font"] = ""
+    records[4].pop("visual_role")
+    records[4]["style"]["font"] = None
+    current.update(reference_video_asset_id="reference-a", reference_video=META,
+                   clean_video_asset_id="clean-a", clean_video=META,
+                   stage="review_ready", segments=records)
+    open_tool(page, base)
+    if api.role == "viewer":
+        for label in ("新建字幕工作区", "1 · 提取字幕", "2 · 翻译", "4 · 压制已保存字幕"):
+            expect(page.get_by_role("button", name=label, exact=True)).to_be_disabled()
+    page.get_by_role("button", name=re.compile(r"3 · 原文")).click()
+    dialog = page.get_by_role("dialog")
+    dialog.get_by_role("button", name="字幕 1 · 定位", exact=True).click()
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("DOM.enable")
+    cdp.send("CSS.enable")
+
+    def check_font(index, font_id, phase):
+        selector = f'[data-subtitle-box="line-{index}"]'
+        box = dialog.locator(selector)
+        expect(box).to_be_visible()
+        expect(box).to_have_css("font-family", f"subtitle-{font_id}, sans-serif")
+        expect(box).to_have_css("font-weight", "400")
+        expect(box).to_have_css("font-synthesis", "none")
+        page.wait_for_function(
+            """family => [...document.fonts].some(
+                f => f.family === family && f.status === 'loaded')""",
+            arg=f"subtitle-{font_id}",
+        )
+        root = cdp.send("DOM.getDocument")["root"]["nodeId"]
+        node = cdp.send("DOM.querySelector", {
+            "nodeId": root, "selector": f'{selector} [data-subtitle-panel]',
+        })["nodeId"]
+        fonts = cdp.send("CSS.getPlatformFontsForNode", {"nodeId": node})["fonts"]
+        assert fonts and all(f["isCustomFont"] and f["glyphCount"] > 0 for f in fonts), fonts
+        if api.font_dir:
+            from fontTools.ttLib import TTFont
+            path = api.font_dir / Path(urlsplit(ROLE_FONT_URLS[font_id]).path).name
+            with TTFont(path) as real_font:
+                postscript = real_font["name"].getDebugName(6)
+            assert {f["postScriptName"] for f in fonts} == {postscript}, fonts
+            assert ROLE_FONT_URLS[font_id] in api.font_files
+        api.font_checks.append({
+            "phase": phase, "segment": f"line-{index}", "font_id": font_id,
+            "font_weight": box.evaluate("e => getComputedStyle(e).fontWeight"),
+            "font_synthesis": box.evaluate("e => getComputedStyle(e).fontSynthesis"),
+            "rendered_fonts": fonts,
+        })
+
+    def screenshot(phase):
+        dialog.locator("video").scroll_into_view_if_needed()
+        no_overflow(page)
+        page.screenshot(path=str(OUT / f"role-font-{api.role}-{page.viewport_size['width']}-{phase}.png"),
+                        full_page=True)
+
+    for index in range(1, 6):
+        expect(dialog.get_by_label(f"字幕 {index}字体")).to_have_value("")
+        expect(dialog.get_by_label(f"字幕 {index}字体").locator("option").first).to_have_text(
+            "自动 · 标题粗体，正文/脚注常规体"
+        )
+        check_font(index, "CenturyGothicBold" if index == 1 else "CenturyGothic", "automatic-legacy-summary")
+    screenshot("automatic")
+    if api.role == "viewer":
+        for index in range(1, 6):
+            article = dialog.get_by_label(f"字幕 {index}译文").locator("xpath=ancestor::article")
+            expect(article.locator("input, textarea, select")).to_have_count(16)
+            for control in article.locator("input, textarea, select").all():
+                expect(control).to_be_disabled()
+            expect(dialog.get_by_role("button", name=f"字幕 {index} · 定位", exact=True)).to_be_enabled()
+        for label in ("保存校对", "保存并压制视频", "计算排版 · 不保存"):
+            expect(dialog.get_by_role("button", name=label, exact=True)).to_be_disabled()
+        assert all(method == "GET" for method, _ in api.calls), "Viewer emitted mutation"
+        return
+
+    def reopen():
+        dialog.get_by_role("button", name="关闭", exact=True).click()
+        expect(dialog).not_to_be_visible()
+        page.reload(wait_until="networkidle")
+        page.get_by_role("tab", name="视频字幕翻译", exact=True).click()
+        page.get_by_role("button", name=re.compile(r"3 · 原文")).click()
+        dialog.get_by_role("button", name="字幕 1 · 定位", exact=True).click()
+
+    before = deepcopy(current)
+    dialog.get_by_label("字幕 1字体").select_option("CenturyGothic")
+    dialog.get_by_label("字幕 2字体").select_option("CenturyGothicBold")
+    check_font(1, "CenturyGothic", "manual")
+    check_font(2, "CenturyGothicBold", "manual")
+    assert current == before, "Unsaved manual selection mutated workspace"
+    screenshot("manual")
+    dialog.get_by_role("button", name="保存校对", exact=True).click()
+    expect(dialog.get_by_text(re.compile("已保存"))).to_be_visible()
+    assert current["segments"][0]["style"]["font"] == "CenturyGothic"
+    assert current["segments"][1]["style"]["font"] == "CenturyGothicBold"
+    reopen()
+    check_font(1, "CenturyGothic", "manual-saved-reopened")
+    check_font(2, "CenturyGothicBold", "manual-saved-reopened")
+    dialog.get_by_label("字幕 1字体").select_option("")
+    dialog.get_by_label("字幕 2字体").select_option("")
+    check_font(1, "CenturyGothicBold", "cleared")
+    check_font(2, "CenturyGothic", "cleared")
+    screenshot("cleared")
+    dialog.get_by_role("button", name="保存校对", exact=True).click()
+    expect(dialog.get_by_text(re.compile("已保存"))).to_be_visible()
+    assert current["segments"][0]["style"]["font"] is None
+    assert current["segments"][1]["style"]["font"] is None
+    reopen()
+    check_font(1, "CenturyGothicBold", "cleared-saved-reopened")
+    check_font(2, "CenturyGothic", "cleared-saved-reopened")
+    no_overflow(page)
+    assert not api.tasks, "Font editing submitted an extract/translate/render task"
+
+
+def run_product_names(page, api, base):
+    api.product_checks = True
+    evidence = json.loads((PRODUCT_EVIDENCE / "real-font-evidence.json").read_text())
+    for index, example in enumerate(evidence["examples"]):
+        path = PRODUCT_EVIDENCE / f"sample-{index}.png"
+        if path.exists():
+            api.product_examples[example["text"]] = example
+            api.product_layers[example["layout"]["render_layer_asset_id"]] = path
+    current = api.workspaces["workspace-a"]
+    records = [segment(index) for index in range(1, 4)]
+    for record, text in zip(records, ("FLOOR ONE S7 Stretch Steam", "FLOOR ONE i5 Lite", "Steam Pro Stretch")):
+        record.update(translated_text=text, translation_status="succeeded", end_ms=3000)
+        example = api.product_examples.get(text)
+        if example:
+            record["bbox_normalized"] = [62, 111 + 150 * (record["line_index"] - 1),
+                                        859, 208 + 150 * (record["line_index"] - 1)]
+        else:
+            record["bbox_normalized"] = [100, 500, 800, 580]
+    current.update(reference_video_asset_id="reference-a", reference_video=META,
+                   clean_video_asset_id="clean-a", clean_video=META,
+                   stage="review_ready", segments=records)
+    api.product_measure(current, recognize=True)
+    open_tool(page, base)
+    page.get_by_role("button", name=re.compile(r"3 · 原文")).click()
+    dialog = page.get_by_role("dialog")
+    dialog.get_by_role("button", name="字幕 1 · 定位", exact=True).click()
+    expect(dialog.locator('[data-product-name="line-1"]')).to_contain_text("型号：FLOOR ONE S7")
+    expect(dialog.locator('[data-product-name="line-1"]')).to_contain_text("规格：Stretch Steam")
+    expect(dialog.locator('[data-product-name="line-2"]')).to_contain_text("型号：FLOOR ONE i5")
+    expect(dialog.locator('[data-product-name="line-2"]')).to_contain_text("规格：Lite")
+    expect(dialog.locator('[data-product-name="line-3"]')).to_have_count(0)
+    for identifier in ("line-1", "line-2"):
+        layer = dialog.locator(f'[data-subtitle-layer="{identifier}"]')
+        expect(layer).to_be_visible()
+        page.wait_for_function("id => document.querySelector(`[data-subtitle-layer=\"${id}\"]`)?.naturalWidth > 0",
+                               arg=identifier)
+        expect(layer).to_have_css("object-fit", "contain")
+    no_overflow(page)
+    page.screenshot(path=str(OUT / f"product-{api.role}-{page.viewport_size['width']}.png"), full_page=False)
+    recognize = dialog.get_by_role("button", name=re.compile("识别产品名称"))
+    expect(recognize).to_have_count(0)
+    expect(dialog.get_by_label("字幕 2产品名称字体")).to_have_count(0)
+    expect(dialog.get_by_label("字幕 2产品1model")).to_have_count(0)
+    if api.role == "viewer":
+        for control in dialog.locator("article input, article textarea, article select").all():
+            expect(control).to_be_disabled()
+        assert all(method == "GET" for method, _ in api.calls)
+        return
+    dialog.get_by_label("字幕 2译文").fill("FLOOR ONE S10 Stretch Steam")
+    expect(dialog.locator('[data-subtitle-layer="line-2"]')).to_have_count(0)
+    dialog.get_by_role("button", name="计算排版 · 不保存", exact=True).click()
+    expect(dialog.locator('[data-product-name="line-2"]')).to_contain_text("型号：FLOOR ONE S10")
+    expect(dialog.locator('[data-product-name="line-2"]')).to_contain_text("规格：Stretch Steam")
+    expect(dialog.locator('[data-subtitle-layer="line-2"]')).to_have_count(1)
+    assert current["segments"][1]["translated_text"] == "FLOOR ONE i5 Lite"
+    dialog.get_by_role("button", name="保存校对", exact=True).click()
+    expect(dialog.get_by_text(re.compile("已保存"))).to_be_visible()
+    assert current["segments"][1]["translated_text"] == "FLOOR ONE S10 Stretch Steam"
+    assert current["segments"][1]["product_mentions"][0]["origin"] == "model_pattern"
+    dialog.get_by_label("字幕 2译文").fill("FLOOR ONE i5 Lite")
+    dialog.get_by_role("button", name="保存校对", exact=True).click()
+    expect(dialog.locator('[data-product-name="line-2"]')).to_contain_text("型号：FLOOR ONE i5")
+    assert not any("recognize-products" in path for _, path in api.calls)
+    assert not api.tasks, "Product review submitted an extraction, translation or render"
+    api.fail_layers = True
+    dialog.get_by_role("button", name="关闭", exact=True).click()
+    page.reload(wait_until="networkidle")
+    page.get_by_role("tab", name="视频字幕翻译", exact=True).click()
+    page.get_by_role("button", name=re.compile(r"3 · 原文")).click()
+    dialog.get_by_role("button", name="字幕 1 · 定位", exact=True).click()
+    expect(dialog.locator('[data-subtitle-panel="line-1"]')).to_be_visible()
+    expect(dialog.locator('[data-subtitle-panel="line-1"]')).to_contain_text("FLOOR ONE S7 Stretch Steam")
+    no_overflow(page)
+    api.font_checks.append({"known_and_unknown_png": True, "automatic_save": True,
+                            "automatic_preview": True, "text_invalidation": True,
+                            "no_manual_product_controls": True, "image_failure_fallback": True})
+
+
 def main():
     global OUT
     parser = argparse.ArgumentParser()
     parser.add_argument("--serve-fixture", action="store_true")
     parser.add_argument("--base-url", default="http://127.0.0.1:3058")
     parser.add_argument("--output-dir", type=Path, default=OUT)
+    parser.add_argument("--role-font-checks", action="store_true",
+                        help="Verify automatic role fonts, legacy summaries, manual overrides and readonly UI")
+    parser.add_argument("--product-checks", action="store_true",
+                        help="Verify real product PNGs, corrections, recognition, invalidation and readonly UI")
+    parser.add_argument("--font-dir", type=Path,
+                        help="Serve real downloaded centurygothic.ttf and centurygothic_bold.ttf from this directory")
+    parser.add_argument("--viewport", action="append", choices=("1440", "834", "390"),
+                        help="Run only selected viewport widths; repeat for multiple widths")
+    parser.add_argument("--role", choices=("creator", "viewer"),
+                        help="Run only one permission role")
     args = parser.parse_args()
     OUT = args.output_dir
     if args.serve_fixture:
         ThreadingHTTPServer(("127.0.0.1", 8058), FixtureHandler).serve_forever()
         return
     OUT.mkdir(parents=True, exist_ok=True)
+    results = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
             for width, height in [(1440, 900), (834, 1112), (390, 844)]:
+                if args.viewport and str(width) not in args.viewport:
+                    continue
                 for role in ("creator", "viewer"):
+                    if args.role and role != args.role:
+                        continue
                     context = browser.new_context(viewport={"width": width, "height": height})
-                    api = MockAPI(role)
+                    api = MockAPI(role, args.font_dir)
                     context.route("**/*", api.route)
                     page = context.new_page()
                     try:
-                        (run_creator if role == "creator" else run_viewer)(page, api, args.base_url)
+                        if args.product_checks:
+                            run_product_names(page, api, args.base_url)
+                        elif args.role_font_checks:
+                            run_role_fonts(page, api, args.base_url)
+                        else:
+                            (run_creator if role == "creator" else run_viewer)(page, api, args.base_url)
                         assert not api.unexpected, f"Undeclared requests: {api.unexpected}"
                         assert api.blocked_debug == 0, "Legacy local debug calls remain after task 9"
-                        print(json.dumps(dict(viewport=f"{width}x{height}", role=role,
-                                              result="passed", api_requests=len(api.calls),
-                                              blocked_legacy_debug=api.blocked_debug,
-                                              mocked_font_requests=api.mocked_fonts)))
+                        result = dict(viewport=f"{width}x{height}", role=role,
+                                      result="passed", api_requests=len(api.calls),
+                                      blocked_legacy_debug=api.blocked_debug,
+                                      mocked_font_requests=api.mocked_fonts,
+                                      font_files=api.font_files, font_checks=api.font_checks)
+                        results.append(result)
+                        print(json.dumps(result))
                     except Exception:
                         page.screenshot(path=str(OUT / f"failure-{role}-{width}.png"), full_page=True)
                         print(json.dumps(dict(viewport=f"{width}x{height}", role=role,
@@ -459,6 +742,7 @@ def main():
                         context.close()
         finally:
             browser.close()
+            (OUT / "results.json").write_text(json.dumps(results, indent=2) + "\n")
 
 
 if __name__ == "__main__":

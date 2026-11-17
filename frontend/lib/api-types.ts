@@ -718,6 +718,23 @@ export interface SubtitleSegment {
   warnings: string[];
   excluded: boolean;
   style: SubtitleStyle;
+  product_names_enabled?: boolean;
+  product_mentions?: SubtitleProductMention[];
+  product_text_sha256?: string | null;
+  product_recognition_sha256?: string | null;
+  text_runs?: { start: number; end: number; kind: string; font_type: string; font_sha256: string; baseline_px: number; font_size_px: number }[] | null;
+  render_layer_asset_id?: string | null;
+  render_layer_url?: string | null;
+}
+export interface SubtitleProductMention {
+  start: number;
+  end: number;
+  model: string;
+  spec: string;
+  origin: "catalog" | "model_pattern" | "manual";
+  status: "confirmed";
+  catalog_id: string | null;
+  context_model?: string;
 }
 export interface SubtitleVideoMetadata {
   width: number;

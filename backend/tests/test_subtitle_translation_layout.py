@@ -90,7 +90,8 @@ def test_real_metrics_fit_height_then_full_german_width(font_http):
     assert "font_size_reduced" in summary["warnings"]
     assert element["text"] == segment()["translated_text"]
     assert not summary["missing_glyphs"]
-    assert element["font_type"] == font_http[0] == layout.CENTURY_GOTHIC_BOLD_URL
+    assert element["font_type"] == font_http[0] == layout.CENTURY_GOTHIC_URL
+    assert element["bold"] is False
     assert summary["font_sha256"] == hashlib.sha256(FONT_PATH.read_bytes()).hexdigest()
     assert element["line_max_width"] == -1
     assert element["typesetting"] == 0
@@ -223,8 +224,19 @@ def test_invalid_overrides_fail_without_guessing(style, code):
     assert "private.invalid" not in str(exc.value)
 
 
-def test_missing_glyphs_use_provider_preset_without_external_fallback(font_http):
-    result = compile_one(translated_text="Missing 漢字")
+@pytest.mark.parametrize(
+    "role,font_url,bold",
+    [
+        ("headline", layout.CENTURY_GOTHIC_BOLD_URL, True),
+        ("body", layout.CENTURY_GOTHIC_URL, False),
+        ("footnote", layout.CENTURY_GOTHIC_URL, False),
+        (None, layout.CENTURY_GOTHIC_URL, False),
+    ],
+)
+def test_missing_glyphs_use_provider_preset_without_external_fallback(
+    font_http, role, font_url, bold
+):
+    result = compile_one(translated_text="Missing 漢字", visual_role=role)
     summary = result["layouts"]["line-1"]
     assert "missing_glyphs" in summary["warnings"]
     assert summary["missing_glyphs"] == ["U+5B57", "U+6F22"]
@@ -233,8 +245,9 @@ def test_missing_glyphs_use_provider_preset_without_external_fallback(font_http)
     assert summary["font_sha256"] is None
     assert "font_metrics_unverified" in summary["warnings"]
     assert "preset_glyph_coverage_unverified" in summary["warnings"]
-    assert font_http == [layout.CENTURY_GOTHIC_BOLD_URL]
+    assert font_http == [font_url]
     assert result["project"]["track"][1][0]["font_type"] == "ALi_PuHui"
+    assert result["project"]["track"][1][0]["bold"] is bold
     assert result["project"]["track"][1][0]["text"] == "Missing 漢字"
 
 
@@ -251,7 +264,7 @@ def test_preset_fallback_keeps_measurement_resource_explicit(monkeypatch, font_h
         return found
 
     monkeypatch.setattr(layout, "_load_font_resource", resource)
-    result = compile_one(style={"font": "CenturyGothic"})
+    result = compile_one(visual_role="headline", style={"font": "CenturyGothic"})
     summary = result["layouts"]["line-1"]
     assert "missing_glyphs" in summary["warnings"]
     assert "font_fallback" in summary["warnings"]
@@ -265,6 +278,7 @@ def test_preset_fallback_keeps_measurement_resource_explicit(monkeypatch, font_h
     )
     assert font_http == [layout.CENTURY_GOTHIC_URL]
     assert result["project"]["track"][1][0]["font_type"] == summary["font_type"]
+    assert result["project"]["track"][1][0]["bold"] is False
 
 
 def test_celsius_badcase_keeps_literal_text_and_omits_stroke(font_http):
@@ -277,13 +291,59 @@ def test_celsius_badcase_keeps_literal_text_and_omits_stroke(font_http):
     assert element["text"] == "Temperatura 60℃"
     assert payload["track"][1][0] == element
     assert "border_color" not in element and "border_width" not in element
-    assert font_http == [layout.CENTURY_GOTHIC_BOLD_URL]
+    assert font_http == [layout.CENTURY_GOTHIC_URL]
 
 
-def test_default_bold_font_applies_without_explicit_override():
-    result = layout.compile_subtitle_project([segment()], video(target_language="ja"))
-    assert result["layouts"]["line-1"]["font_type"] == layout.CENTURY_GOTHIC_BOLD_URL
+@pytest.mark.parametrize(
+    "role,font_url",
+    [
+        ("headline", layout.CENTURY_GOTHIC_BOLD_URL),
+        ("body", layout.CENTURY_GOTHIC_URL),
+        ("footnote", layout.CENTURY_GOTHIC_URL),
+        (None, layout.CENTURY_GOTHIC_URL),
+        ("legacy-unknown", layout.CENTURY_GOTHIC_URL),
+    ],
+)
+@pytest.mark.parametrize("style", [{}, {"font": None}, {"font": ""}])
+def test_auto_role_font_replaces_old_derived_summary(role, font_url, style, font_http):
+    source = segment(
+        visual_role=role,
+        style=style,
+        font_type=layout.CENTURY_GOTHIC_BOLD_URL,
+        effective_font_size_px=999,
+    )
+    result = layout.compile_subtitle_project([source], video(target_language="ja"))
+    element = result["project"]["track"][1][0]
+    assert element["font_type"] == result["layouts"]["line-1"]["font_type"] == font_url
+    assert font_http == [font_url]
+    assert element["bold"] is False
+    assert element["font_size"] == result["layouts"]["line-1"]["effective_font_size_px"]
+    assert element["font_size"] != 999
     assert "font_url_version_unverified" in result["layouts"]["line-1"]["warnings"]
+
+
+@pytest.mark.parametrize(
+    "role,font,font_url",
+    [
+        ("body", "CenturyGothicBold", layout.CENTURY_GOTHIC_BOLD_URL),
+        ("headline", "CenturyGothic", layout.CENTURY_GOTHIC_URL),
+        ("headline", layout.CENTURY_GOTHIC_URL, layout.CENTURY_GOTHIC_URL),
+    ],
+)
+def test_manual_font_wins_over_visual_role(role, font, font_url, font_http):
+    result = compile_one(visual_role=role, style={"font": font})
+    element = result["project"]["track"][1][0]
+    assert element["font_type"] == result["layouts"]["line-1"]["font_type"] == font_url
+    assert element["bold"] is False
+    assert font_http == [font_url]
+
+
+def test_platform_alias_shares_core_font_rules_and_layout_version():
+    from video_subtitle_grounding import layout as core
+
+    assert layout is core
+    assert layout.compile_subtitle_project is core.compile_subtitle_project
+    assert layout.LAYOUT_VERSION == "single-line-adaptive-panel35-product-font-v3"
 
 
 def test_explicit_japanese_font_is_preserved():
@@ -662,7 +722,7 @@ def test_boundary_limit_then_shrink_and_no_regression(alignment):
     assert 64 <= box[0] <= original[0] < original[2] <= box[2] <= 1216
     assert summary["effective_font_size_px"] < summary["estimated_font_size_px"]
     assert "bbox_expansion_limited" in summary["warnings"]
-    resource = layout._load_font_resource(layout.CENTURY_GOTHIC_BOLD_URL)
+    resource = layout._load_font_resource(layout.CENTURY_GOTHIC_URL)
     previous = layout._largest_size(
         resource,
         summary["estimated_font_size_px"],

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+from collections import OrderedDict
 from time import monotonic
 
 from backend.app.core.logging import log_event
@@ -34,6 +35,9 @@ LAYOUT_FIELDS = (
     "render_bbox_pixels",
     "font_type",
     "font_sha256",
+    "text_runs",
+    "render_layer_asset_id",
+    "render_layer_url",
 )
 ADAPTIVE_LAYOUT_WARNINGS = {
     "bbox_expanded",
@@ -42,6 +46,9 @@ ADAPTIVE_LAYOUT_WARNINGS = {
     "expanded_background_unverified",
     "font_size_reduced",
     "font_size_small",
+    "product_layout_unavailable",
+    "product_layer_storage_unavailable",
+    "product_glyph_font_fallback",
 }
 
 
@@ -68,6 +75,160 @@ class SubtitleTranslationService:
         self.media = media
         self._scheduled: set[str] = set()
         self._running: set[asyncio.Task] = set()
+        from .subtitle_translation_layers import SubtitleLayerStorage
+
+        self.layers = SubtitleLayerStorage(repository, asset_storage)
+        self._product_results = OrderedDict()
+
+    @staticmethod
+    def _refresh_products(segment):
+        from video_subtitle_grounding.product_names import (
+            effective_mentions,
+            text_fingerprint,
+            validated_mentions,
+        )
+
+        text = segment.translated_text or ""
+        if segment.product_names_enabled is False:
+            segment.product_mentions = (validated_mentions(text, segment.product_mentions)
+                                        if segment.product_text_sha256 == text_fingerprint(text) else [])
+        else:
+            segment.product_mentions = effective_mentions(segment.model_dump(mode="json"))
+        segment.product_text_sha256 = text_fingerprint(text)
+
+    def _segment_content(self, segments):
+        copies = []
+        for original in segments:
+            segment = original.model_copy(deep=True)
+            self._refresh_products(segment)
+            copies.append(segment)
+        self._refresh_context(copies)
+        return [segment.model_dump(mode="json", exclude={
+            *LAYOUT_FIELDS, "warnings", "product_text_sha256",
+            "product_recognition_sha256"}) for segment in copies]
+
+    @staticmethod
+    def _recognition_fingerprints(segments):
+        from video_subtitle_grounding.product_names import CATALOG_VERSION
+
+        records = [{
+            "id": s.segment_id, "text": s.translated_text or "",
+            "block": s.block_id, "excluded": s.excluded, "enabled": s.product_names_enabled,
+        } for s in segments]
+        return {s.segment_id: hashlib.sha256(json.dumps({
+            "catalog": CATALOG_VERSION, "record": record,
+            "context": [other for other in records if s.block_id and other["block"] == s.block_id],
+        }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+                for s, record in zip(segments, records, strict=True)}
+
+    async def prepare_product_update(self, workspace_id, request):
+        """Automatically infer edited/historical names before save or POST preview."""
+        from backend.app.services.modelark_subtitle_translation import ModelArkSubtitleTranslationAdapter
+        from video_subtitle_grounding.product_names import text_fingerprint
+
+        workspace = self.repository.get_subtitle_workspace(workspace_id)
+        if workspace.revision != request.expected_revision:
+            raise RevisionConflictError("workspace revision changed; reload before saving")
+        if request.segments is None:
+            return request
+        if {s.segment_id: s.text for s in request.segments} != {
+                s.segment_id: s.text for s in workspace.segments}:
+            raise ValueError("preview must preserve segment IDs and original text")
+        segments = [s.model_copy(deep=True) for s in request.segments]
+        fingerprints = self._recognition_fingerprints(segments)
+        previous = {s.segment_id: s for s in workspace.segments}
+        pending = []
+        for segment in segments:
+            digest = fingerprints[segment.segment_id]
+            key = (workspace_id, segment.segment_id, digest)
+            saved = previous[segment.segment_id]
+            if saved.product_recognition_sha256 == digest:
+                segment.product_mentions = saved.product_mentions
+                segment.product_recognition_sha256 = digest
+                segment.product_text_sha256 = text_fingerprint(segment.translated_text or "")
+            elif key in self._product_results:
+                segment.product_mentions = self._product_results[key]
+                segment.product_recognition_sha256 = digest
+                segment.product_text_sha256 = text_fingerprint(segment.translated_text or "")
+            elif segment.translated_text and not segment.excluded and segment.product_names_enabled:
+                pending.append(segment.segment_id)
+        if pending:
+            records = [{**s.model_dump(mode="json"), "text": s.translated_text}
+                       for s in segments if s.translated_text and not s.excluded]
+            result = {"product_mentions": {}, "warnings": {}}
+            retry_ids = pending
+            for attempt in range(2):
+                try:
+                    translator = self.translator or ModelArkSubtitleTranslationAdapter()
+                    fresh = await translator.recognize_products(records, segment_ids=retry_ids)
+                    result["product_mentions"].update(fresh["product_mentions"])
+                    result["warnings"].update(fresh.get("warnings", {}))
+                    retry_ids = [sid for sid in retry_ids if fresh.get("warnings", {}).get(sid)]
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - automatic inference cannot block edits
+                    log_event(logger, "subtitle_translation.auto_products_failed", outcome="failed",
+                              workspace_id=workspace_id, attempt=attempt + 1,
+                              error_type=type(exc).__name__, segment_count=len(retry_ids))
+                if not retry_ids:
+                    break
+            for segment in segments:
+                if segment.segment_id not in pending:
+                    continue
+                segment.product_mentions = result["product_mentions"].get(segment.segment_id, [])
+                segment.product_text_sha256 = text_fingerprint(segment.translated_text)
+                segment.product_recognition_sha256 = fingerprints[segment.segment_id]
+                key = (workspace_id, segment.segment_id, segment.product_recognition_sha256)
+                self._product_results[key] = segment.product_mentions
+                if len(self._product_results) > 512:
+                    self._product_results.popitem(last=False)
+            log_event(logger, "subtitle_translation.auto_products_completed", outcome="completed",
+                      workspace_id=workspace_id, segment_count=len(pending),
+                      fallback_count=len(retry_ids))
+        if self.repository.get_subtitle_workspace(workspace_id).revision != request.expected_revision:
+            raise RevisionConflictError("workspace revision changed; reload before saving")
+        return request.model_copy(update={"segments": segments})
+
+    @staticmethod
+    def _refresh_context(segments):
+        from video_subtitle_grounding.product_names import contextual_segments
+
+        normalized = contextual_segments([s.model_dump(mode="json") for s in segments])
+        for segment, record in zip(segments, normalized, strict=True):
+            if segment.product_names_enabled is not False:
+                segment.product_mentions = record["product_mentions"]
+
+    async def recognize_products(self, workspace_id, request):
+        """Explicit paid recognition of a draft, with optimistic writeback."""
+        from backend.app.services.modelark_subtitle_translation import (
+            ModelArkSubtitleTranslationAdapter,
+        )
+
+        workspace = self.repository.get_subtitle_workspace(workspace_id)
+        if workspace.revision != request.expected_revision:
+            raise RevisionConflictError("workspace revision changed; reload before recognizing")
+        if workspace.active_task_id:
+            raise ValueError("another workspace stage is active")
+        # Use preview validation without invoking layout or writing any draft.
+        segments = request.segments if request.segments is not None else workspace.segments
+        if {s.segment_id: s.text for s in segments} != {s.segment_id: s.text for s in workspace.segments}:
+            raise ValueError("preview must preserve segment IDs and original text")
+        records = [{**s.model_dump(mode="json"), "text": s.translated_text}
+                   for s in segments if s.translated_text and not s.excluded]
+        translator = self.translator or ModelArkSubtitleTranslationAdapter()
+        result = await translator.recognize_products(records, segment_ids=[s["segment_id"] for s in records])
+        updated = []
+        for item in segments:
+            segment = item.model_copy(deep=True)
+            segment.product_mentions = result["product_mentions"].get(segment.segment_id, [])
+            segment.product_text_sha256 = result["product_text_sha256"].get(segment.segment_id)
+            segment.warnings = [*segment.warnings, *result.get("warnings", {}).get(segment.segment_id, [])]
+            updated.append(segment)
+        # patch checks revision again after the model finishes; concurrent edits win.
+        saved = self.patch(workspace_id, SubtitleWorkspaceUpdate(
+            **{**request.model_dump(exclude_unset=True), "segments": updated}))
+        self._event("products_recognized", saved)
+        return await self.preview(saved)
 
     async def stop(self):
         pending = list(self._running)
@@ -144,6 +305,7 @@ class SubtitleTranslationService:
             )
         )
         for segment in workspace.segments:
+            self._refresh_products(segment)
             for key in LAYOUT_FIELDS:
                 setattr(segment, key, None)
             segment.warnings = [
@@ -152,6 +314,7 @@ class SubtitleTranslationService:
                 if not w.startswith("layout_preview:")
                 and w.rsplit(":", 1)[-1] not in ADAPTIVE_LAYOUT_WARNINGS
             ]
+        self._refresh_context(workspace.segments)
         video_metadata = workspace.clean_video or workspace.reference_video
         if not video_metadata:
             workspace.warnings.append("layout_preview:video_metadata_unavailable")
@@ -187,6 +350,14 @@ class SubtitleTranslationService:
         while pending:
             try:
                 compiled = await asyncio.to_thread(compiler, pending, video)
+                try:
+                    await self.layers.prepare(workspace.id, compiled)
+                except Exception:  # noqa: BLE001 - optional PNG storage cannot block editing
+                    for summary in compiled.get("layouts", {}).values():
+                        if summary.get("render_layer_asset_id"):
+                            summary["render_layer_asset_id"] = None
+                            summary["render_layer_url"] = None
+                            summary["warnings"].append("product_layer_storage_unavailable")
                 summaries = compiled["layouts"]
                 workspace.warnings = list(
                     dict.fromkeys([*workspace.warnings, *compiled.get("warnings", [])])
@@ -249,12 +420,18 @@ class SubtitleTranslationService:
                 cleaned = [s.model_copy(deep=True) for s in request.segments]
                 for segment in cleaned:
                     previous = old_segments[segment.segment_id]
-                    for key in (*LAYOUT_FIELDS, "warnings"):
+                    self._refresh_products(segment)
+                    for key in LAYOUT_FIELDS:
                         setattr(segment, key, getattr(previous, key))
+                    segment.warnings = list(dict.fromkeys([
+                        *previous.warnings, *[w for w in segment.warnings if w in {
+                            "product_recognition_unavailable", "product_recognition_invalid_split"}]
+                    ]))
                     if segment.translated_text:
                         segment.translation_status = "succeeded"
                     elif previous.translated_text:
                         segment.translation_status = "pending"
+                self._refresh_context(cleaned)
                 changes["segments"] = cleaned
             reference_changed = (
                 changes.get(
@@ -280,7 +457,8 @@ class SubtitleTranslationService:
             )
             active_operation = active.input_snapshot["operation"] if active else None
             draft_changed = (
-                "segments" in changes and changes["segments"] != workspace.segments
+                "segments" in changes and self._segment_content(changes["segments"])
+                != self._segment_content(workspace.segments)
             )
             content_changed = (
                 reference_changed
@@ -308,6 +486,7 @@ class SubtitleTranslationService:
                     segment.translated_text = None
                     segment.translation_status = "pending"
                     segment.warnings = []
+                    self._refresh_products(segment)
                 workspace.stage_task_ids.pop("translate", None)
                 workspace.stage_task_ids.pop("render", None)
             if clean_changed:
@@ -369,6 +548,8 @@ class SubtitleTranslationService:
     def submit(
         self, workspace_id, operation, request: SubtitleStageRequest, *, retry_of=None
     ):
+        from video_subtitle_grounding.product_names import CATALOG_VERSION
+
         from backend.app.services.subtitle_translation_layout import LAYOUT_VERSION
 
         task_id = None
@@ -385,7 +566,8 @@ class SubtitleTranslationService:
                 retry_of,
             ]
             if operation == "render":
-                identity.append({"render_layout_version": LAYOUT_VERSION})
+                identity.append({"render_layout_version": LAYOUT_VERSION,
+                                 "product_catalog_version": CATALOG_VERSION})
             key = hashlib.sha256(
                 json.dumps(identity, separators=(",", ":")).encode()
             ).hexdigest()
@@ -458,6 +640,7 @@ class SubtitleTranslationService:
             )
             if operation == "render":
                 snapshot["render_layout_version"] = LAYOUT_VERSION
+                snapshot["product_catalog_version"] = CATALOG_VERSION
             resume_provider_task_id = None
             if retry_of:
                 previous = next((t for t in tasks if t.id == retry_of), None)
@@ -627,16 +810,25 @@ class SubtitleTranslationService:
                                 segment.segment_id
                             ]
                             segment.translation_status = "succeeded"
+                            segment.product_mentions = result.get("product_mentions", {}).get(segment.segment_id, [])
+                            segment.product_text_sha256 = result.get("product_text_sha256", {}).get(segment.segment_id)
+                            self._refresh_products(segment)
                             segment.warnings = [
                                 w
                                 for w in segment.warnings
                                 if not w.startswith("translation_pending:")
                             ]
+                            segment.warnings.extend(result.get("warnings", {}).get(segment.segment_id, []))
                         elif segment.segment_id in result["failed_ids"]:
                             segment.translation_status = "failed"
                             segment.warnings = [
                                 "translation_pending: retry or manually fill this segment"
                             ]
+                    if "product_mentions" in result:
+                        fingerprints = self._recognition_fingerprints(workspace.segments)
+                        for segment in workspace.segments:
+                            if segment.translated_text == result["translations"].get(segment.segment_id):
+                                segment.product_recognition_sha256 = fingerprints[segment.segment_id]
                     workspace.revision += 1
                     workspace.output_asset_id = None
                     workspace.stage = SubtitleTranslationStage.REVIEW_READY
@@ -862,6 +1054,21 @@ class SubtitleTranslationService:
                 ),
             }
             compiled = await asyncio.to_thread(compiler, snapshot["segments"], video)
+            if isinstance(compiled, dict) and compiled.get("layers"):
+                try:
+                    await self.layers.prepare(snapshot["workspace_id"], compiled, submit=True)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 - readable text fallback, never unresolved sources
+                    fallback = [{**s, "product_names_enabled": False} for s in snapshot["segments"]]
+                    compiled = await asyncio.to_thread(compiler, fallback, video)
+                    if compiled.get("layers"):
+                        from backend.app.services.subtitle_translation_layout import SubtitleLayoutError
+
+                        raise SubtitleLayoutError("product_layer_materialization_unavailable")
+                    compiled.setdefault("warnings", []).append("product_layer_storage_unavailable")
+                    for summary in compiled.get("layouts", {}).values():
+                        summary.setdefault("warnings", []).append("product_layer_storage_unavailable")
             if isinstance(compiled, dict):
                 project = compiled.get("project", compiled)
                 layouts = compiled.get("layouts", {})

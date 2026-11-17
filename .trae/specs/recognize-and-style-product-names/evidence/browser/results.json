@@ -1,0 +1,89 @@
+[
+  {
+    "viewport": "1440x900",
+    "role": "creator",
+    "result": "passed",
+    "api_requests": 29,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 4,
+    "font_files": {},
+    "font_checks": [
+      {
+        "known_and_unknown_png": true,
+        "manual_edit": true,
+        "disabled": true,
+        "text_invalidation": true,
+        "explicit_recognition_saved": true,
+        "image_failure_fallback": true
+      }
+    ]
+  },
+  {
+    "viewport": "1440x900",
+    "role": "viewer",
+    "result": "passed",
+    "api_requests": 9,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 1,
+    "font_files": {},
+    "font_checks": []
+  },
+  {
+    "viewport": "834x1112",
+    "role": "creator",
+    "result": "passed",
+    "api_requests": 25,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 4,
+    "font_files": {},
+    "font_checks": [
+      {
+        "known_and_unknown_png": true,
+        "manual_edit": true,
+        "disabled": true,
+        "text_invalidation": true,
+        "explicit_recognition_saved": true,
+        "image_failure_fallback": true
+      }
+    ]
+  },
+  {
+    "viewport": "834x1112",
+    "role": "viewer",
+    "result": "passed",
+    "api_requests": 9,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 1,
+    "font_files": {},
+    "font_checks": []
+  },
+  {
+    "viewport": "390x844",
+    "role": "creator",
+    "result": "passed",
+    "api_requests": 26,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 4,
+    "font_files": {},
+    "font_checks": [
+      {
+        "known_and_unknown_png": true,
+        "manual_edit": true,
+        "disabled": true,
+        "text_invalidation": true,
+        "explicit_recognition_saved": true,
+        "image_failure_fallback": true
+      }
+    ]
+  },
+  {
+    "viewport": "390x844",
+    "role": "viewer",
+    "result": "passed",
+    "api_requests": 9,
+    "blocked_legacy_debug": 0,
+    "mocked_font_requests": 1,
+    "font_files": {},
+    "font_checks": []
+  }
+]
