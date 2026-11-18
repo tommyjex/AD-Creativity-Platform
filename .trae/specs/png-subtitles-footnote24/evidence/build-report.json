@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "artifacts": [
+    {
+      "name": "video_subtitle_grounding-0.3.6.tar.gz",
+      "path": "/Users/bytedance/AD-Creativity/.trae/specs/png-subtitles-footnote24/evidence/dist/video_subtitle_grounding-0.3.6.tar.gz",
+      "kind": "sdist",
+      "size": 139936,
+      "hashes": {
+        "sha256": "437a9e6c4780512cd9781c9e5a453cb4c39c801d03c9c7326f9e5bfeddaef8f0"
+      }
+    },
+    {
+      "name": "video_subtitle_grounding-0.3.6-py3-none-any.whl",
+      "path": "/Users/bytedance/AD-Creativity/.trae/specs/png-subtitles-footnote24/evidence/dist/video_subtitle_grounding-0.3.6-py3-none-any.whl",
+      "kind": "wheel",
+      "size": 62652,
+      "hashes": {
+        "sha256": "9b1d7154abbb3a7b6facee6055f681a60ded3757f540012a8f25853e988ad602"
+      }
+    }
+  ]
+}

@@ -1,0 +1,1383 @@
+{
+  "metadata": {
+    "description": "最近一次本地实际视频测试：压制任务提交前保存的翻译字幕快照",
+    "data_source": "tool_tasks.input_snapshot.segments",
+    "render_task_id": "3d0e318f-65ab-45d1-8e21-1fb5622e0065",
+    "render_task_status": "succeeded",
+    "render_submitted_at": "2026-11-17T16:56:55+08:00",
+    "timezone": "Asia/Shanghai",
+    "workspace_id": "d74a93f0-3f7f-4bf7-abac-54fe100d4baa",
+    "workspace_name": "视频字幕翻译",
+    "revision": 8,
+    "source_language": "auto",
+    "target_language": "de",
+    "video_category": "product",
+    "segment_count": 23,
+    "translated_segment_count": 23,
+    "included_segment_count": 23,
+    "notes": [
+      "字幕顺序和所有非链接字段均保持任务快照原值。",
+      "render_layer_url 为临时渲染资源链接，未导出；保留 render_layer_asset_id。",
+      "排版字段来自任务提交时已有的预览数据，不代表压制完成后的新增结果。"
+    ]
+  },
+  "reference_video": {
+    "fps": 25.0,
+    "width": 1920,
+    "height": 1080,
+    "rotation": 0,
+    "has_audio": true,
+    "duration_ms": 65400,
+    "video_bit_rate": null,
+    "video_bit_rate_probed": false
+  },
+  "output_video": {
+    "fps": 25.0,
+    "width": 1920,
+    "height": 1080,
+    "rotation": 0,
+    "has_audio": true,
+    "duration_ms": 65400,
+    "video_bit_rate": null,
+    "video_bit_rate_probed": false
+  },
+  "reference_video_asset_id": "e6af2553-9838-4acb-81ff-28ec3d6005f3",
+  "clean_video_asset_id": "0d8f54ac-d9d5-4b14-ac28-87a557ea6b3d",
+  "segments": [
+    {
+      "text": "FLOOR ONE i5 Lite",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 2000,
+      "block_id": "block_0",
+      "excluded": false,
+      "start_ms": 500,
+      "warnings": [],
+      "alignment": "center",
+      "font_type": null,
+      "text_runs": [
+        {
+          "end": 12,
+          "kind": "product_model",
+          "text": "FLOOR ONE i5",
+          "x_px": 56.625,
+          "start": 0,
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+          "advance_px": 515.75,
+          "baseline_px": 57.0,
+          "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+          "font_size_px": 72
+        },
+        {
+          "end": 17,
+          "kind": "product_spec",
+          "text": " Lite",
+          "x_px": 572.375,
+          "start": 12,
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+          "advance_px": 136.0,
+          "baseline_px": 57.0,
+          "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+          "font_size_px": 72
+        }
+      ],
+      "line_index": 0,
+      "segment_id": "08f44a11-f4d0-464b-9864-1ee26461c214",
+      "bbox_pixels": [
+        576,
+        491,
+        1340,
+        568
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        300,
+        455,
+        698,
+        526
+      ],
+      "translated_text": "FLOOR ONE i5 Lite",
+      "background_color": "#876344",
+      "product_mentions": [
+        {
+          "end": 17,
+          "spec": "Lite",
+          "model": "FLOOR ONE i5",
+          "start": 0,
+          "origin": "model_pattern",
+          "status": "confirmed"
+        }
+      ],
+      "font_height_ratio": 0.058,
+      "render_bbox_pixels": [
+        577,
+        492,
+        1342,
+        569
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "db2d4e8b179f982fc20550530658c8d6cac39923ba7f535d79ae2a1032949f6e",
+      "product_names_enabled": true,
+      "render_layer_asset_id": "4f6743a8aefce807fbb1f6cc32665e2fa4070ded7f58b4ac3ccc373d06376b5e",
+      "effective_font_size_px": 72.0,
+      "estimated_font_size_px": 72.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "7a08e26e45e6fb2594e14f589bfa3fd830c1984bf0f78a30a60f290b1de075be"
+    },
+    {
+      "text": "22,000Pa Powerful Suction",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 11500,
+      "block_id": "block_1",
+      "excluded": false,
+      "start_ms": 9000,
+      "warnings": [
+        "font_url_version_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "text_runs": null,
+      "line_index": 0,
+      "segment_id": "d96c2b94-eef4-4a59-bdd6-5bf0311ebd47",
+      "bbox_pixels": [
+        124,
+        885,
+        769,
+        937
+      ],
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "visual_role": "headline",
+      "bbox_normalized": [
+        65,
+        820,
+        401,
+        868
+      ],
+      "translated_text": "Starke Saugkraft von 22.000 Pa",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.038,
+      "render_bbox_pixels": [
+        125,
+        886,
+        771,
+        938
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "b1b15f58a65a31f8832dadfa10bd38a0076b72ff6a50fb89783185a1a448b783",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 41.0,
+      "estimated_font_size_px": 41.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "26d9e59a8c18bc0573d7d458ef57fd5ccc2eb3516ae32adc31b3d6d0ca4b92ae"
+    },
+    {
+      "text": "Suck out dry and wet garbage from the floor effortlessly.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 11500,
+      "block_id": "block_1",
+      "excluded": false,
+      "start_ms": 9000,
+      "warnings": [
+        "font_url_version_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 1,
+      "segment_id": "5c3551b5-f26f-4499-b3aa-560cde413d06",
+      "bbox_pixels": [
+        124,
+        942,
+        1249,
+        986
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        873,
+        651,
+        913
+      ],
+      "translated_text": "Saugt trockenen und nassen Schmutz mühelos vom Boden auf.",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        944,
+        1251,
+        987
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "0416778fc8a9f6569aa1f7d8b9c63a9ec0b0bb8927fa5998c376e911fdb03793",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 34.0,
+      "estimated_font_size_px": 34.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "163e8a1e2d245b4600b170066151d1008210cc6997f0c68f997c6b221f6d20ae"
+    },
+    {
+      "text": "Constant Clean Brush Mopping",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 16500,
+      "block_id": "block_2",
+      "excluded": false,
+      "start_ms": 12500,
+      "warnings": [
+        "font_url_version_unverified",
+        "low_contrast"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "text_runs": null,
+      "line_index": 0,
+      "segment_id": "75667555-4f28-4f17-833e-d463b6aeb251",
+      "bbox_pixels": [
+        124,
+        858,
+        896,
+        910
+      ],
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "visual_role": "headline",
+      "bbox_normalized": [
+        65,
+        795,
+        467,
+        843
+      ],
+      "translated_text": "Konstant sauberes Bürstenwischen",
+      "background_color": "#D7D7D7",
+      "product_mentions": [],
+      "font_height_ratio": 0.038,
+      "render_bbox_pixels": [
+        125,
+        859,
+        898,
+        911
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "aaa44e10f7cb991a7fc383a8b03d60495850317289be0e718aa23dd84a6f7b4e",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 41.0,
+      "estimated_font_size_px": 41.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "3e32b6ddc40dbbe4284d19f9f228ccba124a5f9627677f16292abcb028f591cf"
+    },
+    {
+      "text": "Always cleans with fresh water and a clean brush, ensuring a deep and",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 16500,
+      "block_id": "block_2",
+      "excluded": false,
+      "start_ms": 12500,
+      "warnings": [
+        "font_url_version_unverified",
+        "low_contrast"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 1,
+      "segment_id": "2e44b203-4271-4344-b527-e21183904ec3",
+      "bbox_pixels": [
+        124,
+        915,
+        1549,
+        959
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        848,
+        807,
+        888
+      ],
+      "translated_text": "Reinigt immer mit frischem Wasser und einer sauberen Bürste für eine gründliche und",
+      "background_color": "#D7D7D7",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        917,
+        1551,
+        960
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "481c1b759edac94d971ed1101cecfe4164b25695f9e2072abeb087b7697ae72e",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 34.0,
+      "estimated_font_size_px": 34.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "58838aaf0ba4cebd2aa865b814978c99ddda06ce2d84f75c93f0755e5e2e60e8"
+    },
+    {
+      "text": "thorough wash every time.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 16500,
+      "block_id": "block_2",
+      "excluded": false,
+      "start_ms": 12500,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified",
+        "low_contrast"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 2,
+      "segment_id": "199ff85c-ea99-4183-9523-3d4fb5f7c3ae",
+      "bbox_pixels": [
+        124,
+        964,
+        652,
+        1007
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        893,
+        340,
+        933
+      ],
+      "translated_text": "tiefgehende Reinigung jedes Mal.",
+      "background_color": "#D7D7D7",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        965,
+        700,
+        1009
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "c7d2baa66f2d6455110cc2386de1bc6bfb78e360667e51935b8c43e8f09ebc90",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 35.0,
+      "estimated_font_size_px": 35.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "7449bba29971095ce0385555d5f3920c8134efe76fa95cc3b6390bd03286f0fe"
+    },
+    {
+      "text": "Anti-Tangle Design",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 19000,
+      "block_id": "block_3",
+      "excluded": false,
+      "start_ms": 17000,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified",
+        "low_contrast"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "text_runs": null,
+      "line_index": 0,
+      "segment_id": "09dd2590-ad24-474f-aa59-6a893bbcbab8",
+      "bbox_pixels": [
+        124,
+        885,
+        591,
+        937
+      ],
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "visual_role": "headline",
+      "bbox_normalized": [
+        65,
+        820,
+        308,
+        868
+      ],
+      "translated_text": "Verwirrungssicheres Design",
+      "background_color": "#8A7770",
+      "product_mentions": [],
+      "font_height_ratio": 0.038,
+      "render_bbox_pixels": [
+        125,
+        886,
+        667,
+        938
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "fcc72e73f572d6267320ba5a1fd2f2351dc4adea0b4f293b094764d8526225a4",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 41.0,
+      "estimated_font_size_px": 41.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "c1204c6edd45954c1140f9332afb5c92fba04d3c674f3da6556c6d4e0b0aad43"
+    },
+    {
+      "text": "Effortlessly tackles hair and pet fur without tangling.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 19000,
+      "block_id": "block_3",
+      "excluded": false,
+      "start_ms": 17000,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified",
+        "low_contrast"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 1,
+      "segment_id": "a1ea9357-b1a5-40b5-9717-6411620ddea6",
+      "bbox_pixels": [
+        124,
+        942,
+        1136,
+        986
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        873,
+        592,
+        913
+      ],
+      "translated_text": "Bewältigt Haare und Tierhaare mühelos, ohne dass sich diese verfangen.",
+      "background_color": "#8A7770",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        944,
+        1322,
+        987
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "a9249d8a6e2a1c5340b3661953b46ee65076c85fd036e3e7f61439a74d4b5fcd",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 34.0,
+      "estimated_font_size_px": 34.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "f7da6981e5fe00da5619009a489827538839530058459fb20b6e07159576e5fc"
+    },
+    {
+      "text": "Dual-sided Edge Cleaning",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 25500,
+      "block_id": "block_4",
+      "excluded": false,
+      "start_ms": 23000,
+      "warnings": [
+        "font_url_version_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "text_runs": null,
+      "line_index": 0,
+      "segment_id": "d6e45397-abd6-45d2-bd4e-cbb32611e279",
+      "bbox_pixels": [
+        124,
+        885,
+        781,
+        937
+      ],
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "visual_role": "headline",
+      "bbox_normalized": [
+        65,
+        820,
+        407,
+        868
+      ],
+      "translated_text": "Zweiseitige Kantenreinigung",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.038,
+      "render_bbox_pixels": [
+        125,
+        886,
+        782,
+        938
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "7ad573fa41d3e32b140916a55f0cae32f84ac0380f6b3bfb40308cfb895a8025",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 41.0,
+      "estimated_font_size_px": 41.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "75c90abc938e4013f83dcc26f09d5d8b8b9c0ffd44c3107b5565fcc2d3e215ca"
+    },
+    {
+      "text": "Easily cleans along the baseboards, leaving no corner uncleaned.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 25500,
+      "block_id": "block_4",
+      "excluded": false,
+      "start_ms": 23000,
+      "warnings": [
+        "font_url_version_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 1,
+      "segment_id": "a87801d3-699e-4ff5-a7e7-ce75d15e7aab",
+      "bbox_pixels": [
+        124,
+        942,
+        1453,
+        986
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        873,
+        757,
+        913
+      ],
+      "translated_text": "Reinigt mühelos entlang der Fußleisten und lässt keine Ecke ungereinigt.",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        944,
+        1455,
+        987
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "a142098e820b46dd1b5b443dffb19ca1645d9d18b1aa15510e1a59102fac2568",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 34.0,
+      "estimated_font_size_px": 34.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "b365f35de295d4db3ef09ac4c209364a11c43ebb82851bf60ed803f3c84b654c"
+    },
+    {
+      "text": "180° Lay-Flat Design",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 32000,
+      "block_id": "block_5",
+      "excluded": false,
+      "start_ms": 28500,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "text_runs": null,
+      "line_index": 0,
+      "segment_id": "9b6afba1-762a-41ea-9f68-ddb05ab6711f",
+      "bbox_pixels": [
+        124,
+        885,
+        624,
+        937
+      ],
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "visual_role": "headline",
+      "bbox_normalized": [
+        65,
+        820,
+        325,
+        868
+      ],
+      "translated_text": "180° Flachlagerungs-Design",
+      "background_color": "#33251B",
+      "product_mentions": [],
+      "font_height_ratio": 0.038,
+      "render_bbox_pixels": [
+        125,
+        886,
+        681,
+        938
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "0653930adf3c1c0524a42232481968630cb39c9d6f890ec069226515ab297e75",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 41.0,
+      "estimated_font_size_px": 41.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "a555034a6fc38157d1e1c4a2572dc947a8eb14eb809e1a57dc4e960041404f13"
+    },
+    {
+      "text": "Easily reaches low areas to clean hidden dust.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 32000,
+      "block_id": "block_5",
+      "excluded": false,
+      "start_ms": 28500,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 1,
+      "segment_id": "404ab7f5-f4fb-4283-a3a8-2e43616dd8e5",
+      "bbox_pixels": [
+        124,
+        942,
+        1046,
+        986
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        873,
+        545,
+        913
+      ],
+      "translated_text": "Erreicht mühelos niedrige Bereiche, um verborgenen Staub zu entfernen.",
+      "background_color": "#33251B",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        944,
+        1321,
+        987
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "15178f03be5845af72c45045338494e3d45a8ab727a7c3c6bd35d5c1ecf0d025",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 34.0,
+      "estimated_font_size_px": 34.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "99770e0794682edfae83100bbd16425bab5e1065f854a6a2f723b537f24d990a"
+    },
+    {
+      "text": "*The lying height is 12.75cm",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 32000,
+      "block_id": "block_5",
+      "excluded": false,
+      "start_ms": 28500,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 2,
+      "segment_id": "e4995f9e-4b8e-4a2f-ad5c-2b1eb57a7015",
+      "bbox_pixels": [
+        124,
+        999,
+        384,
+        1023
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "footnote",
+      "bbox_normalized": [
+        65,
+        925,
+        200,
+        948
+      ],
+      "translated_text": "*Die Höhe im flachliegenden Zustand beträgt 12,75 cm",
+      "background_color": "#33251B",
+      "product_mentions": [],
+      "font_height_ratio": 0.018,
+      "render_bbox_pixels": [
+        125,
+        1000,
+        633,
+        1025
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "162fccb6b29190b488a41d787e01dff9e1e472bd2f82dd45dd4fbfe8800b219e",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 19.0,
+      "estimated_font_size_px": 19.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "984596ff430714c1509bb8e4b14065dce8bde4ba40cf10d33cc80434db3460f3"
+    },
+    {
+      "text": "Mini Assistive Wheels",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 38000,
+      "block_id": "block_6",
+      "excluded": false,
+      "start_ms": 36500,
+      "warnings": [
+        "font_url_version_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "text_runs": null,
+      "line_index": 0,
+      "segment_id": "10f01dd3-4ad7-464e-acbd-2d2ab927731a",
+      "bbox_pixels": [
+        124,
+        885,
+        629,
+        937
+      ],
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "visual_role": "headline",
+      "bbox_normalized": [
+        65,
+        820,
+        328,
+        868
+      ],
+      "translated_text": "Kleine Stützräder",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.038,
+      "render_bbox_pixels": [
+        125,
+        886,
+        630,
+        938
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "db46b4a9af0f70f3a991640aa988d978a74649cc1f5e780816f930f55ecde603",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 41.0,
+      "estimated_font_size_px": 41.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "5a3a4d203501360b1e5be39e3a80cc4630d186d3827a1a3f0fade45a8fbc8b0e"
+    },
+    {
+      "text": "Easily push and pull in both directions for effortless maneuvering.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 38000,
+      "block_id": "block_6",
+      "excluded": false,
+      "start_ms": 36500,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 1,
+      "segment_id": "ac557102-5190-46ce-bca6-c9f8ce7536d6",
+      "bbox_pixels": [
+        124,
+        942,
+        1411,
+        986
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        873,
+        735,
+        913
+      ],
+      "translated_text": "Lässt sich in beide Richtungen leicht schieben und ziehen – für müheloses Manövrieren.",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        944,
+        1556,
+        987
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "1d8becc181f591559f7fca81b09cd0522e455bda432e7a85729875149667652d",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 34.0,
+      "estimated_font_size_px": 34.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "2dddddf3a06d39192d8e5c9f6d4c98e6be202379dd1a3a124b5176f9954e0800"
+    },
+    {
+      "text": "45° Swivel Design",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 41500,
+      "block_id": "block_7",
+      "excluded": false,
+      "start_ms": 38500,
+      "warnings": [
+        "font_url_version_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "text_runs": null,
+      "line_index": 0,
+      "segment_id": "1d4f3b97-982c-48ac-9626-15644e07eaba",
+      "bbox_pixels": [
+        124,
+        885,
+        556,
+        937
+      ],
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "visual_role": "headline",
+      "bbox_normalized": [
+        65,
+        820,
+        290,
+        868
+      ],
+      "translated_text": "45°-Schwenkdesign",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.038,
+      "render_bbox_pixels": [
+        125,
+        886,
+        557,
+        938
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "a27ebaf9f5ca828d64761e63e010da7765b79660551dab3d3310a99fbc32925e",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 41.0,
+      "estimated_font_size_px": 41.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "3406ae95379a51c02b64dee227a50567f1a2f1d8c10f2ae7a099159a223e52fd"
+    },
+    {
+      "text": "Flexibly swivels left and right.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 41500,
+      "block_id": "block_7",
+      "excluded": false,
+      "start_ms": 38500,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 1,
+      "segment_id": "273e27e3-e4ce-470e-84cf-e1d469571ae6",
+      "bbox_pixels": [
+        124,
+        942,
+        687,
+        986
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        873,
+        358,
+        913
+      ],
+      "translated_text": "Lässt sich flexibel nach links und rechts schwenken.",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        944,
+        960,
+        987
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "04ba36ec837f579da139e7a2f850e70618bdc747679ac17ddef8b33b97233f08",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 34.0,
+      "estimated_font_size_px": 34.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "5530e202c29b7fd2b184dbaa21d59c314320cba293072a9ce54e960971526963"
+    },
+    {
+      "text": "Up to 45 Minutes Runtime",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 49000,
+      "block_id": "block_8",
+      "excluded": false,
+      "start_ms": 45000,
+      "warnings": [
+        "font_url_version_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "text_runs": null,
+      "line_index": 0,
+      "segment_id": "cdb0152b-9f59-4cf5-ae9c-a021703d2d9b",
+      "bbox_pixels": [
+        124,
+        885,
+        743,
+        937
+      ],
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "visual_role": "headline",
+      "bbox_normalized": [
+        65,
+        820,
+        387,
+        868
+      ],
+      "translated_text": "Bis zu 45 Minuten Laufzeit",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.038,
+      "render_bbox_pixels": [
+        125,
+        886,
+        744,
+        938
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "4a10096ebd4911c8218ea7929fba898cb9d1407e611670a5128c77b0b0cc15c5",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 41.0,
+      "estimated_font_size_px": 41.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "931ee942d6f092f1e3540e70cfc81ca8f16ed267dc11e3ab4ae8b13f77870ce9"
+    },
+    {
+      "text": "Allows for whole-house cleaning on a single charge",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 49000,
+      "block_id": "block_8",
+      "excluded": false,
+      "start_ms": 45000,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 1,
+      "segment_id": "68cf0c54-17cc-4582-90c1-d756c23c5cae",
+      "bbox_pixels": [
+        124,
+        942,
+        1155,
+        986
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        873,
+        602,
+        913
+      ],
+      "translated_text": "Ermöglicht die Reinigung des gesamten Hauses mit einer einzigen Akkuladung",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        944,
+        1410,
+        987
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "1ef3f852a1b0d079de444db9cd6d36e2084c3a0057fb14267e9072a1be366dad",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 34.0,
+      "estimated_font_size_px": 34.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "1f77d787e9b650ffe8f242d5f2b3d126037aef02692500c469408127deabe420"
+    },
+    {
+      "text": "*Based on Tineco lab data.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 49000,
+      "block_id": "block_8",
+      "excluded": false,
+      "start_ms": 45000,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 2,
+      "segment_id": "dee96d05-a6d5-4fc9-88c4-80bbf4a88ed5",
+      "bbox_pixels": [
+        124,
+        999,
+        378,
+        1023
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "footnote",
+      "bbox_normalized": [
+        65,
+        925,
+        197,
+        948
+      ],
+      "translated_text": "*Basierend auf Tineco-Labordaten.",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.018,
+      "render_bbox_pixels": [
+        125,
+        1000,
+        448,
+        1025
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "10ef40b035628c9c2328fec151082951183afec9c34653ab69a764135c112b47",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 19.0,
+      "estimated_font_size_px": 19.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "02576d08f212bd2335548fb58df12bda02d6d292bcbdc6e9a55806ceaf544155"
+    },
+    {
+      "text": "One-Press Self-Cleaning",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 56500,
+      "block_id": "block_9",
+      "excluded": false,
+      "start_ms": 54000,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "text_runs": null,
+      "line_index": 0,
+      "segment_id": "67b03884-dc95-445e-b99d-49b01319bce9",
+      "bbox_pixels": [
+        124,
+        885,
+        723,
+        937
+      ],
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "visual_role": "headline",
+      "bbox_normalized": [
+        65,
+        820,
+        377,
+        868
+      ],
+      "translated_text": "Selbstreinigung per Knopfdruck",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.038,
+      "render_bbox_pixels": [
+        125,
+        886,
+        749,
+        938
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "f6769e505b013fd112f77c8e971b75c5d3cc063eaca80833b65544bd47df9f4c",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 41.0,
+      "estimated_font_size_px": 41.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "9f2167e176087b8cbbeafb8a89fd710dab2c9a0ce2a373b8a7355616010ec193"
+    },
+    {
+      "text": "Truly hassle-free after use.",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 56500,
+      "block_id": "block_9",
+      "excluded": false,
+      "start_ms": 54000,
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "text_runs": null,
+      "line_index": 1,
+      "segment_id": "657496d2-9156-4037-8d72-2c37ed2e74e8",
+      "bbox_pixels": [
+        124,
+        942,
+        627,
+        986
+      ],
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "visual_role": "body",
+      "bbox_normalized": [
+        65,
+        873,
+        327,
+        913
+      ],
+      "translated_text": "Nach der Nutzung wirklich unkompliziert.",
+      "background_color": "#876344",
+      "product_mentions": [],
+      "font_height_ratio": 0.032,
+      "render_bbox_pixels": [
+        125,
+        944,
+        791,
+        987
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "5959f5d02f7794841c2d21d3e9e7b63f0ed8ad110cabf3f7b47c6b1a341318cc",
+      "product_names_enabled": true,
+      "render_layer_asset_id": null,
+      "effective_font_size_px": 34.0,
+      "estimated_font_size_px": 34.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "b0307d14a05d67a9cdb24b05d2dfffa6f4d4a9aff7c6c75511c55a579740c509"
+    },
+    {
+      "text": "FLOOR ONE i5 Lite",
+      "style": {
+        "font": null,
+        "alignment": null,
+        "text_color": null,
+        "font_size_px": null,
+        "background_color": null
+      },
+      "end_ms": 60000,
+      "block_id": "block_10",
+      "excluded": false,
+      "start_ms": 57500,
+      "warnings": [],
+      "alignment": "left",
+      "font_type": null,
+      "text_runs": [
+        {
+          "end": 12,
+          "kind": "product_model",
+          "text": "FLOOR ONE i5",
+          "x_px": 2.0,
+          "start": 0,
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Black.otf",
+          "advance_px": 436.953125,
+          "baseline_px": 49.0,
+          "font_sha256": "e4b6150ba6f2d33f5b0c4b6f576c300ded663f133129f988808bb86c7a882c86",
+          "font_size_px": 61
+        },
+        {
+          "end": 17,
+          "kind": "product_spec",
+          "text": " Lite",
+          "x_px": 438.953125,
+          "start": 12,
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/AvenirLTStd-Light.otf",
+          "advance_px": 115.234375,
+          "baseline_px": 49.0,
+          "font_sha256": "bd09c8c93f4a42589aaae4b01a7380fc823e4a93787ec55aba7459bc17253c7f",
+          "font_size_px": 61
+        }
+      ],
+      "line_index": 0,
+      "segment_id": "73663950-779c-4316-a80d-668365865193",
+      "bbox_pixels": [
+        374,
+        502,
+        1031,
+        568
+      ],
+      "font_sha256": null,
+      "visual_role": "headline",
+      "bbox_normalized": [
+        195,
+        465,
+        537,
+        526
+      ],
+      "translated_text": "FLOOR ONE i5 Lite",
+      "background_color": "#876344",
+      "product_mentions": [
+        {
+          "end": 17,
+          "spec": "Lite",
+          "model": "FLOOR ONE i5",
+          "start": 0,
+          "origin": "model_pattern",
+          "status": "confirmed"
+        }
+      ],
+      "font_height_ratio": 0.058,
+      "render_bbox_pixels": [
+        375,
+        503,
+        1032,
+        569
+      ],
+      "translation_status": "succeeded",
+      "product_text_sha256": "db2d4e8b179f982fc20550530658c8d6cac39923ba7f535d79ae2a1032949f6e",
+      "product_names_enabled": true,
+      "render_layer_asset_id": "b0dd7ab826147dc85d7c930610abdd9dc887fe2041799ee2e1730360fa001ba0",
+      "effective_font_size_px": 61.0,
+      "estimated_font_size_px": 61.0,
+      "recommended_text_color": "#FFFFFF",
+      "product_recognition_sha256": "3c5c72f01623bd98a4a69e948c67bdb76f1e57df37dc7edb8e653b8eb0175a4d"
+    }
+  ]
+}

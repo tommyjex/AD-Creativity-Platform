@@ -687,6 +687,20 @@ export interface ToolVideoPromptOptimizeResponse {
 
 export type SubtitleLanguage = "en" | "de" | "fr" | "es" | "it" | "pt" | "zh" | "ja";
 export type SubtitleOperation = "extract" | "translate" | "render";
+export type SubtitleRenderMode = "png" | "text";
+export type SubtitleEffectiveRenderMode = SubtitleRenderMode | "mixed";
+export interface SubtitleRenderSummary {
+  render_mode?: SubtitleRenderMode;
+  effective_render_mode?: SubtitleEffectiveRenderMode;
+  encoding_policy_version?: string;
+  video_codec?: string;
+  crf?: number;
+}
+export interface SubtitleRenderInputPayload {
+  render_mode: SubtitleRenderMode;
+  crf: number;
+  encoding_policy_version: "configurable-crf-h264-v3";
+}
 export interface SubtitleStyle {
   font?: string | null;
   font_size_px?: number | null;
@@ -725,6 +739,7 @@ export interface SubtitleSegment {
   text_runs?: { start: number; end: number; kind: string; font_type: string; font_sha256: string; baseline_px: number; font_size_px: number }[] | null;
   render_layer_asset_id?: string | null;
   render_layer_url?: string | null;
+  effective_render_mode?: SubtitleRenderMode | null;
 }
 export interface SubtitleProductMention {
   start: number;
@@ -743,10 +758,17 @@ export interface SubtitleVideoMetadata {
   rotation: number;
   fps?: number | null;
   has_audio: boolean;
+  video_bit_rate?: number | null;
+  video_bit_rate_probed?: boolean;
 }
+export type SubtitleVideoCategory = "product" | "unboxing";
+
 export interface SubtitleWorkspace {
   id: string;
   name: string;
+  video_category: SubtitleVideoCategory;
+  render_mode?: SubtitleRenderMode;
+  crf?: number;
   reference_video_asset_id: string | null;
   clean_video_asset_id: string | null;
   source_language: SubtitleLanguage | "auto";
@@ -765,6 +787,9 @@ export interface SubtitleWorkspace {
 }
 export interface SubtitleWorkspaceCreate {
   name?: string;
+  video_category?: SubtitleVideoCategory;
+  render_mode?: SubtitleRenderMode;
+  crf?: number;
   reference_video_asset_id?: string | null;
   clean_video_asset_id?: string | null;
   source_language?: SubtitleLanguage | "auto";

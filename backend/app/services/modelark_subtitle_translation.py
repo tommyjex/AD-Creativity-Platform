@@ -35,3 +35,7 @@ class ModelArkSubtitleTranslationAdapter(_Adapter):
             ),
             **kwargs,
         )
+
+
+class LegacySubtitleTranslationAdapter(ModelArkSubtitleTranslationAdapter):
+    brand_rules_enabled = False

@@ -23,3 +23,11 @@ class VideoSubtitleGroundingService(_Service):
             ),
             **kwargs,
         )
+
+
+class LegacyVideoSubtitleGroundingService(VideoSubtitleGroundingService):
+    """Only used for tasks frozen before the brand rule was introduced."""
+    from video_subtitle_grounding.legacy import LegacyGroundingAdapter
+
+    brand_rules_enabled = False
+    provider_class = LegacyGroundingAdapter

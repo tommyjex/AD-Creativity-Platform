@@ -1,0 +1,62 @@
+[
+  {
+    "viewport": "1440x900",
+    "role": "creator",
+    "result": "passed",
+    "actual_font_png_lines": 3,
+    "footnote_size_px": 24,
+    "failed_image_fallback": true,
+    "overflow": false,
+    "paid_calls": false
+  },
+  {
+    "viewport": "1440x900",
+    "role": "viewer",
+    "result": "passed",
+    "actual_font_png_lines": 3,
+    "footnote_size_px": 24,
+    "failed_image_fallback": true,
+    "overflow": false,
+    "paid_calls": false
+  },
+  {
+    "viewport": "834x1112",
+    "role": "creator",
+    "result": "passed",
+    "actual_font_png_lines": 3,
+    "footnote_size_px": 24,
+    "failed_image_fallback": true,
+    "overflow": false,
+    "paid_calls": false
+  },
+  {
+    "viewport": "834x1112",
+    "role": "viewer",
+    "result": "passed",
+    "actual_font_png_lines": 3,
+    "footnote_size_px": 24,
+    "failed_image_fallback": true,
+    "overflow": false,
+    "paid_calls": false
+  },
+  {
+    "viewport": "390x844",
+    "role": "creator",
+    "result": "passed",
+    "actual_font_png_lines": 3,
+    "footnote_size_px": 24,
+    "failed_image_fallback": true,
+    "overflow": false,
+    "paid_calls": false
+  },
+  {
+    "viewport": "390x844",
+    "role": "viewer",
+    "result": "passed",
+    "actual_font_png_lines": 3,
+    "footnote_size_px": 24,
+    "failed_image_fallback": true,
+    "overflow": false,
+    "paid_calls": false
+  }
+]

@@ -112,6 +112,27 @@ def test_upload_association_reaches_json_and_tls_without_payloads() -> None:
         assert "signed_url" not in event
 
 
+def test_render_configuration_reaches_stdout_and_tls_without_secrets() -> None:
+    logger, output = _logger_with_output()
+    sink = _CapturingSink()
+    logger.addHandler(TlsLogHandler(
+        sink, JsonStdoutFormatter(service="test", environment="test"),
+    ))
+    expected = {
+        "render_mode": "png", "effective_render_mode": "mixed",
+        "video_codec": "h264", "crf": 16, "encoding_policy_version": "crf16-h264-v2",
+    }
+    log_event(
+        logger, "subtitle_translation.submitted", outcome="succeeded", **expected,
+        model_raw="private model response", signed_url="https://private/?token=secret",
+        credentials="private credentials",
+    )
+    for event in (json.loads(output.getvalue()), sink.events[0]):
+        assert {key: event[key] for key in expected} == expected
+        assert "private" not in json.dumps(event)
+        assert "secret" not in json.dumps(event)
+
+
 def test_formatter_redacts_sensitive_values_and_strips_url_queries() -> None:
     assert sanitize_value("authorization", "Bearer top-secret") == "[REDACTED]"
     assert sanitize_value("download_url", "https://example.test/file?signature=secret") == (

@@ -1,4 +1,79 @@
-import type { SubtitleSegment } from "@/lib/api-types";
+import type { SubtitleEffectiveRenderMode, SubtitleRenderMode, SubtitleSegment, SubtitleVideoCategory, ToolTask } from "@/lib/api-types";
+
+export type { SubtitleVideoCategory } from "@/lib/api-types";
+
+export function subtitleVideoCategory(workspace: { video_category?: SubtitleVideoCategory }) {
+  return workspace.video_category ?? "unboxing";
+}
+
+export function subtitleVideoCategoryLabel(category: SubtitleVideoCategory) {
+  return category === "product" ? "产品视频" : "开箱视频";
+}
+
+export function subtitleRenderMode(workspace: { render_mode?: SubtitleRenderMode }) {
+  return workspace.render_mode ?? "png";
+}
+
+export function subtitleCrf(workspace: { crf?: number }) {
+  return workspace.crf ?? 16;
+}
+
+function validCrf(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 30;
+}
+
+export function subtitleRenderModeLabel(mode: SubtitleEffectiveRenderMode) {
+  return ({ png: "PNG · 图片绘制", text: "Text · 原生文字", mixed: "PNG / Text · 混合" })[mode];
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+}
+
+function resultMode(value: unknown): SubtitleEffectiveRenderMode | null {
+  return value === "png" || value === "text" || value === "mixed" ? value : null;
+}
+
+// Never infer historical output parameters from the current workspace selection.
+export function subtitleRenderSummaryLabel(value: unknown) {
+  const summary = record(value);
+  const requested = summary.render_mode === "png" || summary.render_mode === "text" ? summary.render_mode : null;
+  const effective = resultMode(summary.effective_render_mode);
+  const crf = validCrf(summary.crf) ? summary.crf :
+    summary.encoding_policy_version === "crf16-h264-v2" ? 16 : null;
+  const encoding = crf !== null && (summary.video_codec === "h264" ||
+    ["crf16-h264-v2", "configurable-crf-h264-v3"].includes(String(summary.encoding_policy_version)));
+  const fallback = requested === "png" && effective === "text" ? "已回退 Text" :
+    requested === "png" && effective === "mixed" ? "部分字幕回退 Text" : null;
+  return [
+    requested ? `请求 ${subtitleRenderModeLabel(requested)}` : "请求方式未知",
+    effective ? `实际 ${subtitleRenderModeLabel(effective)}` : "实际方式未记录",
+    fallback,
+    encoding ? `H.264 · CRF ${crf}` : "历史参数"
+  ].filter(Boolean).join(" · ");
+}
+
+export function subtitleTaskRenderSummaryLabel(task: ToolTask) {
+  const snapshot = task.input_snapshot;
+  const payload = record(snapshot.input_payload);
+  const result = record(snapshot.result);
+  const frozen = record(snapshot.encoding_result);
+  const encoding = validCrf(result.crf) ? result : validCrf(frozen.crf) ? frozen :
+    validCrf(snapshot.crf) ? snapshot : {};
+  return subtitleRenderSummaryLabel({
+    ...result,
+    ...encoding,
+    render_mode: snapshot.render_mode ?? payload.render_mode ?? result.render_mode,
+    effective_render_mode: resultMode(result.effective_render_mode) ?? resultMode(snapshot.effective_render_mode),
+    encoding_policy_version: snapshot.encoding_policy_version ?? payload.encoding_policy_version ?? result.encoding_policy_version
+  });
+}
+
+export function subtitleTextProductWarning(warnings: string[]) {
+  return warnings.some((warning) => warning.split(":").some((part) => part.trim() === "text_product_font_fallback"))
+    ? WARNING_MESSAGES.text_product_font_fallback : null;
+}
 
 export const SUBTITLE_LANGUAGES = [
   ["en", "英语"], ["de", "德语"], ["fr", "法语"], ["es", "西班牙语"],
@@ -21,6 +96,8 @@ export const SUBTITLE_CAPACITY_NOTICE =
   "Tool limit: 500 subtitles, 4000 characters per subtitle. MediaKit publishes no text/track capacity limit; these tool limits are not a provider capacity guarantee.";
 
 const WARNING_MESSAGES: Record<string, string> = {
+  text_product_font_fallback: "Text 模式：产品名按整行字体压制",
+  brand_content_skipped: "品牌片尾已跳过。",
   product_recognition_unavailable: "产品名称自动识别暂不可用，已保留普通字幕。",
   product_recognition_invalid_split: "无效的产品拆分已自动忽略，保留普通字幕。",
   product_layout_unavailable: "产品混合字体暂不可用，已自动保留普通字幕排版。",
@@ -58,6 +135,7 @@ const WARNING_MESSAGES: Record<string, string> = {
   provider_literal_escaping_unverified: "特殊文本解释与转义尚未真实验证，请核对成片文字。",
   real_render_unverified: "尚未进行真实压制验证；字体测量和排版示意不等于最终效果。",
   video_metadata_unavailable: "暂缺视频尺寸，无法测量字号，请补充视频后重新计算。",
+  source_video_bit_rate_unavailable: "未能读取底片视频码率，本次使用默认编码码率，请检查成片清晰度与体积。",
   video_source_unavailable: "视频暂不可访问，请刷新或重新导入后计算排版。",
   missing_translation: "请补齐译文或排除此条后计算排版。",
   measurement_unavailable: "暂时无法测量字号，请稍后重新计算；草稿已保留。",
@@ -79,11 +157,24 @@ const WARNING_MESSAGES: Record<string, string> = {
   text_capacity_exceeded: "单条译文超过 4000 字符，请精简译文；供应商未公开容量，工具上限不代表容量保证。"
 };
 
-export function subtitleWarningMessage(warning: string) {
+const PRODUCT_WARNING_MESSAGES: Record<string, string> = {
+  background_unknown: "画面背景未知，字幕无底板，请核对文字可读性。",
+  background_color_unavailable: "无法可靠估计画面背景，请核对文字色。",
+  expanded_background_unverified: "扩宽区域的背景尚未核对，请检查文字色的可读性。",
+  low_contrast: "文字与背景对比度偏低，请调整文字色。",
+  invalid_panel_color: "产品视频的底板配置不生效，字幕无底板。"
+};
+
+export function subtitleWarningMessage(warning: string, category: SubtitleVideoCategory = "unboxing", renderMode: SubtitleRenderMode = "png") {
   if (warning === SUBTITLE_CAPACITY_NOTICE) return WARNING_MESSAGES.provider_text_capacity_unverified;
   const parts = warning.split(":").map((part) => part.trim());
   const code = parts.find((part) => WARNING_MESSAGES[part]);
-  if (code) return WARNING_MESSAGES[code];
+  if (code) {
+    if (renderMode === "text" && ["background_unknown", "background_color_unavailable", "expanded_background_unverified", "low_contrast", "invalid_panel_color"].includes(code)) {
+      return "底板使用接口默认值，请在成片中核对文字可读性。";
+    }
+    return (category === "product" ? PRODUCT_WARNING_MESSAGES[code] : null) ?? WARNING_MESSAGES[code];
+  }
   if (/^[a-z0-9_:.-]+$/i.test(warning)) return "此条排版尚需核对，请检查译文、时间和样式后重新计算。";
   return warning;
 }
@@ -117,21 +208,52 @@ export function subtitlePanelColor(rgb: string, opacity: number) {
     .toString(16).padStart(2, "0").toUpperCase();
 }
 
-export function subtitleColors(segment: SubtitleSegment) {
+export function subtitleColors(segment: SubtitleSegment, category: SubtitleVideoCategory = "unboxing") {
   const background = segment.background_color;
   const valid = background != null && /^#[0-9a-f]{6}$/i.test(background);
   const channels = valid ? [1, 3, 5].map((i) => parseInt(background.slice(i, i + 2), 16)) : [];
   const white = valid && Math.min(...channels) >= 245;
   const black = valid && Math.max(...channels) <= 16;
   const recommended = white ? "#000000" : "#FFFFFF";
-  const panel = segment.style.background_color ?? (white || black ? "#00000000" : DEFAULT_SUBTITLE_PANEL_COLOR);
-  const customPanel = segment.style.background_color != null &&
+  const panel = category === "product" ? "#00000000" :
+    segment.style.background_color ?? (white || black ? "#00000000" : DEFAULT_SUBTITLE_PANEL_COLOR);
+  const customPanel = category !== "product" && segment.style.background_color != null &&
     (subtitleColorParts(segment.style.background_color)?.alpha ?? 0) > 0;
   return {
     text: segment.style.text_color ?? (customPanel ? "#FFFFFF" : recommended),
     panel,
     recommended
   };
+}
+
+export function clearSubtitleLayout(segment: SubtitleSegment, modeChanged = false): SubtitleSegment {
+  return {
+    ...segment,
+    estimated_font_size_px: null, effective_font_size_px: null, render_bbox_pixels: null,
+    recommended_text_color: null, font_type: null, font_sha256: null,
+    render_layer_asset_id: null, render_layer_url: null, text_runs: null,
+    ...(modeChanged ? { effective_render_mode: null } : {}),
+    warnings: clearSubtitleLayoutWarnings(segment.warnings, modeChanged)
+  };
+}
+
+export function clearSubtitleLayoutWarnings(warnings: string[], modeChanged = false) {
+  return warnings.filter((warning) => ![
+      "bbox_expanded", "bbox_expansion_limited", "original_bbox_overlap",
+      "expanded_background_unverified", "font_size_reduced", "font_size_small",
+      "background_unknown", "background_color_unavailable", "low_contrast", "contrast_unverified",
+      "font_fallback", "font_metrics_unverified", "product_layout_unavailable",
+      "product_layer_storage_unavailable", "product_layer_materialization_unavailable",
+      "png_text_fallback", "png_mixed_fallback", "subtitle_raster_unavailable",
+      ...(modeChanged ? [
+        "text_product_font_fallback", "missing_glyphs", "font_size_minimum_applied",
+        "preset_glyph_coverage_unverified", "font_url_version_unverified", "font_resource_unavailable",
+        "font_resource_too_large", "font_unicode_cmap_missing", "invalid_font_cmap",
+        "measurement_unavailable", "bbox_below_font_minimum", "bbox_below_pixel_resolution",
+        "text_cannot_fit_at_minimum_font", "provider_vertical_anchor_unverified",
+        "provider_literal_escaping_unverified", "real_render_unverified", "product_glyph_font_fallback"
+      ] : [])
+    ].some((code) => warning.split(":").some((part) => part.trim() === code)));
 }
 
 export const subtitleFieldClass =
@@ -200,6 +322,11 @@ export function segmentDraftIssue(segment: SubtitleSegment): string | null {
 }
 
 export function segmentIssue(segment: SubtitleSegment): string | null {
+  if (subtitleBrandSkipped(segment)) return null;
   return segmentDraftIssue(segment) ??
     (!segment.excluded && !segment.translated_text?.trim() ? "待补齐译文或明确排除。" : null);
+}
+
+export function subtitleBrandSkipped(segment: SubtitleSegment) {
+  return segment.warnings.includes("brand_content_skipped");
 }

@@ -1,14 +1,16 @@
 "use client";
 
 import { memo } from "react";
-import type { SubtitleSegment, SubtitleStyle } from "@/lib/api-types";
-import { DEFAULT_SUBTITLE_PANEL_COLOR, segmentIssue, subtitleColorParts, subtitleColors, subtitleFieldClass, subtitlePanelColor, subtitleProductText, SUBTITLE_FONTS } from "@/lib/subtitle-translation";
+import type { SubtitleRenderMode, SubtitleSegment, SubtitleStyle } from "@/lib/api-types";
+import { DEFAULT_SUBTITLE_PANEL_COLOR, segmentIssue, subtitleBrandSkipped, subtitleColorParts, subtitleColors, subtitleFieldClass, subtitlePanelColor, subtitleProductText, SUBTITLE_FONTS, type SubtitleVideoCategory } from "@/lib/subtitle-translation";
 import { Button } from "@/components/ui/button";
 
 export const SubtitleSegmentEditor = memo(function SubtitleSegmentEditor({
-  segment, index, readOnly, selected, onChange, onSeek
+  segment, index, readOnly, selected, onChange, onSeek, videoCategory = "unboxing", renderMode = "png"
 }: {
   segment: SubtitleSegment;
+  videoCategory?: SubtitleVideoCategory;
+  renderMode?: SubtitleRenderMode;
   index: number;
   readOnly: boolean;
   selected: boolean;
@@ -19,7 +21,8 @@ export const SubtitleSegmentEditor = memo(function SubtitleSegmentEditor({
   const changeStyle = (change: Partial<SubtitleStyle>) =>
     onChange(segment.segment_id, { style: { ...segment.style, ...change } });
   const title = `字幕 ${index + 1}`;
-  const colors = subtitleColors(segment);
+  const product = videoCategory === "product";
+  const colors = subtitleColors(segment, videoCategory);
   const panelParts = subtitleColorParts(colors.panel);
   const panelMode = segment.style.background_color == null ? "auto" :
     subtitleColorParts(segment.style.background_color)?.alpha === 0 ? "none" : "custom";
@@ -48,7 +51,7 @@ export const SubtitleSegmentEditor = memo(function SubtitleSegmentEditor({
           <p className="whitespace-pre-wrap break-words rounded-lg bg-secondary p-3 text-sm">{segment.text}</p>
         </div>
         <label className="text-xs text-muted-foreground">
-          译文 {segment.translation_status !== "succeeded" && !segment.translated_text ? "· 待处理" : ""}
+          译文 {subtitleBrandSkipped(segment) ? "· 品牌片尾已跳过" : segment.translation_status !== "succeeded" && !segment.translated_text ? "· 待处理" : ""}
           <textarea aria-label={`${title}译文`} className={`${subtitleFieldClass} mt-1 min-h-20 resize-y`} value={segment.translated_text ?? ""} disabled={readOnly} onChange={(event) => onChange(segment.segment_id, { translated_text: event.target.value, translation_status: event.target.value.trim() ? "succeeded" : "pending" })} />
         </label>
       </div>
@@ -85,6 +88,7 @@ export const SubtitleSegmentEditor = memo(function SubtitleSegmentEditor({
         <label className="text-xs text-muted-foreground">文字色
           <input aria-label={`${title}text_color`} className={subtitleFieldClass} value={segment.style.text_color ?? ""} placeholder="自动" onChange={(event) => changeStyle({ text_color: event.target.value || null })} />
         </label>
+        {product || renderMode === "text" ? null : <>
         <label className="text-xs text-muted-foreground">字幕底板
           <select aria-label={`${title}底板模式`} className={subtitleFieldClass} value={panelMode} onChange={(event) => changeStyle({
             background_color: event.target.value === "auto" ? null : event.target.value === "none" ? "#00000000" : DEFAULT_SUBTITLE_PANEL_COLOR
@@ -107,11 +111,12 @@ export const SubtitleSegmentEditor = memo(function SubtitleSegmentEditor({
         <label className="text-xs text-muted-foreground">底板色 · RGBA
           <input aria-label={`${title}background_color`} className={subtitleFieldClass} value={segment.style.background_color ?? ""} placeholder="自动" onChange={(event) => changeStyle({ background_color: event.target.value || null })} />
         </label>
+        </>}
       </fieldset>
       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1">画面背景估计 <i className="h-4 w-4 rounded border border-border" style={{ backgroundColor: segment.background_color ?? "transparent" }} />{segment.background_color ?? "未知 · 白字/半透明深灰底"}</span>
+        <span className="inline-flex items-center gap-1">画面背景估计 <i className="h-4 w-4 rounded border border-border" style={{ backgroundColor: segment.background_color ?? "transparent" }} />{segment.background_color ?? (renderMode === "text" ? "未知 · 请核对文字可读性" : product ? "未知 · 白字/无底板" : "未知 · 白字/半透明深灰底")}</span>
         <span>推荐文字色 {colors.recommended}</span>
-        <span>当前底板 {panelParts?.alpha === 0 ? "无" : colors.panel}</span>
+        <span>{renderMode === "text" ? "底板使用接口默认值" : product ? "产品视频：字幕无底板" : `当前底板 ${panelParts?.alpha === 0 ? "无" : colors.panel}`}</span>
         <span>估算字号 {segment.estimated_font_size_px ?? "待计算"} · 输出字号 {segment.effective_font_size_px ?? "待计算"}</span>
         {segment.render_bbox_pixels ? <span>输出 BBox {segment.render_bbox_pixels.join(", ")}</span> : null}
       </div>

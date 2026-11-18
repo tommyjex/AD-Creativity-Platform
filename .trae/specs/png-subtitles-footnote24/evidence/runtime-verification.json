@@ -1,0 +1,11 @@
+{
+  "version": "0.3.6",
+  "imported_from": "/Users/bytedance/AD-Creativity/.venv/lib/python3.14/site-packages/video_subtitle_grounding/__init__.py",
+  "layout_version": "single-line-supersampled-png-footnote24-v6",
+  "platform_shared_compiler": true,
+  "health_status": 200,
+  "active_before_restart": {
+    "queued": 0,
+    "running": 0
+  }
+}

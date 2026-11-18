@@ -17,6 +17,139 @@ from backend.tests.test_subtitle_translation_workspace import (
 __all__ = ["font_http", "subtitle_repo", "subtitle_service"]
 
 
+@pytest.mark.parametrize("category", ["product", "unboxing"])
+@pytest.mark.parametrize("background", ["#FFFFFF", "#000000", "#888888", None])
+@pytest.mark.parametrize("role", ["headline", "body", "footnote"])
+def test_preview_category_policy_preserves_original_background_and_style(
+    subtitle_service, category, background, role
+):
+    workspace, _ = extracted(subtitle_service)
+    workspace.video_category = category
+    item = workspace.segments[0]
+    item.visual_role = VideoSubtitleVisualRole(role)
+    item.background_color = background
+    item.style.background_color = "#FF000080"
+    seen = []
+    summaries = []
+
+    def compiler(segments, video):
+        seen.append(video["video_category"])
+        compiled = layout.compile_subtitle_project(segments, video)
+        summaries.append(compiled["layouts"]["s1"])
+        return compiled
+
+    subtitle_service.compiler = compiler
+    preview = asyncio.run(subtitle_service.preview(workspace))
+    result = preview.segments[0]
+    assert seen == [category]
+    assert result.background_color == background
+    assert result.style.background_color == "#FF000080"
+    assert summaries[0]["background_color"] == (
+        "#00000000" if category == "product" else "#FF000080"
+    )
+    assert result.recommended_text_color == (
+        "#000000" if background == "#FFFFFF" else "#FFFFFF"
+    )
+    assert summaries[0]["text_color"] == (
+        "#000000FF" if category == "product" and background == "#FFFFFF" else "#FFFFFFFF"
+    )
+    assert subtitle_service.repository.get_subtitle_workspace(
+        workspace.id
+    ).video_category == "unboxing"
+
+
+@pytest.mark.parametrize("category", ["product", "unboxing"])
+def test_http_get_and_post_preview_use_saved_category_without_paid_calls(
+    client, subtitle_service, category
+):
+    service = subtitle_service
+    workspace, _ = extracted(service)
+    item = workspace.segments[0].model_copy(deep=True)
+    item.background_color = "#888888"
+    saved = service.patch(workspace.id, SubtitleWorkspaceUpdate(
+        expected_revision=workspace.revision, video_category=category, segments=[item],
+    ))
+    client.app.dependency_overrides[get_subtitle_translation_service] = lambda: service
+    root = f"/api/tools/subtitle-translation/workspaces/{workspace.id}"
+    before = service.repository.list_subtitle_workspace_history(workspace.id)
+    summaries = []
+
+    def compiler(segments, video):
+        assert video["video_category"] == category
+        compiled = layout.compile_subtitle_project(segments, video)
+        summaries.append(compiled["layouts"]["s1"])
+        return compiled
+
+    service.compiler = compiler
+    for response in (
+        client.get(root),
+        client.post(root + "/preview", json={"expected_revision": saved.revision}),
+    ):
+        assert response.status_code == 200
+        record = response.json()
+        assert record["video_category"] == category
+        assert summaries.pop(0)["background_color"] == (
+            "#00000000" if category == "product" else "#33333359"
+        )
+    assert service.repository.list_subtitle_workspace_history(workspace.id) == before
+    service.translator.recognize_products.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "saved_category,draft_category",
+    [("unboxing", "product"), ("product", "unboxing")],
+)
+def test_unsaved_preview_category_does_not_change_saved_workspace(
+    client, subtitle_service, saved_category, draft_category
+):
+    workspace, _ = extracted(subtitle_service, video_category=saved_category)
+    workspace = subtitle_service.patch(
+        workspace.id,
+        asyncio.run(subtitle_service.prepare_product_update(
+            workspace.id,
+            SubtitleWorkspaceUpdate(
+                expected_revision=workspace.revision, segments=workspace.segments,
+            ),
+        )),
+    )
+    subtitle_service.translator.recognize_products.reset_mock()
+    draft = workspace.segments[0].model_dump(mode="json")
+    draft["background_color"] = "#888888"
+    before = subtitle_service.repository.list_subtitle_workspace_history(workspace.id)
+    summaries = []
+
+    def compiler(segments, video):
+        assert video["video_category"] == draft_category
+        compiled = layout.compile_subtitle_project(segments, video)
+        summaries.append(compiled["layouts"]["s1"])
+        return compiled
+
+    subtitle_service.compiler = compiler
+    client.app.dependency_overrides[get_subtitle_translation_service] = (
+        lambda: subtitle_service
+    )
+    response = client.post(
+        f"/api/tools/subtitle-translation/workspaces/{workspace.id}/preview",
+        json={
+            "expected_revision": workspace.revision,
+            "video_category": draft_category,
+            "segments": [draft],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["video_category"] == draft_category
+    assert summaries[0]["background_color"] == (
+        "#00000000" if draft_category == "product" else "#33333359"
+    )
+    assert subtitle_service.repository.get_subtitle_workspace(
+        workspace.id
+    ).video_category == saved_category
+    assert subtitle_service.repository.list_subtitle_workspace_history(
+        workspace.id
+    ) == before
+    subtitle_service.translator.recognize_products.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     "role,font,expected_font",
     [

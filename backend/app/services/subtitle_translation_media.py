@@ -11,6 +11,8 @@ from fractions import Fraction
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from video_subtitle_grounding.metadata import parse_video_bit_rate
+
 from backend.app.core.config import ConfigurationError, get_settings
 from backend.app.core.logging import log_event
 from backend.app.schemas.asset import AssetCreate
@@ -62,6 +64,8 @@ def metadata_for_asset(asset):
         rotation=metadata.get("rotation", 0),
         fps=metadata.get("fps"),
         has_audio=bool(metadata.get("audio_codec")),
+        video_bit_rate=metadata.get("video_bit_rate"),
+        video_bit_rate_probed=metadata.get("video_bit_rate_probed", False),
     )
 
 
@@ -117,6 +121,8 @@ class SubtitleVideoPathInspector:
             rotation=display.rotation,
             fps=fps if fps > 0 else None,
             has_audio=any(s.get("codec_type") == "audio" for s in streams),
+            video_bit_rate=parse_video_bit_rate(stream.get("bit_rate")),
+            video_bit_rate_probed=True,
         )
         return display, metadata
 
@@ -128,17 +134,41 @@ class SubtitleTranslationMediaService:
         self.downloader = downloader or SecureRemoteVideoDownloader(max_bytes=MAX_BYTES)
         self.inspector = inspector or SubtitleVideoPathInspector()
 
-    async def ensure_metadata(self, asset_id, *, role):
+    async def ensure_metadata(self, asset_id, *, role, require_video_bit_rate=False):
         asset = self.repository.get_asset(asset_id)
         validate_video_asset(asset)
         try:
             metadata = metadata_for_asset(asset)
         except (ValueError, TypeError):
-            async with self.open_asset(asset_id, role=role) as prepared:
-                _, metadata = await self.inspector.inspect(prepared.path, role=role)
+            metadata = None
+        needs_probe = metadata is None or (
+            require_video_bit_rate and metadata.video_bit_rate is None
+            and not metadata.video_bit_rate_probed
+        )
+        if needs_probe:
+            try:
+                url = self.storage.signed_access_url(asset)
+                if not url:
+                    raise ValueError("video asset is not accessible")
+                async with self.downloader.open(url) as prepared:
+                    _, inspected = await self.inspector.inspect(prepared.path, role=role)
+                # Preserve existing display metadata; this late probe resolves encoding only.
+                metadata = inspected if metadata is None else metadata.model_copy(update={
+                    "video_bit_rate": inspected.video_bit_rate,
+                    "video_bit_rate_probed": True,
+                })
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - optional encoding metadata cannot block render
+                if metadata is None:
+                    raise
+                metadata = metadata.model_copy(update={"video_bit_rate_probed": True})
+                log_event(logger, "subtitle_translation.bit_rate_probe_failed",
+                          outcome="unavailable", asset_id=asset_id,
+                          error_type=type(exc).__name__, video_bit_rate_probed=True)
             self.repository.update_asset(
                 asset_id,
-                metadata={**asset.metadata, "subtitle_video": metadata.model_dump()},
+                metadata={**(asset.metadata or {}), "subtitle_video": metadata.model_dump()},
             )
         if role == "reference" and metadata.duration_ms > 600_000:
             raise ValueError("reference video must be at most 600 seconds")
@@ -265,6 +295,16 @@ class SubtitleTranslationMediaService:
                         "workspace_id": task.input_snapshot["workspace_id"],
                         "revision": task.input_snapshot["revision"],
                         "operation": "render",
+                        **{
+                            key: task.input_snapshot[key]
+                            for key in ("render_mode", "effective_render_mode", "encoding_policy_version")
+                            if key in task.input_snapshot
+                        },
+                        **{
+                            key: (task.input_snapshot.get("encoding_result") or {})[key]
+                            for key in ("video_codec", "crf")
+                            if key in (task.input_snapshot.get("encoding_result") or {})
+                        },
                     }
                     if task
                     else {}
@@ -320,6 +360,11 @@ class SubtitleTranslationMediaService:
             revision=task.input_snapshot["revision"] if task else None,
             operation="render" if task else "import",
             video_bytes=size,
+            **{
+                key: asset.metadata[key]
+                for key in ("render_mode", "effective_render_mode", "encoding_policy_version", "video_codec", "crf")
+                if key in (asset.metadata or {})
+            },
         )
         return asset
 

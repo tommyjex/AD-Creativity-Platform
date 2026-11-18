@@ -239,11 +239,12 @@ def test_probe_rotation_fps_audio_and_duration_limit(
                 "height": 720,
                 "duration": str(duration),
                 "avg_frame_rate": "30000/1001",
+                "bit_rate": "7000",
                 "side_data_list": [{"rotation": -90}],
             },
-            {"codec_type": "audio", "codec_name": "aac"},
+            {"codec_type": "audio", "codec_name": "aac", "bit_rate": "128000"},
         ],
-        "format": {"format_name": "mov,mp4", "duration": str(duration)},
+        "format": {"format_name": "mov,mp4", "duration": str(duration), "bit_rate": "9000000"},
     }
     process = SimpleNamespace(
         returncode=0,
@@ -263,6 +264,58 @@ def test_probe_rotation_fps_audio_and_duration_limit(
         assert display.rotation == metadata.rotation == 270
         assert metadata.has_audio is True
         assert metadata.fps == pytest.approx(29.97, abs=0.001)
+        assert metadata.video_bit_rate == 7000 and metadata.video_bit_rate_probed
+
+
+@pytest.mark.parametrize("value", [7000, None])
+def test_legacy_bitrate_probe_is_cached_once(subtitle_service, tmp_path, value):
+    service = subtitle_service
+    asset = service.repository.get_asset("clean")
+    legacy = {k: v for k, v in asset.metadata["subtitle_video"].items()
+              if not k.startswith("video_bit_rate")}
+    service.repository.update_asset("clean", metadata={"subtitle_video": legacy})
+    path = tmp_path / "video"
+    path.touch(mode=0o600)
+    urls = []
+
+    @asynccontextmanager
+    async def open_video(url):
+        urls.append(url)
+        yield SimpleNamespace(path=path)
+
+    inspector = SimpleNamespace(inspect=AsyncMock(return_value=(
+        None, SubtitleVideoMetadata(**legacy, video_bit_rate=value, video_bit_rate_probed=True))))
+    media = SubtitleTranslationMediaService(
+        service.repository, SimpleNamespace(signed_access_url=lambda asset: "https://fixture/video"),
+        downloader=SimpleNamespace(open=open_video), inspector=inspector)
+    assert asyncio.run(media.ensure_metadata("clean", role="clean")).video_bit_rate is None
+    assert not urls
+    for _ in range(2):
+        actual = asyncio.run(media.ensure_metadata("clean", role="clean", require_video_bit_rate=True))
+        assert actual.video_bit_rate == value and actual.video_bit_rate_probed
+    assert len(urls) == inspector.inspect.await_count == 1
+
+
+def test_known_bitrate_does_not_download(subtitle_service):
+    media = SubtitleTranslationMediaService(
+        subtitle_service.repository, SimpleNamespace(),
+        downloader=SimpleNamespace(open=lambda _: pytest.fail("unexpected download")),
+        inspector=SimpleNamespace())
+    actual = asyncio.run(media.ensure_metadata("clean", role="clean", require_video_bit_rate=True))
+    assert actual.video_bit_rate == 7000000
+
+
+def test_failed_optional_probe_is_cached_and_does_not_block(subtitle_service):
+    repository = subtitle_service.repository
+    asset = repository.get_asset("clean")
+    legacy = {k: v for k, v in asset.metadata["subtitle_video"].items()
+              if not k.startswith("video_bit_rate")}
+    repository.update_asset("clean", metadata={"subtitle_video": legacy})
+    storage = SimpleNamespace(signed_access_url=lambda _: None)
+    media = SubtitleTranslationMediaService(repository, storage, inspector=SimpleNamespace())
+    for _ in range(2):
+        actual = asyncio.run(media.ensure_metadata("clean", role="clean", require_video_bit_rate=True))
+        assert actual.video_bit_rate is None and actual.video_bit_rate_probed
 
 
 def test_output_is_atomic_and_losing_transfer_object_is_deleted(subtitle_service):

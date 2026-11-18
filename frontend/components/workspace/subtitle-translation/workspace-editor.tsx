@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import type { Asset, SubtitleLanguage, SubtitleWorkspace } from "@/lib/api-types";
+import type { Asset, SubtitleLanguage, SubtitleRenderMode, SubtitleWorkspace } from "@/lib/api-types";
 import { getAssetContentUrlById, getAssetDownloadUrlById } from "@/lib/asset-display";
-import { segmentIssue, SUBTITLE_LANGUAGES, subtitleFieldClass, subtitleWarningMessage } from "@/lib/subtitle-translation";
+import { segmentIssue, subtitleBrandSkipped, SUBTITLE_LANGUAGES, subtitleCrf, subtitleFieldClass, subtitleWarningMessage, subtitleVideoCategory, subtitleRenderMode, subtitleRenderModeLabel, subtitleRenderSummaryLabel, subtitleTaskRenderSummaryLabel, subtitleTextProductWarning, type SubtitleVideoCategory } from "@/lib/subtitle-translation";
 import { SubtitleReviewDialog } from "./review-dialog";
 import { SubtitleVideoInput } from "./video-input";
 import { SubtitleVideoPreview } from "./video-preview";
@@ -28,20 +28,30 @@ export function SubtitleWorkspaceEditor({
   onAsset: (asset: Asset) => void;
   onDirtyChange: (dirty: boolean) => void;
 }) {
-  const state = useSubtitleWorkspace(initial, onUpdate);
+  const state = useSubtitleWorkspace(initial, onUpdate, canWrite);
   const { workspace, busy, conflict, task } = state;
   const [review, setReview] = useState(false);
   const [reviewSession, setReviewSession] = useState(0);
   const [enlarged, setEnlarged] = useState(false);
-  const running = ["extracting", "translating", "rendering"].includes(workspace.stage);
+  const category = subtitleVideoCategory(workspace);
+  const renderMode = subtitleRenderMode(workspace);
+  const running = Boolean(workspace.active_task_id) || ["extracting", "translating", "rendering"].includes(workspace.stage);
   const blocked = busy || running || !canWrite || conflict;
   const durationDiff = workspace.reference_video && workspace.clean_video
     ? Math.abs(workspace.reference_video.duration_ms - workspace.clean_video.duration_ms) : 0;
-  const missing = workspace.segments.filter((segment) => !segment.excluded && !segment.translated_text?.trim());
+  const missing = workspace.segments.filter((segment) => !segment.excluded && !subtitleBrandSkipped(segment) && !segment.translated_text?.trim());
   const output = workspace.stage === "succeeded" && workspace.output_asset_id ? getAssetContentUrlById(workspace.output_asset_id) : null;
-  const renderable = workspace.segments.filter((segment) => !segment.excluded &&
+  const outputAsset = assets.find((asset) => asset.id === workspace.output_asset_id);
+  const outputTask = task && task.id === workspace.stage_task_ids.render &&
+    task.input_snapshot.operation === "render" && task.status === "succeeded" ? task : null;
+  const outputSummary = outputAsset ? subtitleRenderSummaryLabel(outputAsset.metadata) :
+    outputTask ? subtitleTaskRenderSummaryLabel(outputTask) : subtitleRenderSummaryLabel(null);
+  const productWarning = subtitleTextProductWarning([
+    ...workspace.warnings, ...workspace.segments.flatMap((segment) => segment.warnings)
+  ]);
+  const renderable = workspace.segments.filter((segment) => !segment.excluded && !subtitleBrandSkipped(segment) &&
     (!workspace.clean_video || segment.start_ms < workspace.clean_video.duration_ms));
-  const adjustments = workspace.clean_video ? workspace.segments.filter((segment) => !segment.excluded &&
+  const adjustments = workspace.clean_video ? workspace.segments.filter((segment) => !segment.excluded && !subtitleBrandSkipped(segment) &&
     segment.end_ms > workspace.clean_video!.duration_ms) : [];
 
   return (
@@ -50,6 +60,25 @@ export function SubtitleWorkspaceEditor({
         <div className="min-w-0 max-w-full"><h2 className="break-words text-xl font-semibold">{workspace.name}</h2><p className="text-xs text-muted-foreground">{STAGE_LABELS[workspace.stage]} · revision {workspace.revision}</p></div>
         <Button variant="outline" disabled={busy || running} onClick={() => void state.reload()}>刷新工作区</Button>
       </header>
+      <label className="block max-w-md text-sm">视频类型
+        <select aria-label="视频类型" className={`${subtitleFieldClass} mt-1`} disabled={blocked} value={category} onChange={(event) => void state.update({ video_category: event.target.value as SubtitleVideoCategory })}>
+          <option value="product">产品视频{renderMode === "png" ? " · 字幕无底板" : " · 接口默认底板"}</option>
+          <option value="unboxing">开箱视频{renderMode === "png" ? " · 保持现有底板规则" : " · 接口默认底板"}</option>
+        </select>
+      </label>
+      <label className="block max-w-md text-sm">字幕压制方式
+        <select aria-label="字幕压制方式" className={`${subtitleFieldClass} mt-1`} disabled={blocked} value={renderMode} onChange={(event) => void state.update({ render_mode: event.target.value as SubtitleRenderMode })}>
+          <option value="png">PNG · 图片绘制</option>
+          <option value="text">Text · 原生文字</option>
+        </select>
+      </label>
+      <label className="block max-w-md text-sm">压制 CRF
+        <select aria-label="压制 CRF" className={`${subtitleFieldClass} mt-1`} disabled={blocked} value={subtitleCrf(workspace)} onChange={(event) => void state.update({ crf: Number(event.target.value) })}>
+          {Array.from({ length: 31 }, (_, crf) => <option key={crf} value={crf}>{crf}</option>)}
+        </select>
+      </label>
+      <p className="text-xs text-muted-foreground">整数 0–30；数值越小质量通常越高，文件通常越大。</p>
+      {renderMode === "text" ? <p className="text-sm text-muted-foreground">底板使用接口默认值；排版示意不代表接口默认底色或真实成片效果。</p> : category === "product" ? <p className="text-sm text-muted-foreground">产品视频：字幕无底板</p> : null}
       <p className="text-sm text-muted-foreground">两份视频应来自相同剪辑与时间原点。不会自动去字幕、配音或对齐时间轴。参考视频最长 600 秒。</p>
       <SubtitleLayoutNotice />
       <div className="grid min-w-0 gap-4 xl:grid-cols-2">
@@ -74,14 +103,16 @@ export function SubtitleWorkspaceEditor({
         <Button disabled={blocked || !workspace.clean_video_asset_id || !renderable.length || workspace.segments.some((segment) => segmentIssue(segment))} onClick={() => void state.run("render")}>4 · 压制已保存字幕</Button>
         {missing.length ? <Button variant="outline" disabled={blocked} onClick={() => void state.run("translate", undefined, missing.map((segment) => segment.segment_id))}>仅重试缺失译文 ({missing.length})</Button> : null}
       </div>
+      <p className="text-sm text-muted-foreground">已保存压制方式：{subtitleRenderModeLabel(renderMode)} · 新任务 H.264 / CRF {subtitleCrf(workspace)}</p>
+      {renderMode === "text" && productWarning ? <p role="status" className="text-sm text-muted-foreground">{productWarning}</p> : null}
       {durationDiff > 250 ? <p role="status" className="rounded-lg border border-amber-500/30 p-3 text-sm text-amber-600">两份视频时长相差 {durationDiff} ms，请核对同一剪辑与时间原点；可继续，尾部越界字幕会调整。</p> : null}
       {adjustments.length ? <div className="break-words rounded-lg border border-amber-500/30 p-3 text-sm"><p>压制时间调整清单</p>{adjustments.map((segment) => <p key={segment.segment_id}>{segment.segment_id}：{segment.start_ms >= workspace.clean_video!.duration_ms ? "完全越界，不参与压制" : `结束时间截到 ${workspace.clean_video!.duration_ms} ms`}</p>)}</div> : null}
-      {state.error ? <p role="alert" className="text-sm text-destructive">{subtitleWarningMessage(state.error)}</p> : null}
+      {state.error ? <p role="alert" className="text-sm text-destructive">{subtitleWarningMessage(state.error, category, renderMode)}</p> : null}
       {conflict ? <div role="alert" className="flex flex-wrap items-center gap-2 text-sm"><span>revision 冲突，未覆盖远端修改。</span><Button variant="outline" onClick={() => void state.reload()}>重新加载远端</Button></div> : null}
-      {task ? <div className="rounded-xl border border-border p-3 text-sm"><p>阶段任务 {String(task.input_snapshot.operation ?? "")} · {task.status}</p>{task.error ? <p role="alert">{subtitleWarningMessage(task.error.message)}</p> : null}{task.status === "failed" ? <Button variant="outline" disabled={blocked} onClick={() => void state.retry()}>重试失败阶段</Button> : null}</div> : null}
-      {output ? <section className="space-y-3 rounded-xl border border-border p-4"><h3 className="font-semibold">当前成片</h3><SubtitleVideoPreview key={workspace.output_asset_id} url={output} label="字幕翻译成片" /><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setEnlarged(true)}>放大预览</Button><a className="rounded-lg border border-border px-4 py-2 text-sm" href={getAssetDownloadUrlById(workspace.output_asset_id!)!} download>下载 MP4</a></div></section> : null}
+      {task ? <div className="rounded-xl border border-border p-3 text-sm"><p>阶段任务 {String(task.input_snapshot.operation ?? "")} · {task.status}</p>{task.input_snapshot.operation === "render" ? <p>{subtitleTaskRenderSummaryLabel(task)}</p> : null}{task.error ? <p role="alert">{subtitleWarningMessage(task.error.message, category)}</p> : null}{task.status === "failed" ? <Button variant="outline" disabled={blocked} onClick={() => void state.retry()}>重试失败阶段</Button> : null}</div> : null}
+      {output ? <section className="space-y-3 rounded-xl border border-border p-4"><h3 className="font-semibold">当前成片</h3><p className="text-sm text-muted-foreground">{outputSummary}</p><SubtitleVideoPreview key={workspace.output_asset_id} videoCategory={category} url={output} label="字幕翻译成片" /><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setEnlarged(true)}>放大预览</Button><a className="rounded-lg border border-border px-4 py-2 text-sm" href={getAssetDownloadUrlById(workspace.output_asset_id!)!} download>下载 MP4</a></div></section> : null}
       {review ? <SubtitleReviewDialog key={`${workspace.id}-${reviewSession}-${workspace.revision}`} workspace={workspace} open readOnly={!canWrite || running} busy={busy} error={state.error} conflict={conflict} onClose={() => { onDirtyChange(false); setReview(false); }} onDirtyChange={onDirtyChange} onSave={state.save} onPreview={state.preview} onRender={(segments) => state.run("render", segments)} onRetry={(segments, ids) => state.run("translate", segments, ids)} onReload={async () => { if (await state.reload()) { setReview(false); onDirtyChange(false); } }} /> : null}
-      <Dialog open={enlarged && Boolean(output)} onOpenChange={setEnlarged}><DialogContent className="max-w-6xl p-5"><DialogTitle>字幕翻译成片</DialogTitle><DialogDescription>最终压制结果</DialogDescription>{output ? <SubtitleVideoPreview url={output} label="放大成片" enlarged /> : null}</DialogContent></Dialog>
+      <Dialog open={enlarged && Boolean(output)} onOpenChange={setEnlarged}><DialogContent className="max-w-6xl p-5"><DialogTitle>字幕翻译成片</DialogTitle><DialogDescription>最终压制结果</DialogDescription>{output ? <SubtitleVideoPreview videoCategory={category} url={output} label="放大成片" enlarged /> : null}</DialogContent></Dialog>
     </div>
   );
 }

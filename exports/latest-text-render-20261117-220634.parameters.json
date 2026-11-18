@@ -1,0 +1,691 @@
+{
+  "evidence": {
+    "task_id": "e29090db-f005-4c31-adc3-d6394aca9f72",
+    "provider_task_id": "amk-tool-multi-track-edit-1937166289666",
+    "render_mode": "text",
+    "effective_render_mode": "text",
+    "encoding_policy_version": "crf16-h264-v2",
+    "basis": "Reconstructed offline from frozen task snapshot; all 23 layout summaries exactly match persisted submission summaries. Original HTTP body was not persisted. Source signed URL replaced; no new provider request.",
+    "source_url_redacted": true,
+    "layout_exact_match": true
+  },
+  "request": {
+    "canvas": {
+      "width": 1920,
+      "height": 1080,
+      "background_color": "#000000FF"
+    },
+    "track": [
+      [
+        {
+          "type": "video",
+          "source": "https://redacted.invalid/source-video.mp4",
+          "target_time": [
+            0,
+            65400
+          ]
+        }
+      ],
+      [
+        {
+          "type": "text",
+          "text": "FLOOR ONE i5 Lite",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 62,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 1,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 577,
+              "pos_y": 492,
+              "width": 765,
+              "height": 77,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            500,
+            2000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Starke Saugkraft von 22.000 Pa",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 41,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 886,
+              "width": 646,
+              "height": 52,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            9000,
+            11500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Konstant sauberes Bürstenwischen",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 41,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 859,
+              "width": 773,
+              "height": 52,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            12500,
+            16500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Verwirrungssicheres Design",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 41,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 886,
+              "width": 542,
+              "height": 52,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            17000,
+            19000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Zweiseitige Kantenreinigung",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 41,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 886,
+              "width": 657,
+              "height": 52,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            23000,
+            25500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "180° Flachlagerungs-Design",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 41,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 886,
+              "width": 556,
+              "height": 52,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            28500,
+            32000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Kleine Stützräder",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 41,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 886,
+              "width": 505,
+              "height": 52,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            36500,
+            38000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "45°-Schwenkdesign",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 41,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 886,
+              "width": 432,
+              "height": 52,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            38500,
+            41500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Bis zu 45 Minuten Laufzeit",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 41,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 886,
+              "width": 619,
+              "height": 52,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            45000,
+            49000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Selbstreinigung per Knopfdruck",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 41,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 886,
+              "width": 624,
+              "height": 52,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            54000,
+            56500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "FLOOR ONE i5 Lite",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_size": 53,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 375,
+              "pos_y": 503,
+              "width": 657,
+              "height": 66,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            57500,
+            60000
+          ]
+        }
+      ],
+      [
+        {
+          "type": "text",
+          "text": "Saugt trockenen und nassen Schmutz mühelos vom Boden auf.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 34,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 944,
+              "width": 1126,
+              "height": 43,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            9000,
+            11500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Reinigt immer mit frischem Wasser und einer sauberen Bürste für eine gründliche und",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 34,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 917,
+              "width": 1426,
+              "height": 43,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            12500,
+            16500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Bewältigt Haare und Tierhaare mühelos, ohne dass sich diese verfangen.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 34,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 944,
+              "width": 1197,
+              "height": 43,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            17000,
+            19000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Reinigt mühelos entlang der Fußleisten und lässt keine Ecke ungereinigt.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 34,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 944,
+              "width": 1330,
+              "height": 43,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            23000,
+            25500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Erreicht mühelos niedrige Bereiche, um verborgenen Staub zu entfernen.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 34,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 944,
+              "width": 1196,
+              "height": 43,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            28500,
+            32000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Lässt sich in beide Richtungen leicht schieben und ziehen – für müheloses Manövrieren.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 34,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 944,
+              "width": 1431,
+              "height": 43,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            36500,
+            38000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Lässt sich flexibel nach links und rechts schwenken.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 34,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 944,
+              "width": 835,
+              "height": 43,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            38500,
+            41500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Ermöglicht die Reinigung des gesamten Hauses mit einer einzigen Akkuladung",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 34,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 944,
+              "width": 1285,
+              "height": 43,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            45000,
+            49000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Nach der Nutzung wirklich unkompliziert.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 34,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 944,
+              "width": 666,
+              "height": 43,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            54000,
+            56500
+          ]
+        }
+      ],
+      [
+        {
+          "type": "text",
+          "text": "tiefgehende Reinigung jedes Mal.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 35,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 965,
+              "width": 575,
+              "height": 44,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            12500,
+            16500
+          ]
+        },
+        {
+          "type": "text",
+          "text": "*Die Höhe im flachliegenden Zustand beträgt 12,75 cm",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 24,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 995,
+              "width": 641,
+              "height": 35,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            28500,
+            32000
+          ]
+        },
+        {
+          "type": "text",
+          "text": "*Basierend auf Tineco-Labordaten.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_size": 24,
+          "font_color": "#FFFFFFFF",
+          "background_color": "#00000000",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "line_max_width": -1,
+          "typesetting": 0,
+          "align_type": 0,
+          "extra": [
+            {
+              "type": "transform",
+              "pos_x": 125,
+              "pos_y": 995,
+              "width": 407,
+              "height": 35,
+              "rotation": 0
+            }
+          ],
+          "target_time": [
+            45000,
+            49000
+          ]
+        }
+      ]
+    ],
+    "output": {
+      "format": "mp4",
+      "fps": 25,
+      "disable_audio": false,
+      "codec": {
+        "video_codec": "h264",
+        "crf": 16
+      }
+    },
+    "client_token": "aigc-multitrack-354e17af6f7917e83c91d4ee50ca906effd019e6"
+  }
+}

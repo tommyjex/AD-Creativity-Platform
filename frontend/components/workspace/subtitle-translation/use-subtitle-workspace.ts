@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient, getUserFacingErrorMessage, isApiError } from "@/lib/api-client";
 import type { SubtitleOperation, SubtitleSegment, SubtitleWorkspace, SubtitleWorkspacePatch, ToolTask } from "@/lib/api-types";
+import { clearSubtitleLayout, clearSubtitleLayoutWarnings, subtitleCrf, subtitleRenderMode, subtitleVideoCategory } from "@/lib/subtitle-translation";
 
-export function useSubtitleWorkspace(initial: SubtitleWorkspace, onUpdate: (workspace: SubtitleWorkspace) => void) {
+export function useSubtitleWorkspace(initial: SubtitleWorkspace, onUpdate: (workspace: SubtitleWorkspace) => void, canWrite = true) {
   const [workspace, setWorkspace] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,8 +37,9 @@ export function useSubtitleWorkspace(initial: SubtitleWorkspace, onUpdate: (work
   useEffect(() => {
     if (active || !lastTaskId) return;
     const controller = new AbortController();
+    const token = version.current;
     apiClient.getToolTask(lastTaskId, { signal: controller.signal, cache: "no-store" })
-      .then((next) => { if (!controller.signal.aborted && alive.current) setTask(next); })
+      .then((next) => { if (!controller.signal.aborted && alive.current && token === version.current) setTask(next); })
       .catch((cause) => { if (!controller.signal.aborted && alive.current) setError(getUserFacingErrorMessage(cause)); });
     return () => controller.abort();
   }, [active, lastTaskId]);
@@ -81,17 +83,32 @@ export function useSubtitleWorkspace(initial: SubtitleWorkspace, onUpdate: (work
   }
 
   async function patch(change: Omit<SubtitleWorkspacePatch, "expected_revision">) {
+    const categoryChanged = change.video_category != null &&
+      change.video_category !== subtitleVideoCategory(current.current);
+    const modeChanged = change.render_mode != null &&
+      change.render_mode !== subtitleRenderMode(current.current);
+    const crfChanged = change.crf != null && change.crf !== subtitleCrf(current.current);
     const next = await apiClient.patchSubtitleWorkspace(current.current.id, {
       expected_revision: current.current.revision, ...change
     });
     if (!alive.current) return null;
-    accept(next);
+    const stageTaskIds = { ...next.stage_task_ids };
+    if (categoryChanged || modeChanged || crfChanged) delete stageTaskIds.render;
+    const accepted = categoryChanged || modeChanged ? {
+      ...next, output_asset_id: null,
+      stage_task_ids: stageTaskIds,
+      segments: next.segments.map((segment) => clearSubtitleLayout(segment, modeChanged)),
+      warnings: modeChanged ? clearSubtitleLayoutWarnings(next.warnings, true) : []
+    } : crfChanged ? { ...next, output_asset_id: null, stage_task_ids: stageTaskIds } : next;
+    accept(accepted);
     setTask(null);
     setConflict(false);
-    return next;
+    return accepted;
   }
 
   function update(change: Omit<SubtitleWorkspacePatch, "expected_revision">) {
+    if ((change.video_category != null || change.render_mode != null || change.crf != null) && (!canWrite || conflict || current.current.active_task_id ||
+      ["extracting", "translating", "rendering"].includes(current.current.stage))) return Promise.resolve(false);
     return transaction(async () => Boolean(await patch(change)));
   }
 
@@ -147,9 +164,17 @@ export function useSubtitleWorkspace(initial: SubtitleWorkspace, onUpdate: (work
   async function preview(segments: SubtitleSegment[]) {
     let result: SubtitleWorkspace | null = null;
     await transaction(async () => {
-      result = await apiClient.previewSubtitleWorkspace(current.current.id, {
-        expected_revision: current.current.revision, segments
+      const base = current.current;
+      const token = version.current;
+      const next = await apiClient.previewSubtitleWorkspace(base.id, {
+        expected_revision: base.revision, segments
       }, { cache: "no-store" });
+      if (token !== version.current || current.current.id !== base.id ||
+        current.current.revision !== base.revision ||
+        subtitleCrf(next) !== subtitleCrf(base) ||
+        subtitleRenderMode(next) !== subtitleRenderMode(base) ||
+        subtitleVideoCategory(next) !== subtitleVideoCategory(base)) return false;
+      result = next;
       return true;
     });
     return alive.current ? result : null;

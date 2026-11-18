@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { SubtitleSegment, SubtitleWorkspace } from "@/lib/api-types";
 import { getAssetContentUrlById } from "@/lib/asset-display";
-import { segmentDraftIssue, segmentIssue, subtitleDraftSignature, subtitleWarningMessage } from "@/lib/subtitle-translation";
+import { segmentDraftIssue, segmentIssue, subtitleBrandSkipped, subtitleCrf, subtitleDraftSignature, subtitleWarningMessage, subtitleVideoCategory, subtitleVideoCategoryLabel, subtitleRenderMode, subtitleRenderModeLabel, subtitleTextProductWarning } from "@/lib/subtitle-translation";
 import { SubtitleVideoPreview } from "./video-preview";
 import { SubtitleSegmentEditor } from "./segment-editor";
 import { SubtitleLayoutNotice } from "./layout-notice";
@@ -32,6 +32,9 @@ export function SubtitleReviewDialog({
   const [selected, setSelected] = useState(workspace.segments[0]?.segment_id);
   const [seekRequest, setSeekRequest] = useState(0);
   const [confirmClose, setConfirmClose] = useState(false);
+  const category = subtitleVideoCategory(workspace);
+  const renderMode = subtitleRenderMode(workspace);
+  const productWarning = subtitleTextProductWarning(segments.flatMap((segment) => segment.warnings));
   const dirty = subtitleDraftSignature(segments) !== subtitleDraftSignature(baseline);
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => {
@@ -56,7 +59,7 @@ export function SubtitleReviewDialog({
     })));
   }, []);
   const active = segments.find((segment) => segment.segment_id === selected);
-  const missing = segments.filter((segment) => !segment.excluded && !segment.translated_text?.trim()).map((segment) => segment.segment_id);
+  const missing = segments.filter((segment) => !segment.excluded && !subtitleBrandSkipped(segment) && !segment.translated_text?.trim()).map((segment) => segment.segment_id);
   const invalid = segments.some((segment) => segmentIssue(segment));
   const invalidDraft = segments.some((segment) => segmentDraftIssue(segment));
   const previewUrl = getAssetContentUrlById(workspace.clean_video_asset_id ?? workspace.reference_video_asset_id ?? "");
@@ -72,17 +75,18 @@ export function SubtitleReviewDialog({
       <DialogContent className="flex h-[calc(100dvh-1rem)] max-w-[1500px] flex-col gap-0 p-0 sm:h-[calc(100dvh-3rem)]" onInteractOutside={(event) => { if (busy || dirty) { event.preventDefault(); close(); } }}>
         <header className="border-b border-border p-4 pr-16">
           <DialogTitle>原文 / 译文校对</DialogTitle>
-          <DialogDescription>保留单行与原位置 · revision {workspace.revision}{dirty ? " · 未保存修改" : " · 已保存"}{readOnly ? " · 只读" : ""}</DialogDescription>
+          <DialogDescription>保留单行与原位置 · {subtitleVideoCategoryLabel(category)} · revision {workspace.revision}{dirty ? " · 未保存修改" : " · 已保存"}{readOnly ? " · 只读" : ""} · 已保存压制方式：{subtitleRenderModeLabel(renderMode)} · CRF {subtitleCrf(workspace)}</DialogDescription>
         </header>
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
           <SubtitleLayoutNotice />
-          {previewUrl ? <SubtitleVideoPreview key={workspace.clean_video_asset_id ?? workspace.reference_video_asset_id} url={previewUrl} layoutSize={workspace.clean_video ?? workspace.reference_video} targetLanguage={workspace.target_language} segments={segments} selectedId={selected} seekRequest={seekRequest} seekMs={active?.start_ms} label={workspace.clean_video_asset_id ? "无字幕视频 · 译文排版示意" : "参考视频 · 译文排版示意"} /> : null}
+          {previewUrl ? <SubtitleVideoPreview key={workspace.clean_video_asset_id ?? workspace.reference_video_asset_id} renderMode={renderMode} videoCategory={category} url={previewUrl} layoutSize={workspace.clean_video ?? workspace.reference_video} targetLanguage={workspace.target_language} segments={segments} selectedId={selected} seekRequest={seekRequest} seekMs={active?.start_ms} label={workspace.clean_video_asset_id ? "无字幕视频 · 译文排版示意" : "参考视频 · 译文排版示意"} /> : null}
+          {renderMode === "text" && productWarning ? <p role="status" className="mt-2 text-sm text-muted-foreground">{productWarning}</p> : null}
           <div className="mt-4 space-y-3">
-            {segments.map((segment, index) => <SubtitleSegmentEditor key={segment.segment_id} segment={segment} index={index} readOnly={readOnly || busy || conflict} selected={selected === segment.segment_id} onChange={edit} onSeek={(item) => { setSelected(item.segment_id); setSeekRequest((n) => n + 1); }} />)}
+            {segments.map((segment, index) => <SubtitleSegmentEditor key={segment.segment_id} renderMode={renderMode} videoCategory={category} segment={segment} index={index} readOnly={readOnly || busy || conflict} selected={selected === segment.segment_id} onChange={edit} onSeek={(item) => { setSelected(item.segment_id); setSeekRequest((n) => n + 1); }} />)}
           </div>
         </div>
         <footer className="space-y-3 border-t border-border p-4">
-          {error ? <p role="alert" className="text-sm text-destructive">{subtitleWarningMessage(error)}</p> : null}
+          {error ? <p role="alert" className="text-sm text-destructive">{subtitleWarningMessage(error, category, renderMode)}</p> : null}
           {conflict ? <div className="flex flex-wrap items-center gap-2 text-sm"><span>远端 revision 已变更，未覆盖本地草稿。请先保留修改再重新加载。</span><Button variant="outline" disabled={busy} onClick={() => {
             if (!dirty || window.confirm("重新加载将丢弃本地未保存修改，继续？")) void onReload();
           }}>重新加载远端</Button></div> : null}
@@ -90,13 +94,15 @@ export function SubtitleReviewDialog({
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" disabled={busy || readOnly || conflict || invalidDraft} onClick={async () => {
               const result = await onPreview(segments);
-              if (result && result.id === workspace.id && result.revision === workspace.revision) {
+              if (result && result.id === workspace.id && result.revision === workspace.revision &&
+                subtitleVideoCategory(result) === category && subtitleRenderMode(result) === renderMode &&
+                subtitleCrf(result) === subtitleCrf(workspace)) {
                 setSegments(result.segments);
               }
             }}>计算排版 · 不保存</Button>
             <Button variant="outline" disabled={busy || readOnly || conflict || invalidDraft || !missing.length} onClick={async () => { if (await onRetry(segments, missing)) { setBaseline(segments); onClose(); } }}>仅重试缺失译文 ({missing.length})</Button>
             <Button variant="outline" disabled={busy || readOnly || conflict || invalidDraft} onClick={() => void save()}>保存校对</Button>
-            <Button disabled={busy || readOnly || conflict || invalid || !segments.some((segment) => !segment.excluded && (!workspace.clean_video || segment.start_ms < workspace.clean_video.duration_ms)) || !workspace.clean_video_asset_id} onClick={async () => { if (await onRender(segments)) { setBaseline(segments); onClose(); } }}>保存并压制视频</Button>
+            <Button disabled={busy || readOnly || conflict || invalid || !segments.some((segment) => !segment.excluded && !subtitleBrandSkipped(segment) && (!workspace.clean_video || segment.start_ms < workspace.clean_video.duration_ms)) || !workspace.clean_video_asset_id} onClick={async () => { if (await onRender(segments)) { setBaseline(segments); onClose(); } }}>保存并压制视频</Button>
           </div>
         </footer>
       </DialogContent>

@@ -13,10 +13,11 @@ from backend.app.schemas import AssetCreate, AssetType, Status, ToolAssetRole
 from backend.app.schemas.subtitle_translation import (
     SubtitleStageRequest,
     SubtitleTranslationSegment,
+    SubtitleWorkspace,
     SubtitleWorkspaceCreate,
     SubtitleWorkspaceUpdate,
 )
-from backend.app.services.subtitle_translation import SubtitleTranslationService
+from backend.app.services.subtitle_translation import LAYOUT_FIELDS, SubtitleTranslationService
 
 
 @pytest.fixture(params=["memory", "mysql"])
@@ -44,6 +45,8 @@ def subtitle_service(subtitle_repo, test_asset_storage):
                         "rotation": 0,
                         "fps": 30,
                         "has_audio": True,
+                        "video_bit_rate": 7000000,
+                        "video_bit_rate_probed": True,
                     }
                 },
             )
@@ -77,9 +80,10 @@ def segment(segment_id="s1"):
     )
 
 
-def extracted(service):
+def extracted(service, *, video_category="unboxing"):
     workspace = service.create(
         SubtitleWorkspaceCreate(
+            video_category=video_category,
             reference_video_asset_id="reference",
             clean_video_asset_id="clean",
         )
@@ -89,6 +93,228 @@ def extracted(service):
     )
     service._complete(task.id, result={"segments": [segment().model_dump(mode="json")]})
     return service.repository.get_subtitle_workspace(workspace.id), task
+
+
+@pytest.mark.parametrize("category", ["product", "unboxing"])
+def test_video_category_json_history_and_stage_snapshot(subtitle_service, category):
+    service = subtitle_service
+    workspace = service.create(SubtitleWorkspaceCreate(
+        video_category=category, reference_video_asset_id="reference",
+    ))
+    assert service.repository.get_subtitle_workspace(workspace.id).video_category == category
+    assert service.repository.list_subtitle_workspaces()[0].video_category == category
+    assert workspace.model_dump(mode="json")["video_category"] == category
+    history = service.repository.list_subtitle_workspace_history(workspace.id)
+    assert history[0]["video_category"] == category
+    saved = service.patch(
+        workspace.id, SubtitleWorkspaceUpdate(expected_revision=1, name="Renamed"),
+    )
+    assert saved.video_category == category
+    task = service.submit(
+        workspace.id, "extract", SubtitleStageRequest(expected_revision=saved.revision),
+    )
+    assert task.input_snapshot["video_category"] == category
+    assert service.repository.list_subtitle_workspace_history(workspace.id)[-1]["video_category"] == category
+
+
+def test_legacy_workspace_category_defaults_without_rewriting_json(subtitle_service):
+    from backend.app.db.models import SubtitleWorkspaceORM
+
+    service = subtitle_service
+    workspace = service.create(SubtitleWorkspaceCreate())
+    assert workspace.video_category == "unboxing"
+    legacy = workspace.model_dump(mode="json", exclude={"video_category"})
+    assert SubtitleWorkspace.model_validate(legacy).video_category == "unboxing"
+    repo = service.repository
+    if hasattr(repo, "_session_factory"):
+        with repo._session_factory.begin() as session:
+            row = session.get(SubtitleWorkspaceORM, workspace.id)
+            row.payload = legacy
+            row.history = [legacy]
+    else:
+        repo._subtitle_workspaces[workspace.id] = SubtitleWorkspace.model_validate(legacy)
+        repo._subtitle_history[workspace.id] = [legacy]
+    assert repo.get_subtitle_workspace(workspace.id).video_category == "unboxing"
+    assert repo.list_subtitle_workspaces()[0].video_category == "unboxing"
+    assert repo.list_subtitle_workspace_history(workspace.id) == [legacy]
+    if hasattr(repo, "_session_factory"):
+        with repo._session_factory() as session:
+            assert session.get(SubtitleWorkspaceORM, workspace.id).payload == legacy
+
+
+def test_category_change_invalidates_only_render_and_preserves_product_fingerprints(
+    subtitle_service,
+):
+    service = subtitle_service
+    workspace, extraction = extracted(service)
+
+    def seed(current, tasks):
+        item = current.segments[0]
+        item.style.background_color = "#33333359"
+        item.product_mentions = [{
+            "start": 0, "end": 8, "model": "Ursprung", "spec": "",
+            "origin": "model_pattern", "status": "confirmed",
+        }]
+        item.product_text_sha256 = "a" * 64
+        item.product_recognition_sha256 = "b" * 64
+        item.render_layer_asset_id = "old-layer"
+        item.render_layer_url = "/old-layer.png"
+        item.effective_font_size_px = 22
+        item.text_runs = [{"text": "Ursprung"}]
+        current.output_asset_id = "old-output"
+        current.stage_task_ids["translate"] = "translation-history"
+        return current, None
+
+    workspace = service.repository.mutate_subtitle_workspace(workspace.id, seed)
+    before = workspace.segments[0].model_dump(exclude=set(LAYOUT_FIELDS))
+    task = service.submit(
+        workspace.id, "render", SubtitleStageRequest(expected_revision=workspace.revision),
+    )
+    assert task.input_snapshot["video_category"] == "unboxing"
+    saved = service.patch(workspace.id, SubtitleWorkspaceUpdate(
+        expected_revision=workspace.revision, video_category="product",
+    ))
+    assert saved.revision == workspace.revision + 1
+    assert saved.video_category == "product"
+    assert saved.output_asset_id is None
+    assert saved.active_task_id is None
+    assert saved.stage.value == "review_ready"
+    assert saved.stage_task_ids == {
+        "extract": extraction.id, "translate": "translation-history",
+    }
+    assert saved.reference_video == workspace.reference_video
+    assert saved.clean_video == workspace.clean_video
+    assert saved.segments[0].model_dump(exclude=set(LAYOUT_FIELDS)) == before
+    assert all(getattr(saved.segments[0], key) is None for key in LAYOUT_FIELDS)
+    assert service.repository.get_tool_task(task.id).input_snapshot == task.input_snapshot
+    service.translator.recognize_products.assert_not_awaited()
+    service._complete(task.id, result={"output_asset_id": "late-output"})
+    assert service.repository.get_subtitle_workspace(workspace.id) == saved
+    assert service.repository.get_tool_task(task.id).input_snapshot["result"]["output_asset_id"] == "late-output"
+    with pytest.raises(RevisionConflictError):
+        service.patch(workspace.id, SubtitleWorkspaceUpdate(
+            expected_revision=workspace.revision, video_category="unboxing",
+        ))
+    restored = service.patch(workspace.id, SubtitleWorkspaceUpdate(
+        expected_revision=saved.revision, video_category="unboxing",
+    ))
+    assert restored.segments[0].style.background_color == "#33333359"
+    assert restored.segments[0].product_recognition_sha256 == "b" * 64
+
+
+def test_same_category_does_not_invalidate_active_render(subtitle_service):
+    service = subtitle_service
+    workspace, _ = extracted(service)
+    task = service.submit(
+        workspace.id, "render", SubtitleStageRequest(expected_revision=workspace.revision),
+    )
+    saved = service.patch(workspace.id, SubtitleWorkspaceUpdate(
+        expected_revision=workspace.revision, video_category="unboxing",
+    ))
+    assert saved.active_task_id == task.id
+    assert saved.stage.value == "rendering"
+    service._complete(task.id, result={"output_asset_id": "output"})
+    assert service.repository.get_subtitle_workspace(workspace.id).output_asset_id == "output"
+
+
+@pytest.mark.parametrize("operation", ["extract", "translate"])
+def test_category_edit_rebases_unaffected_stage(subtitle_service, operation):
+    service = subtitle_service
+    workspace = service.create(SubtitleWorkspaceCreate(reference_video_asset_id="reference"))
+    if operation == "translate":
+        workspace, _ = extracted(service)
+
+        def pending(current, tasks):
+            current.segments[0].translated_text = None
+            return current, None
+
+        workspace = service.repository.mutate_subtitle_workspace(workspace.id, pending)
+    task = service.submit(
+        workspace.id, operation, SubtitleStageRequest(expected_revision=workspace.revision),
+    )
+    saved = service.patch(workspace.id, SubtitleWorkspaceUpdate(
+        expected_revision=workspace.revision, video_category="product",
+    ))
+    assert saved.active_task_id == task.id
+    assert saved.stage.value == ("extracting" if operation == "extract" else "translating")
+    snapshot = service.repository.get_tool_task(task.id).input_snapshot
+    assert snapshot["video_category"] == "unboxing"
+    assert snapshot["revision"] == workspace.revision
+    assert snapshot["writeback_revision"] == saved.revision
+    result = (
+        {"segments": [segment().model_dump(mode="json")]}
+        if operation == "extract" else {"translations": {"s1": "Translated"}, "failed_ids": []}
+    )
+    service._complete(task.id, result=result)
+    current = service.repository.get_subtitle_workspace(workspace.id)
+    assert current.video_category == "product"
+    assert current.segments[0].translated_text
+    assert current.revision == saved.revision + 1
+
+
+def test_category_is_in_render_identity_even_at_same_revision(subtitle_service):
+    service = subtitle_service
+    workspace, _ = extracted(service)
+    request = SubtitleStageRequest(expected_revision=workspace.revision)
+    first = service.submit(workspace.id, "render", request)
+    service._complete(first.id, result={"output_asset_id": "old-output"})
+
+    def change_only_category(current, tasks):
+        current.video_category = "product"
+        return current, None
+
+    service.repository.mutate_subtitle_workspace(workspace.id, change_only_category)
+    fresh = service.submit(workspace.id, "render", request)
+    assert fresh.id != first.id
+    assert fresh.input_snapshot["video_category"] == "product"
+    assert fresh.input_snapshot["idempotency_key"] != first.input_snapshot["idempotency_key"]
+    assert service.submit(workspace.id, "render", request).id == fresh.id
+
+
+def test_render_does_not_reuse_pre_category_identity(subtitle_service):
+    service = subtitle_service
+    workspace, _ = extracted(service)
+    request = SubtitleStageRequest(expected_revision=workspace.revision)
+    task = service.submit(workspace.id, "render", request)
+    snapshot = {k: v for k, v in task.input_snapshot.items() if k != "video_category"}
+    snapshot["idempotency_key"] = hashlib.sha256(json.dumps([
+        workspace.id, "render", workspace.revision, [], None,
+        {
+            "render_layout_version": snapshot["render_layout_version"],
+            "product_catalog_version": snapshot["product_catalog_version"],
+        },
+    ], separators=(",", ":")).encode()).hexdigest()
+    service.repository.update_tool_task(task.id, input_snapshot=snapshot)
+    service._complete(task.id, result={"output_asset_id": "legacy-output"})
+    fresh = service.submit(workspace.id, "render", request)
+    assert fresh.id != task.id
+    assert fresh.input_snapshot["video_category"] == "unboxing"
+    assert fresh.input_snapshot["render_layout_version"] == snapshot["render_layout_version"]
+    assert service.submit(workspace.id, "render", request).id == fresh.id
+    assert "video_category" not in service.repository.get_tool_task(task.id).input_snapshot
+
+
+@pytest.mark.parametrize("change_revision", [False, True])
+def test_retry_rejects_changed_render_category(subtitle_service, change_revision):
+    service = subtitle_service
+    workspace, _ = extracted(service)
+    task = service.submit(
+        workspace.id, "render", SubtitleStageRequest(expected_revision=workspace.revision),
+    )
+    service._complete(task.id, error="poll interrupted")
+    if change_revision:
+        service.patch(workspace.id, SubtitleWorkspaceUpdate(
+            expected_revision=workspace.revision, video_category="product",
+        ))
+    else:
+        def category_only(current, tasks):
+            current.video_category = "product"
+            return current, None
+
+        service.repository.mutate_subtitle_workspace(workspace.id, category_only)
+    with pytest.raises(RevisionConflictError, match="snapshot is stale"):
+        service.retry(task.id)
+    assert service.repository.get_tool_task(task.id).input_snapshot["video_category"] == "unboxing"
 
 
 def test_workspace_revision_persistence_history_and_conflict(subtitle_service):
@@ -169,7 +395,7 @@ def test_render_layout_version_changes_identity_without_changing_draft(
     service = subtitle_service
     workspace, extraction = extracted(service)
     current_version = layout.LAYOUT_VERSION
-    assert current_version == "single-line-adaptive-panel35-product-font-v3"
+    assert current_version == "single-line-png-text-default-background-v8"
     monkeypatch.setattr(layout, "LAYOUT_VERSION", "single-line-adaptive-panel35-v1")
     request = SubtitleStageRequest(expected_revision=workspace.revision)
     first = service.submit(workspace.id, "render", request)
@@ -342,11 +568,12 @@ def test_role_font_render_payload_and_measured_writeback(subtitle_service, monke
             if before.visual_role == "headline"
             else layout.CENTURY_GOTHIC_URL
         )
-        assert element["font_type"] == after.font_type == expected_font
-        assert element["bold"] is False
-        assert element["text"] == before.translated_text
+        assert element["type"] == "image" and "bold" not in element
+        assert after.font_type == expected_font
+        assert "".join(run["text"] for run in summary["text_runs"]) == before.translated_text
+        assert {run["font_type"] for run in summary["text_runs"]} == {expected_font}
         assert element["target_time"] == [before.start_ms, before.end_ms]
-        assert element["font_size"] == after.effective_font_size_px
+        assert {run["font_size_px"] for run in summary["text_runs"]} == {after.effective_font_size_px}
         assert after.effective_font_size_px == summary["effective_font_size_px"] != 999
         assert after.estimated_font_size_px == summary["estimated_font_size_px"]
         assert 0 < after.effective_font_size_px <= after.estimated_font_size_px

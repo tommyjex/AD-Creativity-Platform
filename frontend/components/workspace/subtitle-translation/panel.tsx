@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { apiClient, getUserFacingErrorMessage } from "@/lib/api-client";
 import type { Asset, SubtitleWorkspace } from "@/lib/api-types";
-import { subtitleFieldClass } from "@/lib/subtitle-translation";
+import { subtitleFieldClass, subtitleVideoCategory, subtitleVideoCategoryLabel, type SubtitleVideoCategory } from "@/lib/subtitle-translation";
 import { SubtitleWorkspaceEditor } from "./workspace-editor";
 
 export function SubtitleTranslationPanel({
@@ -63,13 +63,13 @@ export function SubtitleTranslationPanel({
       if (alive.current && token === requestId.current) setError(getUserFacingErrorMessage(cause));
     } finally { if (alive.current && token === requestId.current) setBusy(false); }
   }
-  async function create() {
+  async function create(video_category: SubtitleVideoCategory) {
     if (busy || !canWrite || !discardAllowed()) return;
     const token = ++requestId.current;
     setBusy(true);
     setError(null);
     try {
-      const workspace = await apiClient.createSubtitleWorkspace({ name: "视频字幕翻译", target_language: "de", source_language: "auto" });
+      const workspace = await apiClient.createSubtitleWorkspace({ name: "视频字幕翻译", target_language: "de", source_language: "auto", video_category });
       if (!alive.current || token !== requestId.current) return;
       updateHistory(workspace);
       setSelected(workspace);
@@ -84,10 +84,13 @@ export function SubtitleTranslationPanel({
         <label className="min-w-0 flex-1 text-sm">持久化工作区历史
           <select aria-label="字幕工作区历史" className={`${subtitleFieldClass} mt-1`} value={selected?.id ?? ""} disabled={busy} onChange={(event) => { if (event.target.value) void select(event.target.value); }}>
             <option value="">{busy ? "正在加载…" : "选择工作区"}</option>
-            {history.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.target_language} · {workspace.stage} · r{workspace.revision}</option>)}
+            {history.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {subtitleVideoCategoryLabel(subtitleVideoCategory(workspace))} · {workspace.target_language} · {workspace.stage} · r{workspace.revision}</option>)}
           </select>
         </label>
-        <Button disabled={busy || !canWrite} onClick={() => void create()}>新建字幕工作区</Button>
+        <div className="flex flex-wrap gap-3">
+          <div><Button disabled={busy || !canWrite} onClick={() => void create("product")}>新建产品视频任务</Button></div>
+          <div><Button disabled={busy || !canWrite} onClick={() => void create("unboxing")}>新建开箱视频任务</Button></div>
+        </div>
       </div>
       {error ? <div role="alert" className="text-sm text-destructive">{error}<Button variant="outline" onClick={() => { if (selected) void select(selected.id); else window.location.reload(); }}>重新加载</Button></div> : null}
       {selected ? <SubtitleWorkspaceEditor key={selected.id} initial={selected} assets={assets} canWrite={canWrite} onUpdate={updateHistory} onDirtyChange={markDirty} onAsset={(asset) => onAssetsChange([asset, ...latestAssets.current.filter((item) => item.id !== asset.id)])} /> : !busy ? <p className="py-12 text-center text-sm text-muted-foreground">{canWrite ? "新建工作区开始提取、翻译与校对。" : "暂无可查看的字幕工作区。"}</p> : null}

@@ -12,6 +12,7 @@ import argparse
 from copy import deepcopy
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 import json
 from pathlib import Path
 import re
@@ -35,7 +36,7 @@ ROLE_FONT_URLS = {
     "CenturyGothic": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
     "CenturyGothicBold": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
 }
-OUT = ROOT / ".trae/specs/add-video-subtitle-translation/browser-acceptance"
+OUT = Path("/tmp/subtitle-category-browser-acceptance")
 NOW = "2026-10-26T00:00:00Z"
 META = dict(width=1280, height=720, duration_ms=4500, rotation=0, fps=30, has_audio=True)
 PREFIX = "/api/tools/subtitle-translation/workspaces"
@@ -108,6 +109,7 @@ class MockAPI:
         self.assets = [asset("reference-a"), asset("clean-a")]
         self.tasks = {}
         self.calls = []
+        self.payloads = []
         self.unexpected = []
         self.blocked_debug = 0
         self.mocked_fonts = 0
@@ -121,6 +123,8 @@ class MockAPI:
         self.product_examples = {}
         self.product_layers = {}
         self.fail_layers = False
+        self.category_checks = False
+        self.hold_tasks = False
 
     def product_measure(self, current, recognize=False):
         for item in current["segments"]:
@@ -140,6 +144,20 @@ class MockAPI:
             top = round(item["bbox_normalized"][1] / 999 * META["height"])
             item["render_bbox_pixels"] = [box[0], top, box[2], top + box[3] - box[1]]
             item["render_layer_url"] = f'{PREFIX}/{current["id"]}/layers/{summary["render_layer_asset_id"]}.png'
+            if self.category_checks:
+                from PIL import Image
+                original = Image.open(self.product_layers[summary["render_layer_asset_id"]]).convert("RGBA")
+                category = current.get("video_category", "unboxing")
+                panel = "#00000000" if category == "product" else item["style"].get("background_color") or "#33333359"
+                image = Image.new("RGBA", original.size, panel)
+                image.alpha_composite(original)
+                buffer = BytesIO()
+                image.save(buffer, format="PNG")
+                content = buffer.getvalue()
+                identifier = hashlib.sha256(category.encode() + content).hexdigest()
+                self.product_layers[identifier] = content
+                item.update(render_layer_asset_id=identifier,
+                            render_layer_url=f'{PREFIX}/{current["id"]}/layers/{identifier}.png')
 
     def route(self, route):
         request = route.request
@@ -167,6 +185,7 @@ class MockAPI:
             return route.continue_()
         self.calls.append((method, path))
         payload = request.post_data_json if method in {"POST", "PATCH"} and path != "/api/tools/subtitle-translation/upload-video" else {}
+        self.payloads.append({"method": method, "path": path, "payload": deepcopy(payload)})
 
         def reply(body, status=200):
             route.fulfill(status=status, content_type="application/json", body=json.dumps(body))
@@ -206,7 +225,10 @@ class MockAPI:
         if path == PREFIX:
             if method == "GET":
                 return reply(list(self.workspaces.values()))
+            if payload.get("video_category", "unboxing") not in {"product", "unboxing"}:
+                return reply({"detail": "Invalid video_category"}, 422)
             created = workspace(f"workspace-{len(self.workspaces) + 1}")
+            created["video_category"] = "unboxing"
             created.update(payload)
             self.workspaces = {created["id"]: created, **self.workspaces}
             return reply(created, 201)
@@ -215,6 +237,8 @@ class MockAPI:
                 return reply({"detail": "Layer unavailable"}, 503)
             layer = self.product_layers.get(Path(path).stem)
             if layer:
+                if isinstance(layer, bytes):
+                    return route.fulfill(body=layer, content_type="image/png")
                 return route.fulfill(path=str(layer), content_type="image/png")
         match = re.fullmatch(PREFIX + r"/([^/]+)(?:/(extract|translate|render|preview|recognize-products))?", path)
         if match:
@@ -252,7 +276,7 @@ class MockAPI:
                 if active:
                     task = self.tasks[active]
                     task["reads"] += 1
-                    if task["reads"] >= 2:
+                    if task["reads"] >= 2 and not self.hold_tasks:
                         self.complete(current, task)
                 return reply(current)
             if self.conflict_next:
@@ -261,10 +285,13 @@ class MockAPI:
                 return reply({"detail": {"code": "revision_conflict", "message": "Revision changed remotely"}}, 409)
             if payload["expected_revision"] != current["revision"]:
                 return reply({"detail": {"code": "revision_conflict", "message": "Revision changed"}}, 409)
+            if "video_category" in payload and payload["video_category"] not in {"product", "unboxing"}:
+                return reply({"detail": "Invalid video_category"}, 422)
             original = {s["segment_id"]: s["text"] for s in current["segments"]}
             if "segments" in payload:
                 assert all(s["text"] == original[s["segment_id"]] for s in payload["segments"])
             changed_language = any(k in payload and payload[k] != current[k] for k in ("source_language", "target_language"))
+            changed_category = "video_category" in payload and payload["video_category"] != current.get("video_category", "unboxing")
             current.update({k: deepcopy(v) for k, v in payload.items() if k != "expected_revision"})
             for role in ("reference", "clean"):
                 if f"{role}_video_asset_id" in payload:
@@ -272,12 +299,20 @@ class MockAPI:
             if changed_language:
                 for s in current["segments"]:
                     s.update(translated_text=None, translation_status="pending")
-            if self.product_checks:
+            if self.product_checks and not changed_category:
                 self.product_measure(current, recognize=True)
+            if changed_category:
+                current["stage_task_ids"].pop("render", None)
+                for item in current["segments"]:
+                    for key in ("render_layer_url", "render_layer_asset_id", "text_runs",
+                                "render_bbox_pixels", "effective_font_size_px",
+                                "estimated_font_size_px", "recommended_text_color"):
+                        item[key] = None
             current["revision"] += 1
             current["output_asset_id"] = None
             current["active_task_id"] = None
             current["stage"] = "review_ready" if current["segments"] else "draft"
+            self.workspaces = {identifier: current, **self.workspaces}
             return reply(current)
         match = re.fullmatch(r"/api/tools/tasks/([^/]+)(/retry)?", path)
         if match:
@@ -295,7 +330,8 @@ class MockAPI:
         task = dict(
             id=identifier, type="video_subtitle_translation", status="queued",
             input_snapshot={"workspace_id": current["id"], "operation": operation,
-                            "revision": current["revision"], "segment_ids": selected},
+                            "revision": current["revision"], "segment_ids": selected,
+                            "video_category": current.get("video_category", "unboxing")},
             provider_task_id=None, created_at=NOW, updated_at=NOW,
             started_at=None, finished_at=None, error=None, reads=0,
         )
@@ -448,7 +484,7 @@ def run_creator(page, api, base):
     expect(page.get_by_role("dialog")).to_be_visible()
     no_overflow(page)
     page.get_by_role("dialog").get_by_role("button", name="关闭", exact=True).click()
-    page.get_by_role("button", name="新建字幕工作区", exact=True).click()
+    page.get_by_role("button", name="新建开箱视频任务", exact=True).click()
     expect(page.get_by_role("heading", name="当前成片", exact=True)).not_to_be_visible()
     page.get_by_label("字幕工作区历史").select_option("workspace-a")
     expect(page.get_by_role("heading", name="当前成片", exact=True)).to_be_visible()
@@ -470,7 +506,7 @@ def run_viewer(page, api, base):
                    stage="review_ready", segments=[segment(1)])
     current["segments"][0].update(translated_text="Read only translation", translation_status="succeeded")
     open_tool(page, base)
-    for label in ("新建字幕工作区", "1 · 提取字幕", "2 · 翻译", "4 · 压制已保存字幕"):
+    for label in ("新建产品视频任务", "新建开箱视频任务", "1 · 提取字幕", "2 · 翻译", "4 · 压制已保存字幕"):
         expect(page.get_by_role("button", name=label, exact=True)).to_be_disabled()
     page.get_by_role("button", name=re.compile(r"3 · 原文")).click()
     dialog = page.get_by_role("dialog")
@@ -499,7 +535,7 @@ def run_role_fonts(page, api, base):
                    stage="review_ready", segments=records)
     open_tool(page, base)
     if api.role == "viewer":
-        for label in ("新建字幕工作区", "1 · 提取字幕", "2 · 翻译", "4 · 压制已保存字幕"):
+        for label in ("新建产品视频任务", "新建开箱视频任务", "1 · 提取字幕", "2 · 翻译", "4 · 压制已保存字幕"):
             expect(page.get_by_role("button", name=label, exact=True)).to_be_disabled()
     page.get_by_role("button", name=re.compile(r"3 · 原文")).click()
     dialog = page.get_by_role("dialog")
@@ -681,6 +717,287 @@ def run_product_names(page, api, base):
                             "no_manual_product_controls": True, "image_failure_fallback": True})
 
 
+def run_brands(page, api, base):
+    """Brand skip warnings are server-derived fixtures; test real UI suppression."""
+    current = api.workspaces["workspace-a"]
+    records = [segment(index) for index in range(1, 4)]
+    records[0].update(text="Tineco", translated_text="Historical brand translation",
+                      translation_status="succeeded", warnings=["brand_content_skipped"],
+                      render_layer_url=f'{PREFIX}/workspace-a/layers/{"a" * 64}.png')
+    records[1].update(text="Live Easy. Enjoy Life.", translated_text=None,
+                      warnings=["brand_content_skipped"])
+    records[2].update(text="Tineco FLOOR ONE S7", translated_text="Normal product explanation",
+                      translation_status="succeeded")
+    current.update(reference_video_asset_id="reference-a", reference_video=deepcopy(META),
+                   clean_video_asset_id="clean-a", clean_video=deepcopy(META),
+                   stage="review_ready", segments=records, warnings=["brand_content_skipped"])
+    open_tool(page, base)
+    for category in ("unboxing", "product"):
+        if category == "product":
+            if api.role == "creator":
+                page.get_by_label("视频类型", exact=True).select_option(category)
+                expect(page.get_by_label("视频类型", exact=True)).to_have_value(category)
+            else:
+                current["video_category"] = category
+                page.reload(wait_until="networkidle")
+                page.get_by_role("tab", name="视频字幕翻译", exact=True).click()
+        page.get_by_role("button", name=re.compile(r"3 · 原文")).click()
+        dialog = page.get_by_role("dialog")
+        dialog.get_by_role("button", name="字幕 3 · 定位", exact=True).click()
+        expect(dialog.locator('[data-subtitle-panel="line-3"]')).to_be_visible()
+        expect(dialog.locator('[data-subtitle-panel="line-1"]')).to_have_count(0)
+        expect(dialog.locator('[data-subtitle-panel="line-2"]')).to_have_count(0)
+        expect(dialog.locator("[data-subtitle-layer]")).to_have_count(0)
+        expect(dialog.get_by_role("button", name="仅重试缺失译文 (0)", exact=True)).to_be_disabled()
+        expect(dialog.get_by_label("字幕 2译文")).to_have_value("")
+        render = dialog.get_by_role("button", name="保存并压制视频", exact=True)
+        (expect(render).to_be_enabled() if api.role == "creator" else expect(render).to_be_disabled())
+        no_overflow(page)
+        dialog.get_by_role("button", name="关闭", exact=True).click()
+    current["segments"] = records[:2]
+    page.reload(wait_until="networkidle")
+    page.get_by_role("tab", name="视频字幕翻译", exact=True).click()
+    page.get_by_role("button", name=re.compile(r"3 · 原文")).click()
+    dialog = page.get_by_role("dialog")
+    expect(dialog.get_by_role("button", name="保存并压制视频", exact=True)).to_be_disabled()
+    expect(dialog.get_by_role("button", name="仅重试缺失译文 (0)", exact=True)).to_be_disabled()
+    assert not any(p["path"].endswith(("/translate", "/render", "/recognize-products"))
+                   for p in api.payloads), "Brand UI caused a paid operation"
+    no_overflow(page)
+    page.screenshot(path=str(OUT / f"brand-{api.role}-{page.viewport_size['width']}.png"), full_page=True)
+
+
+def run_categories(page, api, base):
+    """UI acceptance only: API persistence and PNG backgrounds are offline fixtures."""
+    api.product_checks = api.category_checks = True
+    evidence = json.loads((PRODUCT_EVIDENCE / "real-font-evidence.json").read_text())
+    for index, example in enumerate(evidence["examples"]):
+        path = PRODUCT_EVIDENCE / f"sample-{index}.png"
+        if path.exists():
+            api.product_examples[example["text"]] = example
+            api.product_layers[example["layout"]["render_layer_asset_id"]] = path
+    current = api.workspaces["workspace-a"]
+    records = [segment(index) for index in range(1, 4)]
+    for record, visual_role, text, background, panel in zip(
+        records, ("headline", "body", "footnote"),
+        ("FLOOR ONE S7 Stretch Steam", "Category body label", "Category footnote label"),
+        (None, "#FFFFFF", "#808080"), ("#CC220080", None, "#00000000"),
+    ):
+        record.update(visual_role=visual_role, translated_text=text,
+                      translation_status="succeeded", end_ms=3000,
+                      background_color=background,
+                      warnings=["expanded_background_unverified", "low_contrast"])
+        record["style"] = {"background_color": panel, "text_color": "#2255CC",
+                           "font_size_px": 24, "font": "CenturyGothic"}
+    current.update(reference_video_asset_id="reference-a", reference_video=deepcopy(META),
+                   clean_video_asset_id="clean-a", clean_video=deepcopy(META),
+                   stage="succeeded", segments=records, output_asset_id="old-output",
+                   stage_task_ids={"render": "old-render"})
+    api.assets.append(asset("old-output"))
+    api.tasks["old-render"] = dict(
+        id="old-render", type="video_subtitle_translation", status="succeeded",
+        input_snapshot={"workspace_id": current["id"], "operation": "render", "revision": 1},
+        provider_task_id=None, created_at=NOW, updated_at=NOW,
+        started_at=NOW, finished_at=NOW, error=None, reads=0,
+    )
+    api.product_measure(current, recognize=True)
+    preserved = [{key: deepcopy(item.get(key)) for key in (
+        "text", "translated_text", "style", "product_mentions", "product_text_sha256",
+        "bbox_normalized", "start_ms", "end_ms", "visual_role",
+    )} for item in current["segments"]]
+    old_layer = current["segments"][0]["render_layer_asset_id"]
+    open_tool(page, base)
+    category = page.get_by_label("视频类型", exact=True)
+    expect(category).to_have_value("unboxing")
+    assert "video_category" not in current, "Reading legacy fixture backfilled category"
+    entries = [page.get_by_role("button", name=f"新建{name}视频任务", exact=True)
+               for name in ("产品", "开箱")]
+
+    def mutations():
+        return [entry for entry in api.payloads if entry["method"] != "GET"]
+
+    def review():
+        page.get_by_role("button", name=re.compile(r"3 · 原文")).click()
+        dialog = page.get_by_role("dialog")
+        dialog.get_by_role("button", name="字幕 1 · 定位", exact=True).click()
+        return dialog
+
+    def screenshot(phase):
+        no_overflow(page)
+        page.screenshot(path=str(OUT / f"category-{api.role}-{page.viewport_size['width']}-{phase}.png"),
+                        full_page=True)
+
+    def panel_controls(dialog, product):
+        for index in range(1, 4):
+            for suffix in ("底板模式", "底板颜色", "底板不透明度", "background_color"):
+                control = dialog.get_by_label(f"字幕 {index}{suffix}", exact=True)
+                expect(control).to_have_count(0 if product else 1)
+            for suffix in ("译文", "字体", "字号", "text_color"):
+                control = dialog.get_by_label(f"字幕 {index}{suffix}", exact=True)
+                (expect(control).to_be_disabled() if api.role == "viewer"
+                 else expect(control).to_be_enabled())
+        if product:
+            expect(dialog.get_by_text("产品视频：字幕无底板", exact=True).first).to_be_visible()
+            expect(dialog.get_by_text(re.compile("半透明深灰底|已添加.*灰|启用底板|调整文字色或底板"))).to_have_count(0)
+        expect(dialog.get_by_role("button", name=re.compile("识别产品名称"))).to_have_count(0)
+        expect(dialog.get_by_label("字幕 1产品1model")).to_have_count(0)
+
+    def native_video(dialog):
+        video = dialog.locator("video")
+        video.scroll_into_view_if_needed()
+        before = len(mutations())
+        video.focus()
+        page.keyboard.press("Space")
+        expect(video).to_have_js_property("paused", False)
+        page.keyboard.press("Space")
+        expect(video).to_have_js_property("paused", True)
+        video.evaluate("v => { v.currentTime = 1.25; v.volume = 0.5; }")
+        expect(video).to_have_js_property("volume", 0.5)
+        assert video.evaluate("""v => {
+            const r = v.getBoundingClientRect();
+            return document.elementFromPoint(r.left + r.width / 2, r.bottom - 12) === v;
+        }"""), "Native control strip is covered"
+        assert len(mutations()) == before, "Playback emitted business mutation"
+        no_overflow(page)
+
+    if api.role == "creator":
+        for entry, value in zip(entries, ("product", "unboxing")):
+            entry.click()
+            expect(category).to_have_value(value)
+            created = [item for item in api.payloads
+                       if item["method"] == "POST" and item["path"] == PREFIX][-1]
+            assert created["payload"]["video_category"] == value, created
+            page.reload(wait_until="networkidle")
+            page.get_by_role("tab", name="视频字幕翻译", exact=True).click()
+            expect(category).to_have_value(value)
+        page.get_by_label("字幕工作区历史").select_option("workspace-a")
+        expect(category).to_have_value("unboxing")
+        expect(page.get_by_role("heading", name="当前成片", exact=True)).to_be_visible()
+    else:
+        for entry in entries:
+            expect(entry).to_be_disabled()
+        expect(category).to_be_disabled()
+
+    dialog = review()
+    panel_controls(dialog, False)
+    expect(dialog.get_by_label("字幕 1底板模式")).to_have_value("custom")
+    expect(dialog.get_by_label("字幕 1background_color")).to_have_value("#CC220080")
+    expect(dialog.get_by_label("字幕 3底板模式")).to_have_value("none")
+    expect(dialog.locator('[data-subtitle-layer="line-1"]')).to_be_visible()
+    native_video(dialog)
+    screenshot("legacy-unboxing")
+    dialog.get_by_role("button", name="关闭", exact=True).click()
+    expect(dialog).not_to_be_visible()
+
+    before = len(mutations())
+    if api.role == "creator":
+        revision = current["revision"]
+        category.select_option("product")
+        expect(category).to_have_value("product")
+        expect(page.get_by_role("heading", name="当前成片", exact=True)).to_have_count(0)
+        assert current["video_category"] == "product" and current["revision"] == revision + 1
+        patch = mutations()[-1]
+        assert patch["method"] == "PATCH" and patch["payload"]["video_category"] == "product"
+        assert patch["payload"]["expected_revision"] == revision
+        assert current["output_asset_id"] is None and "render" not in current["stage_task_ids"]
+        assert all(item["render_layer_url"] is None and item["render_bbox_pixels"] is None
+                   for item in current["segments"])
+        assert [{key: item.get(key) for key in saved} for item, saved in
+                zip(current["segments"], preserved)] == preserved
+        assert current["reference_video_asset_id"] == "reference-a"
+        assert current["clean_video_asset_id"] == "clean-a"
+    else:
+        # Server-originated product workspace, not a viewer mutation.
+        current["video_category"] = "product"
+        for item in current["segments"]:
+            item.update(render_layer_url=None, render_layer_asset_id=None, render_bbox_pixels=None)
+    page.reload(wait_until="networkidle")
+    page.get_by_role("tab", name="视频字幕翻译", exact=True).click()
+    expect(category).to_have_value("product")
+    expect(page.get_by_label("字幕工作区历史").locator('option[value="workspace-a"]')).to_contain_text("产品")
+    dialog = review()
+    panel_controls(dialog, True)
+    expect(dialog.locator('[data-subtitle-layer="line-1"]')).to_have_count(0)
+    for index in range(1, 4):
+        expect(dialog.locator(f'[data-subtitle-panel="line-{index}"]')).to_have_css(
+            "background-color", "rgba(0, 0, 0, 0)")
+    expect(dialog.locator('[data-subtitle-box="line-2"]')).to_have_css("color", "rgb(34, 85, 204)")
+    native_video(dialog)
+    screenshot("product-invalidated")
+    if api.role == "creator":
+        dialog.get_by_role("button", name="计算排版 · 不保存", exact=True).click()
+        layer = dialog.locator('[data-subtitle-layer="line-1"]')
+        expect(layer).to_be_visible()
+        page.wait_for_function('() => document.querySelector(\'[data-subtitle-layer="line-1"]\')?.naturalWidth > 0')
+        assert old_layer not in layer.get_attribute("src"), "Old unboxing PNG reused"
+        screenshot("product-png")
+        assert all(item["render_layer_url"] is None for item in current["segments"])
+    dialog.get_by_role("button", name="关闭", exact=True).click()
+    expect(dialog).not_to_be_visible()
+
+    # Seed a category-specific PNG on server GET and fail only its local content route.
+    api.product_measure(current)
+    api.fail_layers = True
+    page.reload(wait_until="networkidle")
+    page.get_by_role("tab", name="视频字幕翻译", exact=True).click()
+    dialog = review()
+    fallback = dialog.locator('[data-subtitle-panel="line-1"]')
+    expect(fallback).to_be_visible()
+    expect(fallback).to_contain_text("产品图层加载失败")
+    expect(fallback).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+    panel_controls(dialog, True)
+    screenshot("product-failed-png")
+    dialog.get_by_role("button", name="关闭", exact=True).click()
+    expect(dialog).not_to_be_visible()
+    api.fail_layers = False
+
+    if api.role == "creator":
+        category.select_option("unboxing")
+        expect(category).to_have_value("unboxing")
+        page.reload(wait_until="networkidle")
+        page.get_by_role("tab", name="视频字幕翻译", exact=True).click()
+        expect(category).to_have_value("unboxing")
+        expect(page.get_by_label("字幕工作区历史").locator('option[value="workspace-a"]')).to_contain_text("开箱")
+        dialog = review()
+        panel_controls(dialog, False)
+        expect(dialog.get_by_label("字幕 1background_color")).to_have_value("#CC220080")
+        expect(dialog.get_by_label("字幕 1底板模式")).to_have_value("custom")
+        expect(dialog.get_by_label("字幕 3底板模式")).to_have_value("none")
+        expect(dialog.locator('[data-subtitle-panel="line-1"]')).to_have_css(
+            "background-color", re.compile(r"rgba\(204, 34, 0, 0\.5(?:02)?\)"))
+        screenshot("unboxing-restored")
+        dialog.get_by_role("button", name="关闭", exact=True).click()
+        assert [{key: item.get(key) for key in saved} for item, saved in
+                zip(current["segments"], preserved)] == preserved
+        assert set(api.tasks) == {"old-render"}, "Category switching submitted pipeline task"
+    else:
+        assert len(mutations()) == before == 0, "Viewer emitted mutation"
+
+    # Workspace stages lock category; entries retain the panel's canWrite guard.
+    api.hold_tasks = True
+    before = len(mutations())
+    for operation in ("extract", "translate", "render"):
+        current["video_category"] = "product"
+        api.submit(current, operation)
+        page.reload(wait_until="networkidle")
+        page.get_by_role("tab", name="视频字幕翻译", exact=True).click()
+        expect(category).to_have_value("product")
+        expect(category).to_be_disabled()
+        for entry in entries:
+            (expect(entry).to_be_disabled() if api.role == "viewer"
+             else expect(entry).to_be_enabled())
+        screenshot(f"busy-{operation}")
+    assert len(mutations()) == before, "Busy state emitted mutation"
+    api.font_checks.append({
+        "category_checks": True, "legacy_missing_is_unboxing": True,
+        "two_entry_payloads": api.role == "creator", "persisted_switch_and_styles": api.role == "creator",
+        "product_controls_hidden": True, "transparent_dom_and_failed_png": True,
+        "no_gray_panel_advice": True, "viewer_and_busy_no_mutations": True,
+        "native_controls": True, "horizontal_overflow": False,
+        "png_backgrounds": "fixture compositing of existing real-font PNG, not compiler acceptance",
+    })
+
+
 def main():
     global OUT
     parser = argparse.ArgumentParser()
@@ -691,6 +1008,10 @@ def main():
                         help="Verify automatic role fonts, legacy summaries, manual overrides and readonly UI")
     parser.add_argument("--product-checks", action="store_true",
                         help="Verify real product PNGs, corrections, recognition, invalidation and readonly UI")
+    parser.add_argument("--category-checks", action="store_true",
+                        help="Verify video category entries, persistence, invalidation, panels and permissions")
+    parser.add_argument("--brand-checks", action="store_true",
+                        help="Verify skipped brand text/PNG, missing translation counts and brand-only stages")
     parser.add_argument("--font-dir", type=Path,
                         help="Serve real downloaded centurygothic.ttf and centurygothic_bold.ttf from this directory")
     parser.add_argument("--viewport", action="append", choices=("1440", "834", "390"),
@@ -718,7 +1039,11 @@ def main():
                     context.route("**/*", api.route)
                     page = context.new_page()
                     try:
-                        if args.product_checks:
+                        if args.brand_checks:
+                            run_brands(page, api, args.base_url)
+                        elif args.category_checks:
+                            run_categories(page, api, args.base_url)
+                        elif args.product_checks:
                             run_product_names(page, api, args.base_url)
                         elif args.role_font_checks:
                             run_role_fonts(page, api, args.base_url)
@@ -733,10 +1058,11 @@ def main():
                                       font_files=api.font_files, font_checks=api.font_checks)
                         results.append(result)
                         print(json.dumps(result))
-                    except Exception:
+                    except Exception as error:
                         page.screenshot(path=str(OUT / f"failure-{role}-{width}.png"), full_page=True)
                         print(json.dumps(dict(viewport=f"{width}x{height}", role=role,
-                                              result="failed", unexpected=api.unexpected)))
+                                              result="failed", unexpected=api.unexpected,
+                                              error=str(error))))
                         raise
                     finally:
                         context.close()

@@ -24,6 +24,8 @@ class SubtitleTranslationStage(StrEnum):
 
 SubtitleOperation = Literal["extract", "translate", "render"]
 SubtitleLanguage = Literal["en", "de", "fr", "es", "it", "pt", "zh", "ja"]
+SubtitleVideoCategory = Literal["product", "unboxing"]
+SubtitleRenderMode = Literal["png", "text"]
 
 
 class SubtitleVideoMetadata(SchemaModel):
@@ -33,6 +35,15 @@ class SubtitleVideoMetadata(SchemaModel):
     rotation: Literal[0, 90, 180, 270] = 0
     fps: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     has_audio: bool = False
+    video_bit_rate: StrictInt | None = Field(default=None, gt=0)
+    video_bit_rate_probed: bool = False
+
+    @field_validator("video_bit_rate", mode="before")
+    @classmethod
+    def optional_video_bit_rate(cls, value):
+        from video_subtitle_grounding.metadata import parse_video_bit_rate
+
+        return parse_video_bit_rate(value)
 
 
 class SubtitleStyleOverride(SchemaModel):
@@ -87,6 +98,7 @@ class SubtitleTranslationSegment(VideoSubtitleGroundingSubtitle):
     text_runs: list[dict] | None = None
     render_layer_asset_id: str | None = Field(default=None, max_length=64)
     render_layer_url: str | None = None
+    effective_render_mode: SubtitleRenderMode | None = None
 
     @field_validator("product_mentions", mode="before")
     @classmethod
@@ -109,6 +121,9 @@ class SubtitleTranslationSegment(VideoSubtitleGroundingSubtitle):
 
 class SubtitleWorkspaceCreate(SchemaModel):
     name: str = Field(default="Subtitle translation", min_length=1, max_length=128)
+    video_category: SubtitleVideoCategory = "unboxing"
+    render_mode: SubtitleRenderMode = "png"
+    crf: StrictInt = Field(default=16, ge=0, le=30)
     reference_video_asset_id: str | None = None
     clean_video_asset_id: str | None = None
     source_language: SubtitleLanguage | Literal["auto"] = "auto"
@@ -117,6 +132,9 @@ class SubtitleWorkspaceCreate(SchemaModel):
 
 class SubtitleWorkspaceUpdate(SchemaModel):
     expected_revision: StrictInt = Field(ge=1)
+    video_category: SubtitleVideoCategory | None = None
+    render_mode: SubtitleRenderMode | None = None
+    crf: StrictInt | None = Field(default=None, ge=0, le=30)
     name: str | None = Field(default=None, min_length=1, max_length=128)
     reference_video_asset_id: str | None = None
     clean_video_asset_id: str | None = None
@@ -128,7 +146,7 @@ class SubtitleWorkspaceUpdate(SchemaModel):
 
     @model_validator(mode="after")
     def required_values(self):
-        for key in ("name", "source_language", "target_language", "segments"):
+        for key in ("name", "video_category", "render_mode", "crf", "source_language", "target_language", "segments"):
             if key in self.model_fields_set and getattr(self, key) is None:
                 raise ValueError(f"{key} cannot be null")
         if self.segments is not None and len(

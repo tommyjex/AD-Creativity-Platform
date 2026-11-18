@@ -1,0 +1,184 @@
+{
+  "description": "Actual-font local PNG sample; not a MediaKit output or evidence of the v4 submission.",
+  "layout_version": "single-line-supersampled-png-footnote24-v6",
+  "paid_calls": false,
+  "layouts": {
+    "9b6afba1-762a-41ea-9f68-ddb05ab6711f": {
+      "segment_id": "9b6afba1-762a-41ea-9f68-ddb05ab6711f",
+      "original_bbox_pixels": [
+        125,
+        886,
+        625,
+        938
+      ],
+      "render_bbox_pixels": [
+        125,
+        886,
+        681,
+        938
+      ],
+      "target_font_size_px": 41,
+      "desired_text_width_px": 556,
+      "estimated_font_size_px": 41,
+      "effective_font_size_px": 41,
+      "recommended_text_color": "#FFFFFF",
+      "text_color": "#FFFFFFFF",
+      "background_color": "#00000000",
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "measurement_font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+      "measurement_font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+      "measured_text_width_px": 554,
+      "ascent_px": 42,
+      "descent_px": 10,
+      "missing_glyphs": [],
+      "fallback_fonts": [],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "text_runs": [
+        {
+          "start": 0,
+          "end": 26,
+          "kind": "ordinary",
+          "text": "180° Flachlagerungs-Design",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/CenturyGothic/centurygothic_bold.ttf",
+          "font_sha256": "90cb613b492874a560c0ff18a3402b1d24fb7e846dff11295d5c4644d6c75e83",
+          "font_size_px": 41,
+          "x_px": 0,
+          "baseline_px": 42.0,
+          "advance_px": 553.515625
+        }
+      ],
+      "render_layer_asset_id": "83286437b0f6b52233f710bd03e667fb2399604756a1e600eceb70f024837570",
+      "render_layer_url": null,
+      "raster_scale": 4,
+      "target_time": [
+        28500,
+        32000
+      ],
+      "track_index": 1
+    },
+    "404ab7f5-f4fb-4283-a3a8-2e43616dd8e5": {
+      "segment_id": "404ab7f5-f4fb-4283-a3a8-2e43616dd8e5",
+      "original_bbox_pixels": [
+        125,
+        944,
+        1047,
+        987
+      ],
+      "render_bbox_pixels": [
+        125,
+        944,
+        1321,
+        987
+      ],
+      "target_font_size_px": 34,
+      "desired_text_width_px": 1196,
+      "estimated_font_size_px": 34,
+      "effective_font_size_px": 34,
+      "recommended_text_color": "#FFFFFF",
+      "text_color": "#FFFFFFFF",
+      "background_color": "#00000000",
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "measurement_font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "measurement_font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "measured_text_width_px": 1194,
+      "ascent_px": 35,
+      "descent_px": 8,
+      "missing_glyphs": [],
+      "fallback_fonts": [],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "text_runs": [
+        {
+          "start": 0,
+          "end": 70,
+          "kind": "ordinary",
+          "text": "Erreicht mühelos niedrige Bereiche, um verborgenen Staub zu entfernen.",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+          "font_size_px": 34,
+          "x_px": 0,
+          "baseline_px": 35.0,
+          "advance_px": 1193.640625
+        }
+      ],
+      "render_layer_asset_id": "b9de280c99e61f14e4b2058835195196f3e94638aae4a632dcb0cd15d53dc23d",
+      "render_layer_url": null,
+      "raster_scale": 4,
+      "target_time": [
+        28500,
+        32000
+      ],
+      "track_index": 2
+    },
+    "e4995f9e-4b8e-4a2f-ad5c-2b1eb57a7015": {
+      "segment_id": "e4995f9e-4b8e-4a2f-ad5c-2b1eb57a7015",
+      "original_bbox_pixels": [
+        125,
+        1000,
+        384,
+        1025
+      ],
+      "render_bbox_pixels": [
+        125,
+        995,
+        766,
+        1030
+      ],
+      "target_font_size_px": 24,
+      "desired_text_width_px": 641,
+      "estimated_font_size_px": 19,
+      "effective_font_size_px": 24,
+      "recommended_text_color": "#FFFFFF",
+      "text_color": "#FFFFFFFF",
+      "background_color": "#00000000",
+      "alignment": "left",
+      "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "measurement_font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+      "measurement_font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+      "measured_text_width_px": 639,
+      "ascent_px": 25,
+      "descent_px": 6,
+      "missing_glyphs": [],
+      "fallback_fonts": [],
+      "warnings": [
+        "font_url_version_unverified",
+        "bbox_expanded",
+        "expanded_background_unverified"
+      ],
+      "text_runs": [
+        {
+          "start": 0,
+          "end": 52,
+          "kind": "ordinary",
+          "text": "*Die Höhe im flachliegenden Zustand beträgt 12,75 cm",
+          "font_type": "https://xujianhua-utils.tos-cn-beijing.volces.com/ECOVACS/centurygothic.ttf",
+          "font_sha256": "3a9cbb5d75b2a2b0d22dc94571608e4e9dc7b88e825374985880c5722c1c9e5f",
+          "font_size_px": 24,
+          "x_px": 0,
+          "baseline_px": 27.0,
+          "advance_px": 638.734375
+        }
+      ],
+      "render_layer_asset_id": "ab6363489b29507f5a755955ec244749dc6b0801701edd2e227c7a92e1a2afc0",
+      "render_layer_url": null,
+      "raster_scale": 4,
+      "target_time": [
+        28500,
+        32000
+      ],
+      "track_index": 3
+    }
+  }
+}

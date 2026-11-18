@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: video-subtitle-grounding
+Version: 0.3.6
+Summary: Video subtitle extraction, translation, layout and MediaKit rendering
+Requires-Python: >=3.11
+Requires-Dist: pydantic<3,>=2.11
+Requires-Dist: httpx<1,>=0.28
+Requires-Dist: Pillow<13,>=11
+Requires-Dist: byteplus-python-sdk-v2[ark]<4,>=3.0.58
+Provides-Extra: server
+Requires-Dist: fastapi<1,>=0.115; extra == "server"
+Requires-Dist: uvicorn[standard]<1,>=0.35; extra == "server"
+Provides-Extra: dev
+Requires-Dist: pytest<10,>=8; extra == "dev"
+Requires-Dist: ruff>=0.12; extra == "dev"
+Requires-Dist: build>=1; extra == "dev"
+Requires-Dist: fastapi<1,>=0.115; extra == "dev"

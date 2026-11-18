@@ -1,8 +1,9 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubtitleTranslationPanel } from "@/components/workspace/subtitle-translation/panel";
 import { SubtitleReviewDialog } from "@/components/workspace/subtitle-translation/review-dialog";
 import { SubtitleVideoPreview } from "@/components/workspace/subtitle-translation/video-preview";
+import { useSubtitleWorkspace } from "@/components/workspace/subtitle-translation/use-subtitle-workspace";
 import { containedVideoRect, segmentDraftIssue, segmentIssue, subtitleColors, subtitlePreviewBox, subtitlePreviewFont, SUBTITLE_CAPACITY_NOTICE, SUBTITLE_FONTS, subtitleWarningMessage } from "@/lib/subtitle-translation";
 import { ApiError } from "@/lib/api-client";
 import { subtitleAsset, subtitleSegment, subtitleTask, subtitleWorkspace } from "./subtitle-translation-fixtures";
@@ -34,6 +35,11 @@ beforeEach(() => {
 function panel(canWrite = true) {
   return render(<SubtitleTranslationPanel assets={[subtitleAsset]} canWrite={canWrite} onAssetsChange={vi.fn()} onDirtyChange={vi.fn()} />);
 }
+
+it("maps missing source bitrate to a safe encoding warning", () => {
+  expect(subtitleWarningMessage("source_video_bit_rate_unavailable"))
+    .toBe("未能读取底片视频码率，本次使用默认编码码率，请检查成片清晰度与体积。");
+});
 function review(overrides: Partial<React.ComponentProps<typeof SubtitleReviewDialog>> = {}) {
   const props = {
     workspace: subtitleWorkspace, open: true, readOnly: false, busy: false, error: null, conflict: false,
@@ -45,6 +51,37 @@ function review(overrides: Partial<React.ComponentProps<typeof SubtitleReviewDia
 }
 
 describe("subtitle review", () => {
+  it("keeps skipped brand records editable without requiring translation or enabling brand-only render", () => {
+    const brand = { ...subtitleSegment, text: "Tineco", translated_text: null,
+      translation_status: "pending" as const, warnings: ["brand_content_skipped"] };
+    review({ workspace: { ...subtitleWorkspace, segments: [brand] } });
+    expect(segmentIssue(brand)).toBeNull();
+    expect(subtitleWarningMessage("brand_content_skipped")).toBe("品牌片尾已跳过。");
+    expect(screen.getByLabelText("字幕 1译文")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "保存并压制视频" })).toBeDisabled();
+    expect(screen.queryByText("待补齐译文或明确排除。")).not.toBeInTheDocument();
+  });
+
+  it.each(["product", "unboxing"] as const)("omits skipped brand text and PNG in %s preview", (videoCategory) => {
+    class Observer {
+      constructor(private callback: (entries: unknown[]) => void) {}
+      observe() { this.callback([{ contentRect: { width: 400, height: 400 } }]); }
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", Observer);
+    const logo = { ...subtitleSegment, segment_id: "brand-logo", translated_text: "Brand translation",
+      warnings: ["brand_content_skipped"] };
+    const png = { ...logo, segment_id: "brand-png",
+      render_layer_url: `/api/tools/subtitle-translation/workspaces/w/layers/${"a".repeat(64)}.png` };
+    const { container } = render(<SubtitleVideoPreview url="/video.mp4" seekMs={1000}
+      videoCategory={videoCategory} segments={[logo, png, subtitleSegment]} label="Brand preview" />);
+    const video = screen.getByLabelText("Brand preview");
+    Object.defineProperties(video, { videoWidth: { value: 1280 }, videoHeight: { value: 720 }, readyState: { value: 1 } });
+    fireEvent.loadedMetadata(video);
+    expect(container.querySelector("[data-subtitle-layer]")).not.toBeInTheDocument();
+    expect(screen.queryByText("Brand translation")).not.toBeInTheDocument();
+    expect(screen.getByText(subtitleSegment.translated_text!)).toBeInTheDocument();
+  });
   it.each(["headline", "body", "footnote"])("saves manual font selection and restores automatic %s on clear", async (visual_role) => {
     const automatic = visual_role === "headline" ? "CenturyGothicBold" : "CenturyGothic";
     const manual = visual_role === "headline" ? "CenturyGothic" : "CenturyGothicBold";
@@ -115,6 +152,53 @@ describe("subtitle review", () => {
     expect(subtitleColors({ ...subtitleSegment, style: { background_color: "#333333B3" } }).text).toBe("#FFFFFF");
     expect(subtitleColors({ ...subtitleSegment, style: { background_color: "#333333B3", text_color: "#FF0000" } }).text).toBe("#FF0000");
   });
+
+  it.each([
+    ["#FFFFFF", "#000000"], ["#F5F5F5", "#000000"], ["#F4F5F5", "#FFFFFF"],
+    ["#000000", "#FFFFFF"], ["#101010", "#FFFFFF"], ["#111010", "#FFFFFF"],
+    ["#777777", "#FFFFFF"], [null, "#FFFFFF"]
+  ])("keeps product text automatic for %s despite an ignored custom panel", (background_color, text) => {
+    for (const background of [null, "#00000000", "#FF000080", "#33333359"]) {
+      const segment = { ...subtitleSegment, background_color, style: { background_color: background } };
+      expect(subtitleColors(segment, "product")).toEqual({ text, panel: "#00000000", recommended: text });
+      expect(subtitleColors({ ...segment, style: { ...segment.style, text_color: "#FF0000" } }, "product").text).toBe("#FF0000");
+      expect(segment.style.background_color).toBe(background);
+    }
+  });
+
+  it("hides every product panel control while preserving styles and automatic product names", async () => {
+    const segment = {
+      ...subtitleSegment, background_color: null,
+      style: { background_color: "#FF000080", text_color: "#123456", font: "CenturyGothicBold", font_size_px: 30 },
+      product_mentions: [{ start: 0, end: 9, model: "Power", spec: "20 W", catalog_id: null, origin: "model_pattern" as const, status: "confirmed" as const }]
+    };
+    const props = review({ workspace: { ...subtitleWorkspace, video_category: "product", segments: [segment] }, error: "line-a:background_unknown" });
+    for (const field of ["底板模式", "底板颜色", "底板不透明度", "background_color"]) {
+      expect(screen.queryByLabelText(`字幕 1${field}`)).not.toBeInTheDocument();
+    }
+    expect(screen.getByText("产品视频：字幕无底板")).toBeInTheDocument();
+    expect(screen.queryByText(/半透明深灰底/)).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("字幕无底板");
+    expect(screen.getByLabelText("字幕 1字号")).toBeEnabled();
+    expect(screen.getByLabelText("字幕 1字体")).toBeEnabled();
+    expect(screen.getByLabelText("字幕 1text_color")).toBeEnabled();
+    expect(screen.getByText("型号：Power")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /识别产品名称/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("字幕 1text_color"), { target: { value: "#654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存校对" }));
+    await waitFor(() => expect(props.onSave).toHaveBeenCalledWith([
+      expect.objectContaining({ style: { ...segment.style, text_color: "#654321" }, product_mentions: segment.product_mentions })
+    ]));
+  });
+
+  it.each(["background_unknown", "background_color_unavailable", "expanded_background_unverified", "low_contrast"])(
+    "does not suggest panels or claim a gray panel in product warning %s", (warning) => {
+      const product = subtitleWarningMessage(`line-a:${warning}`, "product");
+      expect(product).not.toMatch(/灰|底板色|文字色和底板|启用/);
+      expect(subtitleWarningMessage(warning)).not.toBe(product);
+      expect(subtitleWarningMessage(warning, "unboxing")).toBe(subtitleWarningMessage(warning));
+    }
+  );
 
   it("edits stable IDs while preserving original, style and bbox; asks before dirty close", async () => {
     const props = review();
@@ -227,6 +311,104 @@ describe("subtitle review", () => {
 });
 
 describe("subtitle workspace", () => {
+  it.each(["product", "unboxing"] as const)("creates an explicitly selected %s workspace", async (video_category) => {
+    mocks.createSubtitleWorkspace.mockImplementation(async (payload) => ({
+      ...subtitleWorkspace, ...payload, id: "created", segments: [], stage: "draft"
+    }));
+    panel();
+    const button = await screen.findByRole("button", { name: video_category === "product" ? "新建产品视频任务" : "新建开箱视频任务" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(mocks.createSubtitleWorkspace).toHaveBeenCalledWith({
+      name: "视频字幕翻译", target_language: "de", source_language: "auto", video_category
+    }));
+    await waitFor(() => expect(screen.getByLabelText("视频类型")).toHaveValue(video_category));
+    expect(mocks.runSubtitleOperation).not.toHaveBeenCalled();
+  });
+
+  it("labels historical categories and defaults missing categories to unboxing", async () => {
+    const legacy = { ...subtitleWorkspace };
+    Reflect.deleteProperty(legacy, "video_category");
+    mocks.listSubtitleWorkspaces.mockResolvedValue([
+      legacy, { ...subtitleWorkspace, id: "product-history", name: "Product history", video_category: "product" }
+    ]);
+    panel();
+    await screen.findByText("Translation A");
+    expect(screen.getByLabelText("视频类型")).toHaveValue("unboxing");
+    expect(screen.getByRole("option", { name: /Translation A · 开箱视频/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Product history · 产品视频/ })).toBeInTheDocument();
+  });
+
+  it.each(["extracting", "translating", "rendering", "active"])("disables the category selector during %s", async (mode) => {
+    const running = {
+      ...subtitleWorkspace,
+      stage: mode === "active" ? subtitleWorkspace.stage : mode as typeof subtitleWorkspace.stage,
+      active_task_id: mode === "active" ? subtitleTask.id : null
+    };
+    mocks.listSubtitleWorkspaces.mockResolvedValue([running]);
+    mocks.getSubtitleWorkspace.mockResolvedValue(running);
+    panel();
+    await screen.findByText("Translation A");
+    expect(screen.getByLabelText("视频类型")).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("视频类型"), { target: { value: "product" } });
+    expect(mocks.patchSubtitleWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("saves category, clears current output and old PNGs, then restores stored unboxing styles", async () => {
+    let remote = {
+      ...subtitleWorkspace, stage: "succeeded" as typeof subtitleWorkspace.stage,
+      output_asset_id: "output-a",
+      segments: [{ ...subtitleSegment, style: { background_color: "#12345680" },
+        render_layer_asset_id: "a".repeat(64),
+        render_layer_url: `/api/tools/subtitle-translation/workspaces/workspace-a/layers/${"a".repeat(64)}.png`
+      }]
+    };
+    mocks.listSubtitleWorkspaces.mockResolvedValue([remote]);
+    mocks.patchSubtitleWorkspace.mockImplementation(async (_id, payload) => {
+      remote = { ...remote, ...payload, revision: payload.expected_revision + 1 };
+      return remote;
+    });
+    // GET returns the accepted current category with no cached layout.
+    mocks.getSubtitleWorkspace.mockImplementation(async () => ({
+      ...remote, output_asset_id: null, segments: remote.segments.map((segment) => ({
+        ...segment, render_layer_url: null, render_layer_asset_id: null,
+        estimated_font_size_px: null, effective_font_size_px: null
+      }))
+    }));
+    panel();
+    await screen.findByText("当前成片");
+    fireEvent.change(screen.getByLabelText("视频类型"), { target: { value: "product" } });
+    await waitFor(() => expect(screen.getByLabelText("视频类型")).toHaveValue("product"));
+    expect(screen.queryByText("当前成片")).not.toBeInTheDocument();
+    expect(mocks.patchSubtitleWorkspace).toHaveBeenCalledWith("workspace-a", { expected_revision: 2, video_category: "product" });
+    fireEvent.change(screen.getByLabelText("视频类型"), { target: { value: "unboxing" } });
+    await waitFor(() => expect(screen.getByLabelText("视频类型")).toHaveValue("unboxing"));
+    expect(mocks.patchSubtitleWorkspace).toHaveBeenLastCalledWith("workspace-a", { expected_revision: 3, video_category: "unboxing" });
+    fireEvent.click(screen.getByRole("button", { name: "3 · 原文 / 译文校对 (1)" }));
+    expect(await screen.findByLabelText("字幕 1background_color")).toHaveValue("#12345680");
+    expect(mocks.runSubtitleOperation).not.toHaveBeenCalled();
+  });
+
+  it("retains category and output after a switch conflict until reloading remote", async () => {
+    mocks.listSubtitleWorkspaces.mockResolvedValue([{ ...subtitleWorkspace, stage: "succeeded", output_asset_id: "output-a" }]);
+    mocks.patchSubtitleWorkspace.mockRejectedValue(new ApiError({
+      code: "task_conflict", message: "Revision changed", status: 409, responseBody: {}
+    }));
+    mocks.getSubtitleWorkspace.mockResolvedValue({ ...subtitleWorkspace, video_category: "product", revision: 3 });
+    panel();
+    await screen.findByText("当前成片");
+    fireEvent.change(screen.getByLabelText("视频类型"), { target: { value: "product" } });
+    await screen.findByText("revision 冲突，未覆盖远端修改。");
+    expect(screen.getByLabelText("视频类型")).toHaveValue("unboxing");
+    expect(screen.getByLabelText("视频类型")).toBeDisabled();
+    expect(screen.getByText("当前成片")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新加载远端" }));
+    await waitFor(() => expect(screen.getByLabelText("视频类型")).toHaveValue("product"));
+    expect(screen.getByLabelText("视频类型")).toBeEnabled();
+    expect(screen.queryByText("当前成片")).not.toBeInTheDocument();
+    expect(mocks.runSubtitleOperation).not.toHaveBeenCalled();
+  });
+
   it("loads measured GET data when opening review, and previews unsaved edits without a PATCH", async () => {
     mocks.getSubtitleWorkspace.mockResolvedValue({ ...subtitleWorkspace, segments: [{ ...subtitleSegment, estimated_font_size_px: 48, effective_font_size_px: 30 }] });
     mocks.previewSubtitleWorkspace.mockImplementation(async (_id, payload) => ({
@@ -314,7 +496,9 @@ describe("subtitle workspace", () => {
   it("keeps Viewer controls read-only", async () => {
     panel(false);
     await screen.findByText("Translation A");
-    expect(screen.getByRole("button", { name: "新建字幕工作区" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "新建产品视频任务" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "新建开箱视频任务" })).toBeDisabled();
+    expect(screen.getByLabelText("视频类型")).toBeDisabled();
     expect(screen.getByLabelText("目标语言")).toBeDisabled();
     expect(screen.getByLabelText("带字幕参考视频上传")).toBeDisabled();
     expect(screen.getByRole("button", { name: "1 · 提取字幕" })).toBeDisabled();
@@ -400,7 +584,98 @@ describe("subtitle workspace", () => {
   });
 });
 
+describe("category switching hook", () => {
+  it("clears all derived layout and render references while retaining inference, input and styles", async () => {
+    const original = {
+      ...subtitleWorkspace, stage: "succeeded" as const, output_asset_id: "old-output",
+      stage_task_ids: { extract: "extract-a", translate: "translate-a", render: "render-a" },
+      segments: [{
+        ...subtitleSegment, style: { background_color: "#33333359", font_size_px: 32 },
+        product_names_enabled: true, product_mentions: [],
+        product_text_sha256: "t".repeat(64), product_recognition_sha256: "r".repeat(64),
+        render_layer_asset_id: "a".repeat(64), render_layer_url: "/old.png",
+        render_bbox_pixels: [1, 2, 3, 4] as [number, number, number, number],
+        font_type: "font", font_sha256: "f".repeat(64), text_runs: [],
+        warnings: ["background_unknown", "bbox_expanded", "product_recognition_unavailable"]
+      }]
+    };
+    mocks.patchSubtitleWorkspace.mockImplementation(async (_id, change) => ({
+      ...original, video_category: change.video_category, revision: 3, stage: "review_ready"
+    }));
+    const onUpdate = vi.fn();
+    const { result } = renderHook(() => useSubtitleWorkspace(original, onUpdate));
+    await act(async () => { expect(await result.current.update({ video_category: "product" })).toBe(true); });
+    expect(result.current.workspace).toMatchObject({
+      video_category: "product", revision: 3, output_asset_id: null,
+      reference_video_asset_id: original.reference_video_asset_id, clean_video_asset_id: original.clean_video_asset_id,
+      stage_task_ids: { extract: "extract-a", translate: "translate-a" }
+    });
+    expect(result.current.workspace.stage_task_ids).not.toHaveProperty("render");
+    expect(result.current.workspace.segments[0]).toEqual({
+      ...original.segments[0], estimated_font_size_px: null, effective_font_size_px: null,
+      recommended_text_color: null, render_bbox_pixels: null,
+      render_layer_asset_id: null, render_layer_url: null, font_type: null, font_sha256: null, text_runs: null,
+      warnings: ["product_recognition_unavailable"]
+    });
+    expect(onUpdate).toHaveBeenLastCalledWith(result.current.workspace);
+    expect(mocks.runSubtitleOperation).not.toHaveBeenCalled();
+  });
+
+  it.each(["extracting", "translating", "rendering", "active", "viewer"])("does not switch category while %s", async (mode) => {
+    const initial = {
+      ...subtitleWorkspace,
+      stage: mode === "active" || mode === "viewer" ? subtitleWorkspace.stage : mode as typeof subtitleWorkspace.stage,
+      active_task_id: mode === "active" ? subtitleTask.id : null
+    };
+    const { result } = renderHook(() => useSubtitleWorkspace(initial, vi.fn(), mode !== "viewer"));
+    await act(async () => { expect(await result.current.update({ video_category: "product" })).toBe(false); });
+    expect(mocks.patchSubtitleWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("serializes category updates and keeps the switch disabled during an in-flight save", async () => {
+    let finish!: (value: typeof subtitleWorkspace) => void;
+    mocks.patchSubtitleWorkspace.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    panel();
+    await screen.findByText("Translation A");
+    fireEvent.change(screen.getByLabelText("视频类型"), { target: { value: "product" } });
+    expect(screen.getByLabelText("视频类型")).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("视频类型"), { target: { value: "unboxing" } });
+    expect(mocks.patchSubtitleWorkspace).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ ...subtitleWorkspace, video_category: "product", revision: 3 }));
+    expect(screen.getByLabelText("视频类型")).toHaveValue("product");
+    expect(screen.getByLabelText("视频类型")).toBeEnabled();
+  });
+});
+
 describe("video projection", () => {
+  it.each(["product", "unboxing"] as const)("uses %s panel policy after a PNG fails to load", (videoCategory) => {
+    class Observer {
+      constructor(private callback: (entries: unknown[]) => void) {}
+      observe() { this.callback([{ contentRect: { width: 400, height: 400 } }]); }
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", Observer);
+    const segment = {
+      ...subtitleSegment, background_color: "#FFFFFF", style: { background_color: "#33333359" },
+      render_layer_asset_id: "a".repeat(64),
+      render_layer_url: `/api/tools/subtitle-translation/workspaces/workspace-a/layers/${"a".repeat(64)}.png`
+    };
+    const { container } = render(<SubtitleVideoPreview url="/video.mp4" videoCategory={videoCategory} segments={[segment]} seekMs={1000} label="PNG preview" />);
+    const video = screen.getByLabelText("PNG preview");
+    Object.defineProperties(video, { videoWidth: { value: 1920 }, videoHeight: { value: 1080 } });
+    fireEvent.loadedMetadata(video);
+    const image = container.querySelector("[data-subtitle-layer]")!;
+    expect(image).toBeInTheDocument();
+    expect(container.querySelector("[data-subtitle-panel]")).not.toBeInTheDocument();
+    fireEvent.error(image);
+    const text = container.querySelector("[data-subtitle-panel]")!;
+    expect(text).toHaveTextContent(segment.translated_text!);
+    expect((text as HTMLElement).style.backgroundColor).toBe("");
+    expect(text.parentElement).toHaveStyle({ color: videoCategory === "product" ? "#000000" : "#FFFFFF" });
+    expect(screen.getByText("图层加载失败；文字回退底板使用接口默认值")).toBeInTheDocument();
+    expect(video).toHaveAttribute("controls");
+  });
+
   it("maps output pixel boxes using display dimensions and falls back to original coordinates", () => {
     const measured = { ...subtitleSegment, render_bbox_pixels: [96, 216, 1728, 324] as [number, number, number, number] };
     expect(subtitlePreviewBox(measured, 1920, 1080)).toEqual({ left: 5, top: 20, width: 85, height: 10 });
@@ -448,7 +723,7 @@ describe("video projection", () => {
       fontFamily: "subtitle-CenturyGothic, sans-serif", fontSize: `${32 * 400 / 1920}px`,
       fontWeight: "400", fontSynthesis: "none"
     });
-    expect(text.style.backgroundColor).toBe("rgba(51, 51, 51, 0.35)");
+    expect(text.style.backgroundColor).toBe("");
     video.currentTime = 4;
     rerender(<SubtitleVideoPreview url="/video.mp4" segments={[subtitleSegment]} selectedId="line-a" seekMs={1000} seekRequest={1} label="Preview" />);
     expect(video.currentTime).toBe(1);

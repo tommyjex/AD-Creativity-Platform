@@ -11,6 +11,7 @@ export const subtitleSegment: SubtitleSegment = {
 };
 export const subtitleWorkspace: SubtitleWorkspace = {
   id: "workspace-a", name: "Translation A", revision: 2, stage: "review_ready",
+  video_category: "unboxing",
   reference_video_asset_id: "reference-a", clean_video_asset_id: "clean-a",
   source_language: "auto", target_language: "de",
   reference_video: { width: 1920, height: 1080, duration_ms: 5000, rotation: 0, fps: 30, has_audio: true },

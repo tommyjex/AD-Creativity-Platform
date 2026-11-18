@@ -67,6 +67,14 @@ def segment(**overrides):
     }
 
 
+@pytest.fixture(autouse=True)
+def native_wire_contract(monkeypatch):
+    """Exercise the native-text fallback; default PNG has dedicated package tests."""
+    compiler = layout.compile_subtitle_project
+    monkeypatch.setattr(layout, "compile_subtitle_project",
+                        lambda segments, video, **kwargs: compiler(segments, video, rasterize=False))
+
+
 def compile_one(**overrides):
     return layout.compile_subtitle_project([segment(**overrides)], video())
 
@@ -91,7 +99,7 @@ def test_real_metrics_fit_height_then_full_german_width(font_http):
     assert element["text"] == segment()["translated_text"]
     assert not summary["missing_glyphs"]
     assert element["font_type"] == font_http[0] == layout.CENTURY_GOTHIC_URL
-    assert element["bold"] is False
+    assert element["bold"] is True
     assert summary["font_sha256"] == hashlib.sha256(FONT_PATH.read_bytes()).hexdigest()
     assert element["line_max_width"] == -1
     assert element["typesetting"] == 0
@@ -150,7 +158,7 @@ def test_background_policy_selects_plain_text_or_gray_panel(
     assert summary["recommended_text_color"] == expected
     assert summary["background_color"] == panel
     assert result["project"]["track"][1][0]["font_color"] == expected + "FF"
-    assert result["project"]["track"][1][0]["background_color"] == panel
+    assert "background_color" not in result["project"]["track"][1][0]
     assert "border_color" not in result["project"]["track"][1][0]
     assert "border_width" not in result["project"]["track"][1][0]
 
@@ -160,7 +168,8 @@ def test_unknown_background_is_white_with_translucent_gray(background):
     result = compile_one(background_color=background)
     element = result["project"]["track"][1][0]
     assert element["font_color"] == "#FFFFFFFF"
-    assert element["background_color"] == "#33333359"
+    assert "background_color" not in element
+    assert result["layouts"]["line-1"]["background_color"] == "#33333359"
     assert "background_unknown" in result["layouts"]["line-1"]["warnings"]
 
 
@@ -171,7 +180,7 @@ def test_explicit_panel_uses_white_text_and_can_be_disabled():
     result = compile_one(
         background_color="#888888", style={"background_color": "#00000000"}
     )
-    assert result["project"]["track"][1][0]["background_color"] == "#00000000"
+    assert "background_color" not in result["project"]["track"][1][0]
 
 
 def test_user_overrides_and_low_contrast():
@@ -189,7 +198,8 @@ def test_user_overrides_and_low_contrast():
     assert element["font_type"] == layout.CENTURY_GOTHIC_URL
     assert element["font_size"] <= 18
     assert element["font_color"] == "#FFFFFFFF"
-    assert element["background_color"] == "#FFFFFF80"
+    assert "background_color" not in element
+    assert summary["background_color"] == "#FFFFFF80"
     assert element["align_type"] == 2
     assert "low_contrast" in summary["warnings"]
     assert "font_url_version_unverified" in summary["warnings"]
@@ -228,9 +238,9 @@ def test_invalid_overrides_fail_without_guessing(style, code):
     "role,font_url,bold",
     [
         ("headline", layout.CENTURY_GOTHIC_BOLD_URL, True),
-        ("body", layout.CENTURY_GOTHIC_URL, False),
-        ("footnote", layout.CENTURY_GOTHIC_URL, False),
-        (None, layout.CENTURY_GOTHIC_URL, False),
+        ("body", layout.CENTURY_GOTHIC_URL, True),
+        ("footnote", layout.CENTURY_GOTHIC_URL, True),
+        (None, layout.CENTURY_GOTHIC_URL, True),
     ],
 )
 def test_missing_glyphs_use_provider_preset_without_external_fallback(
@@ -316,7 +326,7 @@ def test_auto_role_font_replaces_old_derived_summary(role, font_url, style, font
     element = result["project"]["track"][1][0]
     assert element["font_type"] == result["layouts"]["line-1"]["font_type"] == font_url
     assert font_http == [font_url]
-    assert element["bold"] is False
+    assert element["bold"] is (role != "headline")
     assert element["font_size"] == result["layouts"]["line-1"]["effective_font_size_px"]
     assert element["font_size"] != 999
     assert "font_url_version_unverified" in result["layouts"]["line-1"]["warnings"]
@@ -334,7 +344,7 @@ def test_manual_font_wins_over_visual_role(role, font, font_url, font_http):
     result = compile_one(visual_role=role, style={"font": font})
     element = result["project"]["track"][1][0]
     assert element["font_type"] == result["layouts"]["line-1"]["font_type"] == font_url
-    assert element["bold"] is False
+    assert element["bold"] is (role != "headline")
     assert font_http == [font_url]
 
 
@@ -343,7 +353,7 @@ def test_platform_alias_shares_core_font_rules_and_layout_version():
 
     assert layout is core
     assert layout.compile_subtitle_project is core.compile_subtitle_project
-    assert layout.LAYOUT_VERSION == "single-line-adaptive-panel35-product-font-v3"
+    assert layout.LAYOUT_VERSION == "single-line-png-text-default-background-v8"
 
 
 def test_explicit_japanese_font_is_preserved():
